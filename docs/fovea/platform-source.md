@@ -1,6 +1,31 @@
 # Scope-safe platform source access
 
-## Status and ownership
+## macOS explicit-analysis update — 2026-09-20
+
+The managed engine now admits a Darwin source binding from the **same validated
+complete generation** as its private Node and parser. `scripts/build-fovea-native.mjs`
+compiles it at build time with local Node/libuv headers and Darwin API declarations;
+`src/fovea/native-source-loader.ts` verifies inventory hashes, target/architecture,
+ABI and source identity before loading captured bytes in private engine storage.
+No runtime compilation, PATH/environment override, workspace addon, or `/dev/fd`
+fallback is permitted. A native artifact cannot be relabeled for another bundle
+target. The unbound `sourcePlatform()` factory still rejects Darwin.
+
+This enables **explicit read-only analysis**. The follow-up now also implements
+Darwin cross-session provenance using the same authenticated native binding:
+bounded descriptor-relative journal reads and compare-and-publish under an
+exclusive private lock, fsync, renameat and identity-checked cleanup. Missing,
+unsafe or conflicting evidence marks a provenance gap; there is no path fallback
+or stale-lock reclamation. Actual Darwin compiled adversarial tests and all 15
+pinned lifecycle cases pass (generation admission is fixture-substituted).
+Automatic Kiro hooks, actual model-input delivery and native lifecycle remain
+unqualified; see [completion-ledger.md](completion-ledger.md).
+Native `.tmp`, `.fabric`, and `.kiro` storage is excluded before source traversal
+and budget accounting. Other hidden source directories remain eligible; arbitrary
+`.gitignore` parity is not claimed. See [macos-activation.md](macos-activation.md)
+for actual checks, installation, native-client evidence and remaining limits.
+
+## Historical status and ownership
 
 Remaining-work item 3 now includes shared source policy, the Darwin adapter,
 **implemented POSIX native binding source**, and direct Linux compilation/probes

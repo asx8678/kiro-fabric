@@ -17,7 +17,7 @@ it.skipIf(!fs.existsSync(parser) || !fs.existsSync(path.join(reference, '.git'))
     let oracleRoot: string | undefined;
     let passed = false;
     try {
-      const run = spawnSync(process.execPath, [path.resolve('scripts/fovea-reference-harness.mjs'), '--reference', reference, '--parser', parser, '--query', 'GetUser', '--budget', String(budget)], {
+      const run = spawnSync(process.execPath, [path.resolve('scripts/fovea-reference-harness.mjs'), '--reference', reference, '--host-reference', process.env.FOVEA_HOST_REFERENCE_ROOT ?? '../pi-fabric', '--parser', parser, '--query', 'GetUser', '--budget', String(budget)], {
         encoding: 'utf8', timeout: 60000, maxBuffer: 1048576, cwd: scope.workspace, env: scope.env,
       });
       expect(run.error).toBeUndefined(); expect(run.status, run.stdout).toBe(0);

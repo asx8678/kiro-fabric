@@ -4,7 +4,34 @@ Status: **not qualified**. The harness now attempts actual native lifecycle
 commands, not only help. **No H01–H12 pass is claimed.** Missing harness
 instrumentation is `untested`, not an external host limitation.
 
-## Current native evidence (2026-09-20)
+## Current authenticated Darwin evidence (2026-09-20)
+
+Kiro CLI **2.22.1** was exercised with existing authorized authentication and
+owned temporary scratch profiles by `scripts/fovea-native-probe.mjs`:
+
+- **Headless:** selected probe mode and actual success/error MCP calls observed;
+  no hooks fired. `.tmp/fovea-native-contract/final-headless-report.json`.
+- **Native TUI:** array-shaped command hooks fired for `SessionStart`,
+  `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop`; stdin contains
+  `session_id`. Exact tool matcher: `^mcp_fabric_fabric_exec$`. A stop-hook
+  continuation led to a subsequent actual MCP call, not just assistant prose.
+  `.tmp/fovea-native-contract/final-tui-report.json`.
+- **Routing limit:** neither observed MCP initialize nor tools/call supplies the
+  native chat identity. A server may be pooled. Cwd, arguments, PID ancestry and
+  status stdout are not a supported association or delivery acknowledgment.
+- **Still unqualified:** actual intended model input, session restoration,
+  cancellation/queued-input precedence, approvals, complete tool inventory and
+  retained-generation behavior. One continuation does not qualify the complete
+  bounded continuation/queue contract. These are protocol fixtures, not Fabric
+  execution or automatic integration.
+
+The managed profile therefore does not register automatic Fovea hooks. The hook
+is silent on stdout by default (exit 3); `--status` explicitly reports diagnostics
+(exit 0). `fabric.info().fovea` exposes the same disabled capability. No credentials,
+partition layout, filesystem mounts, signing keys or approval policy were changed.
+The earlier isolated-auth failure below is historical, not a current auth blocker.
+
+## Historical isolated Linux evidence (2026-09-20)
 
 The installed **kiro-cli 2.22.0**, in a new Linux private HOME, KIRO_HOME, XDG
 directories and workspace, produced:

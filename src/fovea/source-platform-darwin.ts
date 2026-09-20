@@ -4,7 +4,7 @@ import {
 } from './source-platform.js';
 
 /** In-process native contract, implemented by source-platform-native.c/.ts;
- * no production native artifact or loader is shipped yet. Names are single
+ * admitted on Darwin by native-source-loader.ts from a complete generation. Names are single
  * components, handles are native-owned opaque capabilities, and errors retain
  * POSIX errno codes. No path fallback.
  *

@@ -11,12 +11,15 @@ import {
   inspectCanonicalPath,
   resolveSearchExecutable
 } from "../chunks/chunk-762YYRNE.js";
+import {
+  validateBundle
+} from "../chunks/chunk-OLJUXTSO.js";
 import "../chunks/chunk-AE4E2KSU.js";
 
 // src/kiro/mcp-entry.ts
 import { readFileSync, realpathSync } from "node:fs";
-import { createHash as createHash4 } from "node:crypto";
-import path6 from "node:path";
+import { createHash as createHash3 } from "node:crypto";
+import path4 from "node:path";
 
 // src/installation/installer-lock.mjs
 import fs from "node:fs";
@@ -26,7 +29,7 @@ import { execFileSync } from "node:child_process";
 
 // src/installation/pinned-recovery.mjs
 import childProcess from "node:child_process";
-function pinnedRecoveryChild(fs5, createHash5, request) {
+function pinnedRecoveryChild(fs4, createHash4, request) {
   const fail2 = (message) => {
     throw Object.assign(new Error(message), { code: "INSTALL_LOCK_RECOVERY_REQUIRED" });
   };
@@ -38,7 +41,7 @@ function pinnedRecoveryChild(fs5, createHash5, request) {
     if ((directory2 ? !s.isDirectory() : !s.isFile()) || s.isSymbolicLink() || typeof process.getuid !== "function" || s.uid !== BigInt(process.getuid()) || (s.mode & 0o7777n) !== (directory2 ? 0o700n : 0o600n) || !directory2 && (s.nlink !== BigInt(links) || s.size > 4096n)) fail2("unsafe pinned recovery file");
     return s;
   };
-  const stat = (name, directory2 = false, links = 1) => safe(fs5.lstatSync(name, { bigint: true }), directory2, links);
+  const stat = (name, directory2 = false, links = 1) => safe(fs4.lstatSync(name, { bigint: true }), directory2, links);
   const directory = () => {
     if (!same2(id(stat(".", true)), request.lock) || request.birth !== void 0 && String(stat(".", true).birthtimeNs) !== request.birth || !same2(id(stat("..", true)), request.root)) fail2("pinned recovery directory replaced");
   };
@@ -57,7 +60,7 @@ function pinnedRecoveryChild(fs5, createHash5, request) {
   ];
   const inspect = () => {
     directory();
-    const dir = fs5.opendirSync(".");
+    const dir = fs4.opendirSync(".");
     const observed = [];
     try {
       let entry;
@@ -72,20 +75,20 @@ function pinnedRecoveryChild(fs5, createHash5, request) {
     for (const [name, expected, links] of controls) {
       const before = stat(name, false, links);
       if (!same2(id(before), expected.file)) fail2("pinned recovery control replaced");
-      const fd2 = fs5.openSync(name, fs5.constants.O_RDONLY | fs5.constants.O_NOFOLLOW | fs5.constants.O_NONBLOCK);
+      const fd2 = fs4.openSync(name, fs4.constants.O_RDONLY | fs4.constants.O_NOFOLLOW | fs4.constants.O_NONBLOCK);
       try {
-        if (!same2(id(safe(fs5.fstatSync(fd2, { bigint: true }), false, links)), expected.file)) fail2("pinned recovery read identity changed");
+        if (!same2(id(safe(fs4.fstatSync(fd2, { bigint: true }), false, links)), expected.file)) fail2("pinned recovery read identity changed");
         const bytes = Buffer.alloc(4097);
         let count = 0;
         while (count < bytes.length) {
-          const n = fs5.readSync(fd2, bytes, count, bytes.length - count, null);
+          const n = fs4.readSync(fd2, bytes, count, bytes.length - count, null);
           if (!n) break;
           count += n;
         }
         const after = stat(name, false, links);
-        if (count > 4096 || BigInt(count) !== before.size || !same2(id(after), expected.file) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size || createHash5("sha256").update(bytes.subarray(0, count)).digest("hex") !== expected.hash) fail2("pinned recovery control changed");
+        if (count > 4096 || BigInt(count) !== before.size || !same2(id(after), expected.file) || before.mtimeNs !== after.mtimeNs || before.ctimeNs !== after.ctimeNs || before.size !== after.size || createHash4("sha256").update(bytes.subarray(0, count)).digest("hex") !== expected.hash) fail2("pinned recovery control changed");
       } finally {
-        fs5.closeSync(fd2);
+        fs4.closeSync(fd2);
       }
     }
     directory();
@@ -94,12 +97,12 @@ function pinnedRecoveryChild(fs5, createHash5, request) {
   if (request.operation === "inspect") return { ok: true };
   if (request.operation === "restore") {
     if (request.hasOwner) fail2("release owner already restored");
-    fs5.linkSync("../.install-lock-release.json", "owner.json");
-    const fd2 = fs5.openSync(".", fs5.constants.O_RDONLY | fs5.constants.O_DIRECTORY | fs5.constants.O_NOFOLLOW);
+    fs4.linkSync("../.install-lock-release.json", "owner.json");
+    const fd2 = fs4.openSync(".", fs4.constants.O_RDONLY | fs4.constants.O_DIRECTORY | fs4.constants.O_NOFOLLOW);
     try {
-      fs5.fsyncSync(fd2);
+      fs4.fsyncSync(fd2);
     } finally {
-      fs5.closeSync(fd2);
+      fs4.closeSync(fd2);
     }
     return { ok: true, file: request.owner.file };
   }
@@ -109,24 +112,24 @@ function pinnedRecoveryChild(fs5, createHash5, request) {
     const before = stat(target);
     if (!same2(id(before), request.created) || before.size !== 0n) fail2("pinned recovery pending claim replaced");
   }
-  const fd = fs5.openSync(target, fs5.constants.O_WRONLY | fs5.constants.O_NOFOLLOW | fs5.constants.O_NONBLOCK | (request.operation === "create" ? fs5.constants.O_CREAT | fs5.constants.O_EXCL : 0), 384);
+  const fd = fs4.openSync(target, fs4.constants.O_WRONLY | fs4.constants.O_NOFOLLOW | fs4.constants.O_NONBLOCK | (request.operation === "create" ? fs4.constants.O_CREAT | fs4.constants.O_EXCL : 0), 384);
   try {
-    if (request.operation === "create") fs5.fchmodSync(fd, 384);
-    const opened = safe(fs5.fstatSync(fd, { bigint: true }), false);
+    if (request.operation === "create") fs4.fchmodSync(fd, 384);
+    const opened = safe(fs4.fstatSync(fd, { bigint: true }), false);
     if (opened.size !== 0n || request.operation === "publish" && !same2(id(opened), request.created)) fail2("pinned recovery write identity changed");
     directory();
-    if (request.operation === "publish") fs5.writeFileSync(fd, request.text);
-    fs5.fsyncSync(fd);
+    if (request.operation === "publish") fs4.writeFileSync(fd, request.text);
+    fs4.fsyncSync(fd);
     if (!same2(id(stat(target)), id(opened))) fail2("pinned recovery claim replaced after write");
-    const directoryFd = fs5.openSync(".", fs5.constants.O_RDONLY | fs5.constants.O_DIRECTORY | fs5.constants.O_NOFOLLOW);
+    const directoryFd = fs4.openSync(".", fs4.constants.O_RDONLY | fs4.constants.O_DIRECTORY | fs4.constants.O_NOFOLLOW);
     try {
-      fs5.fsyncSync(directoryFd);
+      fs4.fsyncSync(directoryFd);
     } finally {
-      fs5.closeSync(directoryFd);
+      fs4.closeSync(directoryFd);
     }
     return { ok: true, file: id(opened) };
   } finally {
-    fs5.closeSync(fd);
+    fs4.closeSync(fd);
   }
 }
 var childSource = `"use strict";
@@ -559,11 +562,11 @@ var writeControl = (target, value, onCreated, bindSelf = false) => {
 `;
   if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
   const fd = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_NOFOLLOW, 384);
-  let owned2;
+  let owned;
   try {
-    owned2 = identity(fs.fstatSync(fd, { bigint: true }));
+    owned = identity(fs.fstatSync(fd, { bigint: true }));
     if (bindSelf) {
-      value.file = owned2;
+      value.file = owned;
       text = `${JSON.stringify(value)}
 `;
       if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
@@ -574,7 +577,7 @@ var writeControl = (target, value, onCreated, bindSelf = false) => {
     fs.fsyncSync(fd);
   } catch (error) {
     try {
-      if (same(identity(privateStat(target, false)), owned2)) fs.unlinkSync(target);
+      if (same(identity(privateStat(target, false)), owned)) fs.unlinkSync(target);
     } catch {
     }
     throw error;
@@ -744,404 +747,52 @@ function acquireInstallationLock(base, { recover = false, transactionId, onPhase
 }
 
 // src/kiro/managed-generation.ts
-import fs3 from "node:fs";
-import path4 from "node:path";
-import { createHash as createHash3 } from "node:crypto";
-
-// src/installation/bundle-contract.mjs
-import { createHash as createHash2 } from "node:crypto";
-import { constants } from "node:fs";
-import { lstat, open } from "node:fs/promises";
-
-// src/installation/filesystem-boundary.mjs
 import fs2 from "node:fs";
-import { opendir } from "node:fs/promises";
 import path2 from "node:path";
-function trustedMacApplications(directory, stat, platform = process.platform) {
-  return platform === "darwin" && directory === "/Applications" && stat.uid === 0 && stat.gid === 80 && (stat.mode & 4095) === 509;
-}
-function trustedDirectoryStat(directory, stat, { platform = process.platform, uid = process.getuid?.() } = {}) {
-  const sticky = stat.uid === 0 && (stat.mode & 512) !== 0;
-  return stat.isDirectory() && !stat.isSymbolicLink() && (uid === void 0 || stat.uid === uid || stat.uid === 0) && (platform === "win32" || (stat.mode & 18) === 0 || sticky || trustedMacApplications(directory, stat, platform));
-}
-function captureDirectoryAncestry(target, options = {}) {
-  const { label = "Unsafe directory ancestry", platform = process.platform, allowMacAliases = false } = options;
-  const absolute = path2.resolve(target);
-  const snapshot2 = (root2, aliases) => {
-    let current = path2.parse(root2).root;
-    const paths = [current];
-    for (const part of root2.slice(current.length).split(path2.sep).filter(Boolean)) {
-      current = path2.join(current, part);
-      paths.push(current);
-    }
-    return paths.map((directory) => {
-      let stat = fs2.lstatSync(directory);
-      if (aliases && platform === "darwin" && ["/etc", "/tmp", "/var"].includes(directory) && stat.isSymbolicLink() && stat.uid === 0 && fs2.realpathSync(directory) === "/private" + directory) stat = fs2.statSync(directory);
-      if (!trustedDirectoryStat(directory, stat, options)) throw Error(label + ": " + JSON.stringify(directory));
-      return { directory, stat };
-    });
-  };
-  snapshot2(absolute, allowMacAliases);
-  const root = fs2.realpathSync(absolute), entries2 = snapshot2(root, false);
-  const check = () => {
-    for (const { directory, stat } of entries2) {
-      const now = fs2.lstatSync(directory);
-      if (!trustedDirectoryStat(directory, now, options) || now.dev !== stat.dev || now.ino !== stat.ino || now.mode !== stat.mode || now.uid !== stat.uid || now.gid !== stat.gid) throw Error(label + " changed: " + JSON.stringify(directory));
-    }
-    if (fs2.realpathSync(root) !== root) throw Error(label + " changed canonical root");
-  };
-  check();
-  return { root, check };
-}
-async function readDirectoryBounded(directory, limit) {
-  if (!Number.isSafeInteger(limit) || limit < 0) throw Error("Directory entry bound");
-  const handle = await opendir(directory, { bufferSize: 32 }), names = [];
-  try {
-    for (; ; ) {
-      const entry = await handle.read();
-      if (!entry) break;
-      if (names.length >= limit) throw Error("Directory entry bound");
-      names.push(entry.name);
-    }
-  } finally {
-    await handle.close();
-  }
-  return names;
-}
-
-// src/installation/bundle-contract.mjs
-import path3 from "node:path";
-var PRODUCT = "kiro-fabric";
-var TARGETS = ["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"];
-var LIMITS = Object.freeze({ entries: 4096, file: 160 * 1024 * 1024, bytes: 384 * 1024 * 1024, archive: 192 * 1024 * 1024, manifest: 2 * 1024 * 1024 });
-var sha256 = (bytes) => createHash2("sha256").update(bytes).digest("hex");
-var byteOrder = (a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b));
-function canonical(value) {
-  if (value === null || typeof value === "boolean" || typeof value === "string") return JSON.stringify(value);
-  if (typeof value === "number" && Number.isSafeInteger(value)) return String(value);
-  if (Array.isArray(value)) return "[" + value.map(canonical).join(",") + "]";
-  if (value && Object.getPrototypeOf(value) === Object.prototype) return "{" + Object.keys(value).sort(byteOrder).map((k) => JSON.stringify(k) + ":" + canonical(value[k])).join(",") + "}";
-  throw Error("Noncanonical metadata");
-}
-function exactFields(value, keys2) {
-  if (!value || Object.getPrototypeOf(value) !== Object.prototype || canonical(Object.keys(value).sort()) !== canonical([...keys2].sort())) throw Error("Invalid schema fields: " + keys2.join(","));
-}
-var isHash = (v) => typeof v === "string" && /^[a-f0-9]{64}$/.test(v);
-var isStable = (v) => typeof v === "string" && /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v) && v.split(".").every((n) => Number.isSafeInteger(Number(n)));
-function safePath(p) {
-  if (typeof p !== "string" || Buffer.byteLength(p) > 240 || p !== p.normalize("NFC") || /[\\:\x00-\x1f\x7f]/.test(p) || p.split("/").some((s) => !s || s === "." || s === ".." || /[. ]$/.test(s))) throw Error("Unsafe bundle path");
-  return p;
-}
-function roleFor(p) {
-  safePath(p);
-  if (p === "tools/node" || p === "tools/rg" || p === "tools/ast-grep") return "executable";
-  if (p === "manager/install-manager.mjs") return "manager";
-  if (p.startsWith("app/")) return "app";
-  if (p === "resources/steering/fabric.md" || p === "resources/skills/fabric-exec/SKILL.md" || p.startsWith("resources/skills/fabric-exec/references/")) return "resource";
-  if (p.startsWith("notices/")) return "notice";
-  throw Error("Unknown bundle entry: " + p);
-}
-var REQUIRED_APP = ["app/kiro/mcp-entry.js", "app/runtime/compiler-worker-entry.js", "app/runtime/sandbox-worker-entry.js", "app/package.json", "app/closure-manifest.json"];
-var FOVEA_REQUIRED_APP = [...REQUIRED_APP, "app/fovea/engine-entry.js", "app/kiro/fovea-hook.js", "app/fovea/component.json", "app/fovea/upstream.json", "app/fovea/UPSTREAM-LICENSE.txt", "app/fovea/ast-grep-LICENSE.txt", "tools/ast-grep", "resources/skills/fabric-exec/references/fovea.md"];
-var HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter((p) => p !== "app/runtime/sandbox-worker-entry.js");
-function compatibilityFor(target, schema = 1) {
-  if (!TARGETS.includes(target) || ![1, 2].includes(schema)) throw Error("Unsupported target/schema");
-  const linux = target.startsWith("linux-");
-  return { minNode: "24.20.0", minKiro: "2.21.1", minGlibc: linux ? schema === 2 && target === "linux-x64" ? "2.34" : "2.28" : null, minKernel: linux ? "4.18" : null, minMacOS: linux ? null : "13.5", libc: linux ? "glibc" : "system" };
-}
-function checkCompatibility(value, target, schema) {
-  exactFields(value, ["minNode", "minKiro", "minGlibc", "minKernel", "minMacOS", "libc"]);
-  if (!(schema === void 0 ? [1, 2] : [schema]).some((version) => canonical(value) === canonical(compatibilityFor(target, version)))) throw Error("Compatibility mismatch");
-}
-function checkProvenance(p) {
-  if (p?.kind === "local-source") {
-    exactFields(p, ["kind", "sourceDigest", "gitHead", "dirty"]);
-    if (!isHash(p.sourceDigest) || p.gitHead !== null && (typeof p.gitHead !== "string" || !/^[a-f0-9]{40}$/.test(p.gitHead)) || typeof p.dirty !== "boolean") throw Error("Invalid source provenance");
-  } else if (p?.kind === "release") {
-    exactFields(p, ["kind", "sourceCommit"]);
-    if (typeof p.sourceCommit !== "string" || !/^[a-f0-9]{40}$/.test(p.sourceCommit)) throw Error("Invalid release provenance");
-  } else throw Error("Invalid provenance kind");
-}
-function pinURL(url, hosts) {
-  if (typeof url !== "string") throw Error("Invalid pin URL");
-  const u = new URL(url);
-  if (u.protocol !== "https:" || !hosts.includes(u.hostname) || u.port || u.username || u.password || u.hash || u.search) throw Error("Unapproved pin URL");
-}
-function checkToolPins(tools, inventory, target, schema = tools && Object.hasOwn(tools, "ast-grep") ? 2 : 1) {
-  if (schema !== 1 && schema !== 2) throw Error("Unsupported tool schema");
-  exactFields(tools, schema === 2 ? ["node", "rg", "ast-grep"] : ["node", "rg"]);
-  if (schema === 2) checkParserPin(tools["ast-grep"], inventory, target);
-  const destinations = /* @__PURE__ */ new Set();
-  let total = 0;
-  for (const tool of ["node", "rg"]) {
-    const pin = tools[tool];
-    exactFields(pin, ["version", "url", "size", "sha256", "checksumUrl", "members"]);
-    const required = tool === "node" ? ["tools/node", "notices/node-LICENSE"] : ["tools/rg", "notices/rg-LICENSE-MIT", "notices/rg-COPYING", "notices/rg-UNLICENSE"];
-    if (!Array.isArray(pin.members) || pin.members.length !== required.length) throw Error("Tool members");
-    if (pin.version !== (tool === "node" ? "24.20.0" : "14.1.1") || !isHash(pin.sha256) || !Number.isSafeInteger(pin.size) || pin.size < 1 || pin.size > LIMITS.archive) throw Error("Invalid tool pin");
-    const hosts = tool === "node" ? ["nodejs.org"] : ["github.com"];
-    pinURL(pin.url, hosts);
-    pinURL(pin.checksumUrl, hosts);
-    const base = tool === "node" ? "https://nodejs.org/dist/v24.20.0/" : "https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/";
-    if (typeof target === "string") {
-      if (!TARGETS.includes(target)) throw Error("Unsupported tool target");
-      const triples = { "darwin-arm64": "aarch64-apple-darwin", "darwin-x64": "x86_64-apple-darwin", "linux-arm64": "aarch64-unknown-linux-gnu", "linux-x64": "x86_64-unknown-linux-musl" };
-      const name = tool === "node" ? "node-v24.20.0-" + target : "ripgrep-14.1.1-" + triples[
-        /** @type {keyof typeof triples} */
-        target
-      ];
-      if (pin.url !== base + name + ".tar.gz") throw Error("Tool target URL mismatch");
-      for (const m of pin.members || []) {
-        const suffix = m.path === "tools/node" ? "bin/node" : m.path === "tools/rg" ? "rg" : typeof m.path === "string" ? m.path.replace("notices/" + tool + "-", "") : "";
-        if (m.member !== name + "/" + suffix) throw Error("Tool target member mismatch");
-      }
-    }
-    if (!pin.url.startsWith(base) || !pin.url.endsWith(".tar.gz") || pin.checksumUrl !== (tool === "node" ? base + "SHASUMS256.txt" : pin.url + ".sha256")) throw Error("Tool pin upstream mismatch");
-    const members = /* @__PURE__ */ new Set();
-    for (const m of pin.members) {
-      exactFields(m, ["member", "path", "size", "sha256"]);
-      safePath(m.member);
-      safePath(m.path);
-      if (!/^[A-Za-z0-9._/-]+$/.test(m.member) || !required.includes(m.path) || destinations.has(m.path) || members.has(m.member) || !Number.isSafeInteger(m.size) || m.size < 1 || m.size > LIMITS.file || !isHash(m.sha256)) throw Error("Invalid tool member");
-      total += m.size;
-      if (total > LIMITS.bytes) throw Error("Tool closure byte bound");
-      destinations.add(m.path);
-      members.add(m.member);
-      if (inventory) {
-        const e = inventory.find((e2) => e2.path === m.path);
-        if (!e || e.size !== m.size || e.sha256 !== m.sha256) throw Error("Tool inventory mismatch: " + m.path);
-      }
-    }
-  }
-}
-function checkParserPin(pin, inventory, target) {
-  exactFields(pin, ["version", "url", "size", "sha256", "integrity", "members"]);
-  if (pin.version !== "0.45.3" || !isHash(pin.sha256) || !/^sha512-[A-Za-z0-9+/]{86}==$/.test(pin.integrity) || !Number.isSafeInteger(pin.size) || pin.size < 1 || pin.size > 32 * 1024 * 1024) throw Error("Invalid parser pin");
-  pinURL(pin.url, ["registry.npmjs.org"]);
-  const targets = target === void 0 ? TARGETS : [target];
-  if (!targets.some((t) => TARGETS.includes(t) && pin.url === "https://registry.npmjs.org/@ast-grep/cli-" + t + (t.startsWith("linux") ? "-gnu" : "") + "/-/cli-" + t + (t.startsWith("linux") ? "-gnu" : "") + "-0.45.3.tgz")) throw Error("Parser target URL mismatch");
-  const required = [["package/ast-grep", "tools/ast-grep"], ["package/package.json", "notices/ast-grep-package.json"], ["package/README.md", "notices/ast-grep-README.md"]];
-  if (!Array.isArray(pin.members) || pin.members.length !== required.length) throw Error("Parser members");
-  for (const [member, destination] of required) {
-    const m = pin.members.find((m2) => m2.path === destination);
-    exactFields(m, ["member", "path", "size", "sha256"]);
-    if (m.member !== member || !Number.isSafeInteger(m.size) || m.size < 1 || m.size > 64 * 1024 * 1024 || !isHash(m.sha256)) throw Error("Invalid parser member");
-    if (inventory) {
-      const e = inventory.find((e2) => e2.path === destination);
-      if (!e || e.size !== m.size || e.sha256 !== m.sha256) throw Error("Parser inventory mismatch: " + destination);
-    }
-  }
-}
-function checkInventoryFor(inventory, requiredApp) {
-  if (!Array.isArray(inventory) || inventory.length > LIMITS.entries) throw Error("Inventory bound");
-  const seen = /* @__PURE__ */ new Set();
-  const aliases = /* @__PURE__ */ new Map();
-  let bytes = 0;
-  let previous = "";
-  for (const e of inventory) {
-    exactFields(e, ["mode", "path", "role", "sha256", "size", "type"]);
-    const role = roleFor(e.path);
-    const key = e.path.toLowerCase();
-    if (seen.has(key) || previous && byteOrder(previous, e.path) >= 0) throw Error("Inventory collision/order");
-    const segments = e.path.split("/");
-    for (let i = 1; i <= segments.length; i++) {
-      const part = segments.slice(0, i).join("/"), fold = part.toLowerCase();
-      if (i < segments.length && seen.has(fold)) throw Error("Path collision");
-      if (aliases.has(fold) && aliases.get(fold) !== part) throw Error("Case directory collision");
-      aliases.set(fold, part);
-    }
-    seen.add(key);
-    previous = e.path;
-    if (e.role !== role || e.type !== "file" || e.mode !== (role === "executable" ? 448 : 384) || !Number.isSafeInteger(e.size) || e.size < 0 || e.size > LIMITS.file || !isHash(e.sha256)) throw Error("Invalid inventory entry");
-    bytes += e.size;
-  }
-  if (bytes > LIMITS.bytes) throw Error("Bundle byte bound");
-  for (const p of [...requiredApp, "tools/node", "tools/rg", "manager/install-manager.mjs", "resources/steering/fabric.md", "resources/skills/fabric-exec/SKILL.md", "notices/node-LICENSE", "notices/rg-LICENSE-MIT", "notices/rg-COPYING", "notices/rg-UNLICENSE"]) if (!inventory.some((e) => e.path === p && e.size > 0)) throw Error("Missing required entry: " + p);
-  if (!inventory.some((e) => e.path.startsWith("resources/skills/fabric-exec/references/"))) throw Error("Missing resource closure");
-  return bytes;
-}
-function manifestDigest(payload) {
-  return sha256("kiro-fabric.bundle.v1\0" + canonical(payload));
-}
-function checkManifestFor(m, requiredApp) {
-  exactFields(m, ["compatibility", "digest", "inventory", "product", "provenance", "schema", "target", "tools", "version"]);
-  if (![1, 2].includes(m.schema) || m.product !== PRODUCT || !TARGETS.includes(m.target) || !isStable(m.version)) throw Error("Manifest identity");
-  checkCompatibility(m.compatibility, m.target, m.schema);
-  checkProvenance(m.provenance);
-  const bytes = checkInventoryFor(m.inventory, m.schema === 2 ? FOVEA_REQUIRED_APP : requiredApp);
-  checkToolPins(m.tools, m.inventory, m.target, m.schema);
-  if (m.schema === 1 && m.inventory.some((e) => e.path === "tools/ast-grep")) throw Error("Parser requires schema 2");
-  const { digest, ...payload } = m;
-  if (!isHash(digest) || digest !== manifestDigest(payload)) throw Error("Manifest digest mismatch");
-  return bytes;
-}
-function owned(s) {
-  if (typeof process.getuid !== "function" || s.uid !== process.getuid()) throw Error("File ownership mismatch");
-}
-var sameFile = (a, b) => b.isFile() && b.nlink === 1 && a.dev === b.dev && a.ino === b.ino && a.size === b.size && a.mode === b.mode && a.uid === b.uid && a.gid === b.gid && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
-async function captureRegular(file, max, consume, { mode } = {}) {
-  if (!Number.isSafeInteger(max) || max < 0 || mode !== void 0 && (!Number.isInteger(mode) || mode < 0 || mode > 4095)) throw Error("Invalid capture bound/mode");
-  const before = await lstat(file);
-  owned(before);
-  if (!before.isFile() || before.nlink !== 1 || before.size > max) throw Error("Unsafe or oversized file: " + file);
-  if (mode !== void 0 && (before.mode & 4095) !== mode) throw Error("File mode/type");
-  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
-  try {
-    const s = await handle.stat();
-    owned(s);
-    if (!sameFile(before, s) || s.size > max || mode !== void 0 && (s.mode & 4095) !== mode) throw Error("File changed");
-    const { value, length } = await consume(handle, s.size);
-    const after = await handle.stat(), named = await lstat(file);
-    if (length !== s.size || !sameFile(s, after) || !sameFile(s, named)) throw Error("File changed");
-    return value;
-  } finally {
-    await handle.close();
-  }
-}
-async function readRegular(file, max, options = {}) {
-  return captureRegular(file, max, async (handle, size) => {
-    const buffer = Buffer.alloc(size + 1);
-    let length = 0;
-    while (length < buffer.length) {
-      const r = await handle.read(buffer, length, buffer.length - length, null);
-      if (!r.bytesRead) break;
-      length += r.bytesRead;
-    }
-    return { value: buffer.subarray(0, length), length };
-  }, options);
-}
-async function hashRegular(file, max, options = {}) {
-  return captureRegular(file, max, async (handle, size) => {
-    const buffer = Buffer.alloc(Math.min(size + 1, 64 * 1024)), hash2 = createHash2("sha256");
-    let length = 0;
-    while (length <= size) {
-      const r = await handle.read(buffer, 0, Math.min(buffer.length, size + 1 - length), null);
-      if (!r.bytesRead) break;
-      length += r.bytesRead;
-      hash2.update(buffer.subarray(0, r.bytesRead));
-    }
-    return { value: { size: length, sha256: hash2.digest("hex") }, length };
-  }, options);
-}
-async function checkRoot(root) {
-  const guard = captureDirectoryAncestry(root, { label: "Unsafe root component" });
-  const s = await lstat(guard.root);
-  owned(s);
-  if ((s.mode & 4095) !== 448) throw Error("Unsafe bundle root mode");
-  guard.check();
-  return guard;
-}
-async function scan(root) {
-  const inventory = [];
-  const aliases = /* @__PURE__ */ new Set(), directories = [];
-  let count = 0, total = 0;
-  const pending = [""];
-  while (pending.length) {
-    const rel = (
-      /** @type {string} */
-      pending.pop()
-    ), directory = path3.join(root, rel), guard = captureDirectoryAncestry(directory, { label: "Directory changed" });
-    const names = await readDirectoryBounded(directory, LIMITS.entries * 2 - count);
-    count += names.length;
-    guard.check();
-    for (const name of names.sort(byteOrder)) {
-      const p = rel ? rel + "/" + name : name;
-      safePath(p);
-      const key = p.toLowerCase();
-      if (aliases.has(key)) throw Error("Case collision");
-      aliases.add(key);
-      const s = await lstat(path3.join(root, p));
-      owned(s);
-      if (s.isDirectory()) {
-        if ((s.mode & 4095) !== 448) throw Error("Directory mode");
-        pending.push(p);
-        directories.push(p);
-      } else {
-        const role = p === "bundle-manifest.json" ? "manifest" : roleFor(p), mode = role === "executable" ? 448 : 384;
-        if (!s.isFile() || s.nlink !== 1 || (s.mode & 4095) !== mode) throw Error("File mode/type");
-        if (p === "bundle-manifest.json") {
-          await hashRegular(path3.join(root, p), LIMITS.manifest, { mode });
-          continue;
-        }
-        const digest = await hashRegular(path3.join(root, p), Math.min(LIMITS.file, LIMITS.bytes - total), { mode });
-        total += digest.size;
-        if (total > LIMITS.bytes) throw Error("Bundle byte bound");
-        inventory.push({ path: p, role, type: "file", mode, ...digest });
-      }
-      guard.check();
-    }
-    guard.check();
-  }
-  for (const p of directories) if (!inventory.some((e) => e.path.startsWith(p + "/"))) throw Error("Empty/unknown directory");
-  return inventory.sort((a, b) => byteOrder(a.path, b.path));
-}
-async function createManifestFor(root, { version, target, compatibility, provenance, tools }, requiredApp) {
-  const guard = await checkRoot(root);
-  root = guard.root;
-  const payload = { schema: Object.hasOwn(tools, "ast-grep") ? 2 : 1, product: PRODUCT, version, target, compatibility, provenance, tools, inventory: await scan(root) };
-  guard.check();
-  const manifest = { ...payload, digest: manifestDigest(payload) };
-  checkManifestFor(manifest, requiredApp);
-  return manifest;
-}
-async function validateBundle(root) {
-  return validateBundleFor(root, REQUIRED_APP);
-}
-async function validateBundleFor(root, requiredApp) {
-  const guard = await checkRoot(root);
-  root = guard.root;
-  const raw = await readRegular(path3.join(root, "bundle-manifest.json"), LIMITS.manifest, { mode: 384 }), manifest = JSON.parse(raw.toString("utf8"));
-  if (!raw.equals(Buffer.from(canonical(manifest) + "\n"))) throw Error("Noncanonical manifest bytes");
-  const bytes = checkManifestFor(manifest, requiredApp), actual = await createManifestFor(root, manifest, requiredApp);
-  if (canonical(actual) !== canonical(manifest)) throw Error("Bundle inventory mismatch");
-  guard.check();
-  return { root, digest: manifest.digest, manifest, version: manifest.version, inventory: manifest.inventory, bytes };
-}
-
-// src/kiro/managed-generation.ts
+import { createHash as createHash2 } from "node:crypto";
 async function resolveManagedFoveaParser(context) {
   const bundle = await validateBundle(context.bundleRoot);
-  if (bundle.root !== context.bundleRoot || context.expectedNode !== path4.join(bundle.root, "tools/node") || context.rg !== path4.join(bundle.root, "tools/rg")) throw new Error("managed parser generation containment mismatch");
+  if (bundle.root !== context.bundleRoot || context.expectedNode !== path2.join(bundle.root, "tools/node") || context.rg !== path2.join(bundle.root, "tools/rg")) throw new Error("managed parser generation containment mismatch");
   const base = managedInstallationBase(bundle.root);
-  if (base && path4.basename(bundle.root) !== bundle.digest) throw new Error("managed parser generation digest mismatch");
+  if (base && path2.basename(bundle.root) !== bundle.digest) throw new Error("managed parser generation digest mismatch");
   if (bundle.manifest.schema === 1) return void 0;
   const parser = bundle.inventory.find((entry) => entry.path === "tools/ast-grep");
   if (!parser || bundle.manifest.tools["ast-grep"].version !== "0.45.3") throw new Error("managed parser identity missing");
-  return { path: path4.join(bundle.root, "tools/ast-grep"), sha256: parser.sha256, version: "0.45.3", generationRoot: bundle.root };
+  return { path: path2.join(bundle.root, "tools/ast-grep"), sha256: parser.sha256, version: "0.45.3", generationRoot: bundle.root };
 }
 var digestPattern = /^[a-f0-9]{64}$/u;
 function inferManagedGeneration(runtimeRoot, env) {
-  const parent = path4.dirname(runtimeRoot);
-  const completeLayout = path4.basename(runtimeRoot) === "app" && (fs3.existsSync(path4.join(parent, "bundle-manifest.json")) || digestPattern.test(path4.basename(parent)) && path4.basename(path4.dirname(parent)) === "runtime" && path4.basename(path4.dirname(path4.dirname(parent))) === "kiro-fabric");
+  const parent = path2.dirname(runtimeRoot);
+  const completeLayout = path2.basename(runtimeRoot) === "app" && (fs2.existsSync(path2.join(parent, "bundle-manifest.json")) || digestPattern.test(path2.basename(parent)) && path2.basename(path2.dirname(parent)) === "runtime" && path2.basename(path2.dirname(path2.dirname(parent))) === "kiro-fabric");
   if (!completeLayout && env.KIRO_FABRIC_BUNDLE_ROOT === void 0 && env.KIRO_FABRIC_RG === void 0) return void 0;
   const bundleRoot = env.KIRO_FABRIC_BUNDLE_ROOT ?? parent;
-  if (!path4.isAbsolute(bundleRoot) || fs3.realpathSync(bundleRoot) !== bundleRoot || runtimeRoot !== path4.join(bundleRoot, "app")) throw new Error("managed generation runtime containment mismatch");
-  const expectedNode = path4.join(bundleRoot, "tools", "node");
-  const rg = path4.join(bundleRoot, "tools", "rg");
+  if (!path2.isAbsolute(bundleRoot) || fs2.realpathSync(bundleRoot) !== bundleRoot || runtimeRoot !== path2.join(bundleRoot, "app")) throw new Error("managed generation runtime containment mismatch");
+  const expectedNode = path2.join(bundleRoot, "tools", "node");
+  const rg = path2.join(bundleRoot, "tools", "rg");
   if (env.KIRO_FABRIC_EXPECTED_NODE !== void 0 && env.KIRO_FABRIC_EXPECTED_NODE !== expectedNode || env.KIRO_FABRIC_RG !== void 0 && env.KIRO_FABRIC_RG !== rg) throw new Error("managed generation executable environment mismatch");
   return { bundleRoot, expectedNode, rg };
 }
 function managedInstallationBase(bundleRoot) {
-  const runtimes = path4.dirname(bundleRoot);
-  const base = path4.dirname(runtimes);
-  return digestPattern.test(path4.basename(bundleRoot)) && path4.basename(runtimes) === "runtime" && path4.basename(base) === "kiro-fabric" ? base : void 0;
+  const runtimes = path2.dirname(bundleRoot);
+  const base = path2.dirname(runtimes);
+  return digestPattern.test(path2.basename(bundleRoot)) && path2.basename(runtimes) === "runtime" && path2.basename(base) === "kiro-fabric" ? base : void 0;
 }
-var hashBytes = (bytes) => createHash3("sha256").update(bytes).digest("hex");
+var hashBytes = (bytes) => createHash2("sha256").update(bytes).digest("hex");
 var record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 function readControl(file) {
-  const stat = fs3.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 2 * 1024 * 1024 || (stat.mode & 4095) !== 384 || process.getuid && stat.uid !== process.getuid() || fs3.realpathSync(file) !== file) throw new Error("unsafe managed installation control");
-  return fs3.readFileSync(file);
+  const stat = fs2.lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 2 * 1024 * 1024 || (stat.mode & 4095) !== 384 || process.getuid && stat.uid !== process.getuid() || fs2.realpathSync(file) !== file) throw new Error("unsafe managed installation control");
+  return fs2.readFileSync(file);
 }
 function validateManagedAdmission(bundleRoot, dataRoot, manifestSha256) {
   const base = managedInstallationBase(bundleRoot);
   if (!base) return;
-  if (dataRoot !== path4.join(base, "data")) throw new Error("installed managed data binding mismatch");
-  const ownerBytes = readControl(path4.join(base, "install-owner.json"));
+  if (dataRoot !== path2.join(base, "data")) throw new Error("installed managed data binding mismatch");
+  const ownerBytes = readControl(path2.join(base, "install-owner.json"));
   const owner = JSON.parse(ownerBytes.toString("utf8"));
   const fields = ["owner", "schemaVersion", "status", "installationId", "kiroHome", "dataRoot", "currentRuntime", "previousRuntime", "runtimeGenerations", "profileSha256", "launcherSha256", "releaseStateSha256", "transactionId"];
   const nullableHash = (value) => value === null || typeof value === "string" && digestPattern.test(value);
-  if (!record(owner) || fields.some((key) => !Object.hasOwn(owner, key)) || Object.keys(owner).some((key) => !fields.includes(key) && key !== "legacy") || owner.owner !== "kiro-fabric-agent-user-install" || owner.schemaVersion !== 3 || !["active", "retired"].includes(String(owner.status)) || typeof owner.installationId !== "string" || !owner.installationId || owner.installationId.length > 200 || /[\x00-\x1f\x7f]/u.test(owner.installationId) || owner.kiroHome !== path4.dirname(base) || owner.dataRoot !== dataRoot || typeof owner.currentRuntime !== "string" || !digestPattern.test(owner.currentRuntime) || !nullableHash(owner.previousRuntime) || !nullableHash(owner.profileSha256) || typeof owner.launcherSha256 !== "string" || !digestPattern.test(owner.launcherSha256) || !nullableHash(owner.releaseStateSha256) || typeof owner.transactionId !== "string" || !/^[a-f0-9]{32}$/u.test(owner.transactionId) || !Array.isArray(owner.runtimeGenerations) || !owner.runtimeGenerations.length || owner.runtimeGenerations.length > 256) throw new Error("invalid managed installation ownership");
+  if (!record(owner) || fields.some((key) => !Object.hasOwn(owner, key)) || Object.keys(owner).some((key) => !fields.includes(key) && key !== "legacy") || owner.owner !== "kiro-fabric-agent-user-install" || owner.schemaVersion !== 3 || !["active", "retired"].includes(String(owner.status)) || typeof owner.installationId !== "string" || !owner.installationId || owner.installationId.length > 200 || /[\x00-\x1f\x7f]/u.test(owner.installationId) || owner.kiroHome !== path2.dirname(base) || owner.dataRoot !== dataRoot || typeof owner.currentRuntime !== "string" || !digestPattern.test(owner.currentRuntime) || !nullableHash(owner.previousRuntime) || !nullableHash(owner.profileSha256) || typeof owner.launcherSha256 !== "string" || !digestPattern.test(owner.launcherSha256) || !nullableHash(owner.releaseStateSha256) || typeof owner.transactionId !== "string" || !/^[a-f0-9]{32}$/u.test(owner.transactionId) || !Array.isArray(owner.runtimeGenerations) || !owner.runtimeGenerations.length || owner.runtimeGenerations.length > 256) throw new Error("invalid managed installation ownership");
   const names = /* @__PURE__ */ new Set();
   for (const generation of owner.runtimeGenerations) {
     if (!record(generation) || Object.keys(generation).sort().join(",") !== "manifestSha256,name" || typeof generation.name !== "string" || !digestPattern.test(generation.name) || names.has(generation.name) || typeof generation.manifestSha256 !== "string" || !digestPattern.test(generation.manifestSha256)) throw new Error("invalid retained generation ownership");
@@ -1149,8 +800,8 @@ function validateManagedAdmission(bundleRoot, dataRoot, manifestSha256) {
   }
   if (!names.has(owner.currentRuntime) || owner.previousRuntime !== null && !names.has(String(owner.previousRuntime))) throw new Error("invalid current/previous generation ownership");
   if (owner.status !== "active") throw new Error("managed installation is retired; install before starting");
-  if (!owner.runtimeGenerations.some((generation) => generation.name === path4.basename(bundleRoot) && generation.manifestSha256 === manifestSha256)) throw new Error("managed generation is not verified retained ownership");
-  const journalPath = path4.join(base, ".transactions", "active.json");
+  if (!owner.runtimeGenerations.some((generation) => generation.name === path2.basename(bundleRoot) && generation.manifestSha256 === manifestSha256)) throw new Error("managed generation is not verified retained ownership");
+  const journalPath = path2.join(base, ".transactions", "active.json");
   let journalBytes;
   try {
     journalBytes = readControl(journalPath);
@@ -1161,24 +812,24 @@ function validateManagedAdmission(bundleRoot, dataRoot, manifestSha256) {
     const journal = JSON.parse(journalBytes.toString("utf8"));
     if (!record(journal) || journal.schemaVersion !== 1 || journal.transactionId !== owner.transactionId || !nullableHash(journal.beforeOwnerSha256) || typeof journal.afterOwnerSha256 !== "string" || !digestPattern.test(journal.afterOwnerSha256) || journal.afterOwnerSha256 !== hashBytes(ownerBytes)) throw new Error("managed installation requires transaction recovery before startup");
   }
-  if (owner.releaseStateSha256 !== null && hashBytes(readControl(path4.join(base, "release-state.json"))) !== owner.releaseStateSha256) throw new Error("managed release state identity mismatch");
+  if (owner.releaseStateSha256 !== null && hashBytes(readControl(path2.join(base, "release-state.json"))) !== owner.releaseStateSha256) throw new Error("managed release state identity mismatch");
 }
 async function validateManagedGeneration(context, dataRoot) {
-  if (context.expectedNode !== path4.join(context.bundleRoot, "tools", "node")) throw new Error("managed generation containment mismatch");
-  const beforeNode = fs3.lstatSync(context.expectedNode, { bigint: true });
+  if (context.expectedNode !== path2.join(context.bundleRoot, "tools", "node")) throw new Error("managed generation containment mismatch");
+  const beforeNode = fs2.lstatSync(context.expectedNode, { bigint: true });
   const bundle = await validateBundle(context.bundleRoot);
-  if (bundle.root !== context.bundleRoot || context.expectedNode !== path4.join(bundle.root, "tools", "node") || context.rg !== path4.join(bundle.root, "tools", "rg")) throw new Error("managed generation containment mismatch");
+  if (bundle.root !== context.bundleRoot || context.expectedNode !== path2.join(bundle.root, "tools", "node") || context.rg !== path2.join(bundle.root, "tools", "rg")) throw new Error("managed generation containment mismatch");
   const base = managedInstallationBase(bundle.root);
-  if (base && (path4.basename(bundle.root) !== bundle.digest || dataRoot !== path4.join(base, "data"))) throw new Error("installed managed generation data binding mismatch");
-  const relative = path4.relative(bundle.root, dataRoot);
-  if (!relative || !relative.startsWith(`..${path4.sep}`) && relative !== ".." && !path4.isAbsolute(relative) || bundle.root.startsWith(dataRoot + path4.sep)) throw new Error("managed bundle and data roots overlap");
+  if (base && (path2.basename(bundle.root) !== bundle.digest || dataRoot !== path2.join(base, "data"))) throw new Error("installed managed generation data binding mismatch");
+  const relative = path2.relative(bundle.root, dataRoot);
+  if (!relative || !relative.startsWith(`..${path2.sep}`) && relative !== ".." && !path2.isAbsolute(relative) || bundle.root.startsWith(dataRoot + path2.sep)) throw new Error("managed bundle and data roots overlap");
   const tools = bundle.manifest.tools;
   if (typeof tools.node?.version !== "string" || typeof tools.rg?.version !== "string" || !/^\d+\.\d+\.\d+$/u.test(tools.node.version) || !/^\d+\.\d+\.\d+$/u.test(tools.rg.version)) throw new Error("managed tool version identity missing");
   const node = bundle.inventory.find((entry) => entry.path === "tools/node");
   const rg = bundle.inventory.find((entry) => entry.path === "tools/rg");
-  const stat = fs3.lstatSync(context.expectedNode, { bigint: true });
+  const stat = fs2.lstatSync(context.expectedNode, { bigint: true });
   const unchanged = ["dev", "ino", "size", "mode", "uid", "gid", "nlink", "mtimeNs", "ctimeNs"].every((key) => beforeNode[key] === stat[key]);
-  if (!node || !rg || !unchanged || fs3.realpathSync(process.execPath) !== context.expectedNode || fs3.realpathSync(context.expectedNode) !== context.expectedNode || !stat.isFile() || stat.nlink !== 1n || (stat.mode & 0o7777n) !== 0o700n || process.getuid && stat.uid !== BigInt(process.getuid()) || stat.size !== BigInt(node.size) || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
+  if (!node || !rg || !unchanged || fs2.realpathSync(process.execPath) !== context.expectedNode || fs2.realpathSync(context.expectedNode) !== context.expectedNode || !stat.isFile() || stat.nlink !== 1n || (stat.mode & 0o7777n) !== 0o700n || process.getuid && stat.uid !== BigInt(process.getuid()) || stat.size !== BigInt(node.size) || process.version !== `v${tools.node.version}`) throw new Error("managed Node executable identity mismatch");
   const managedSearch = { generationRoot: bundle.root, path: context.rg, sha256: rg.sha256, mode: 448, version: `ripgrep ${tools.rg.version}` };
   resolveSearchExecutable(managedSearch);
   return managedSearch;
@@ -1188,17 +839,17 @@ async function validateManagedGeneration(context, dataRoot) {
 import { fileURLToPath } from "node:url";
 
 // src/kiro/power/agent-launch-context.ts
-import fs4 from "node:fs";
-import path5 from "node:path";
+import fs3 from "node:fs";
+import path3 from "node:path";
 var canonicalDirectory = (value, name) => {
   if (!value) throw new Error(`Agent launch is missing ${name}`);
-  if (!path5.isAbsolute(value)) throw new Error(`${name} must be an absolute path`);
+  if (!path3.isAbsolute(value)) throw new Error(`${name} must be an absolute path`);
   try {
     const inspected = inspectCanonicalPath(value, {
       kind: "directory",
       rejectFinalSymlink: true
     });
-    const stats = fs4.lstatSync(inspected.canonicalPath);
+    const stats = fs3.lstatSync(inspected.canonicalPath);
     if (typeof process.getuid === "function" && stats.uid !== process.getuid()) {
       throw new Error("directory is not owned by the current user");
     }
@@ -1242,11 +893,11 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
     try {
       const managedSearch = launch.managedGeneration ? await validateManagedGeneration(launch.managedGeneration, launch.dataRoot) : void 0;
       if (launch.managedGeneration && base) {
-        const manifestHash = createHash4("sha256").update(readFileSync(path6.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
+        const manifestHash = createHash3("sha256").update(readFileSync(path4.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
       const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : void 0;
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-JKIUK4Q3.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-UVRAKP22.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {} });
     } finally {
       release?.();

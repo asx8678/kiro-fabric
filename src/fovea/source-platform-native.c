@@ -1,9 +1,14 @@
-/* Read-only POSIX source capabilities, N-API 8. No paths except literal root
+/* POSIX source capabilities plus bounded private-journal CAS, N-API 8.
+ * Source operations remain read-only. No paths except literal root
  * and validated single components; no exported fd integers or fs fallbacks.
  * One async operation per capability: concurrent use (including close) fails
  * EBUSY. A strong JS reference pins it until completion. Work touches only its
  * own copy of fd/DIR; capability state is modified on the JS thread only.
  * Filesystem work runs in the Node worker pool, not the JS event loop. */
+#if defined(__APPLE__)
+/* POSIX-only feature selection hides O_NOFOLLOW and Darwin stat timestamps. */
+#define _DARWIN_C_SOURCE 1
+#endif
 #define _POSIX_C_SOURCE 200809L
 #define NAPI_VERSION 8
 #include <node_api.h>
@@ -17,6 +22,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #if !defined(__linux__) && !defined(__APPLE__)
 #error "Source capabilities require audited Linux or Darwin POSIX semantics"
@@ -36,9 +42,18 @@ typedef struct {
   int busy;
   int closed;
 } capability;
-typedef enum { ROOT, OPEN, STAT, READ, CLOSE, DIRECTORY, ENTRIES, CLOSE_DIRECTORY } operation;
+/* Additive provenance ABI 1: not general-purpose write/open/unlink exports. */
+#define JOURNAL_CAP 48000
+typedef enum { ROOT, OPEN, STAT, READ, CLOSE, DIRECTORY, ENTRIES, CLOSE_DIRECTORY, JOURNAL_READ, JOURNAL_REPLACE } operation;
+typedef struct {
+  unsigned char expected[JOURNAL_CAP], replacement[JOURNAL_CAP];
+  size_t expected_length, replacement_length;
+  int expected_absent, absent;
+  char nonce[33];
+} journal_task;
 typedef struct {
   operation op;
+  journal_task *journal;
   napi_async_work work;
   napi_deferred deferred;
   napi_ref owner;
@@ -71,8 +86,11 @@ static napi_value fail(napi_env env, const char *code, const char *message) {
 static napi_value errno_value(napi_env env, int number) {
   napi_value message, error, code, value;
   const int translated = uv_translate_sys_error(number);
-  if (napi_create_string_utf8(env, uv_strerror(translated), NAPI_AUTO_LENGTH, &message) != napi_ok ||
-      napi_create_string_utf8(env, uv_err_name(translated), NAPI_AUTO_LENGTH, &code) != napi_ok ||
+  /* libuv does not name Darwin ESTALE; keep journal identity failures portable. */
+  const char *error_message = number == ESTALE ? "Stale journal identity" : uv_strerror(translated);
+  const char *error_code = number == ESTALE ? "ESTALE" : uv_err_name(translated);
+  if (napi_create_string_utf8(env, error_message, NAPI_AUTO_LENGTH, &message) != napi_ok ||
+      napi_create_string_utf8(env, error_code, NAPI_AUTO_LENGTH, &code) != napi_ok ||
       napi_create_error(env, code, message, &error) != napi_ok ||
       napi_create_int32(env, number, &value) != napi_ok ||
       napi_set_named_property(env, error, "errno", value) != napi_ok) return NULL;
@@ -139,9 +157,123 @@ static int stat_retry(int fd, struct stat *s) {
   do { result = fstat(fd, s); } while (result < 0 && errno == EINTR);
   return result;
 }
+static int journal_private(int fd) {
+  struct stat s;
+  if (stat_retry(fd, &s) < 0) return errno;
+  return S_ISDIR(s.st_mode) && s.st_uid == getuid() && !(s.st_mode & 0077) ? 0 : EPERM;
+}
+static int journal_file(const struct stat *s) {
+  return S_ISREG(s->st_mode) && s->st_uid == getuid() && !(s->st_mode & 0077) && s->st_nlink == 1 && s->st_size >= 0 && s->st_size <= JOURNAL_CAP;
+}
+static int journal_same(const struct stat *a, const struct stat *b) {
+  return a->st_dev == b->st_dev && a->st_ino == b->st_ino;
+}
+/* Never unlink a name we did not create, including a replaced lock/temp. */
+static int journal_identity(int directory, const char *name, const struct stat *identity) {
+  struct stat current;
+  if (fstatat(directory, name, &current, AT_SYMLINK_NOFOLLOW) < 0) return errno;
+  return journal_file(&current) && journal_same(identity, &current) ? 0 : ESTALE;
+}
+static int journal_remove(int directory, const char *name, const struct stat *identity) {
+  int error = journal_identity(directory, name, identity);
+  if (error) return error;
+  return unlinkat(directory, name, 0) < 0 ? errno : 0;
+}
+static int journal_read(task *t) {
+  int fd = open_retry(t->fd, t->name, ENTRY_FLAGS), error = 0;
+  t->count = 0; t->journal->absent = 0;
+  if (fd < 0) { if (errno == ENOENT) { t->journal->absent = 1; return 0; } return errno; }
+  struct stat before, after;
+  if (stat_retry(fd, &before) < 0) error = errno;
+  else if (!journal_file(&before)) error = EPERM;
+  while (!error && t->count <= JOURNAL_CAP) {
+    ssize_t n;
+    do { n = read(fd, t->data.bytes + t->count, JOURNAL_CAP + 1 - t->count); } while (n < 0 && errno == EINTR);
+    if (n < 0) { error = errno; break; }
+    if (!n) break;
+    t->count += (size_t)n;
+  }
+  if (!error) {
+    if (t->count > JOURNAL_CAP) error = EFBIG;
+    else if (stat_retry(fd, &after) < 0) error = errno;
+    else if (!journal_file(&after) || before.st_size != after.st_size || (off_t)t->count != after.st_size) error = EAGAIN;
+#if defined(__APPLE__)
+    else if (before.st_mtimespec.tv_sec != after.st_mtimespec.tv_sec || before.st_mtimespec.tv_nsec != after.st_mtimespec.tv_nsec ||
+             before.st_ctimespec.tv_sec != after.st_ctimespec.tv_sec || before.st_ctimespec.tv_nsec != after.st_ctimespec.tv_nsec) error = EAGAIN;
+#else
+    else if (before.st_mtim.tv_sec != after.st_mtim.tv_sec || before.st_mtim.tv_nsec != after.st_mtim.tv_nsec ||
+             before.st_ctim.tv_sec != after.st_ctim.tv_sec || before.st_ctim.tv_nsec != after.st_ctim.tv_nsec) error = EAGAIN;
+#endif
+  }
+  if (close(fd) < 0 && !error) error = errno;
+  return error;
+}
+static int journal_exclusive(int directory, const char *name) {
+  int fd;
+  do { fd = openat(directory, name, O_CREAT | O_EXCL | O_WRONLY | O_NOFOLLOW | O_CLOEXEC, 0600); } while (fd < 0 && errno == EINTR);
+  return fd;
+}
+static int journal_sync(int fd) {
+  int result;
+  do { result = fsync(fd); } while (result < 0 && errno == EINTR);
+  return result < 0 ? errno : 0;
+}
+static int journal_execute(task *t) {
+  int error = journal_private(t->fd);
+  if (error) return error;
+  if (t->op == JOURNAL_READ) return journal_read(t);
+  /* invoke validated exactly 69 filename and 32 nonce bytes. */
+  char lock_name[75], temp_name[107];
+  memcpy(lock_name, t->name, 69); memcpy(lock_name + 69, ".lock", 6);
+  memcpy(temp_name, t->name, 69); temp_name[69] = '.';
+  memcpy(temp_name + 70, t->journal->nonce, 32); memcpy(temp_name + 102, ".tmp", 5);
+  int lock = journal_exclusive(t->fd, lock_name);
+  if (lock < 0) return errno; /* No stale lock recovery or waiting. */
+  int temp = -1, own_temp = 0, own_lock = 0;
+  struct stat lock_identity, temp_identity;
+  if (stat_retry(lock, &lock_identity) < 0) { error = errno; goto done; }
+  own_lock = 1;
+  if (!journal_file(&lock_identity)) { error = EPERM; goto done; }
+  error = journal_read(t);
+  if (error) goto done;
+  if (t->journal->absent != t->journal->expected_absent || (!t->journal->absent &&
+      (t->count != t->journal->expected_length || memcmp(t->data.bytes, t->journal->expected, t->count)))) { error = EAGAIN; goto done; }
+  temp = journal_exclusive(t->fd, temp_name);
+  if (temp < 0) { error = errno; goto done; }
+  if (stat_retry(temp, &temp_identity) < 0) { error = errno; goto done; }
+  own_temp = 1;
+  for (size_t written = 0; written < t->journal->replacement_length;) {
+    ssize_t n;
+    do { n = write(temp, t->journal->replacement + written, t->journal->replacement_length - written); } while (n < 0 && errno == EINTR);
+    if (n <= 0) { error = n < 0 ? errno : EIO; goto done; }
+    written += (size_t)n;
+  }
+  error = journal_sync(temp);
+  if (error) goto done;
+  if (close(temp) < 0) { error = errno; temp = -1; goto done; }
+  temp = -1;
+  if ((error = journal_private(t->fd)) || (error = journal_identity(t->fd, lock_name, &lock_identity)) ||
+      (error = journal_identity(t->fd, temp_name, &temp_identity))) goto done;
+  if (renameat(t->fd, temp_name, t->fd, t->name) < 0) { error = errno; goto done; }
+  own_temp = 0;
+  error = journal_sync(t->fd); /* Failure after rename is uncertain, never success. */
+done:
+  if (temp >= 0 && close(temp) < 0 && !error) error = errno;
+  if (own_temp) { int e = journal_remove(t->fd, temp_name, &temp_identity); if (e && !error) error = e; }
+  if (own_lock) { int e = journal_remove(t->fd, lock_name, &lock_identity); if (e && !error) error = e; }
+  if (close(lock) < 0 && !error) error = errno;
+  return error;
+}
+static int journal_hex(const char *text, size_t length) {
+  for (size_t i = 0; i < length; i++) if (!((text[i] >= 'a' && text[i] <= 'f') || (text[i] >= '0' && text[i] <= '9'))) return 0;
+  return 1;
+}
 static void execute(napi_env env, void *data) {
   (void)env; task *t = data;
   switch (t->op) {
+    case JOURNAL_READ: case JOURNAL_REPLACE:
+      t->error = journal_execute(t);
+      break;
     case ROOT:
       do { t->result_fd = open("/", DIR_FLAGS); } while (t->result_fd < 0 && errno == EINTR);
       if (t->result_fd < 0) t->error = errno;
@@ -214,7 +346,7 @@ static void cleanup(napi_env env, task *t) {
   if (t->result_stream) (void)closedir(t->result_stream);
   if (t->owner) (void)napi_delete_reference(env, t->owner);
   if (t->work) (void)napi_delete_async_work(env, t->work);
-  free(t);
+  free(t->journal); free(t);
 }
 static void complete(napi_env env, napi_status status, void *data) {
   task *t = data; napi_value value = NULL;
@@ -238,6 +370,12 @@ static void complete(napi_env env, napi_status status, void *data) {
         if (value) t->result_stream = NULL;
         break;
       case STAT: value = stat_object(env, &t->stat); break;
+      case JOURNAL_READ:
+        if (t->journal->absent) {
+          if (napi_get_null(env, &value) != napi_ok) value = NULL;
+          break;
+        }
+        /* fall through */
       case READ:
         if (napi_create_buffer_copy(env, t->count, t->data.bytes, NULL, &value) != napi_ok) value = NULL;
         break;
@@ -250,7 +388,7 @@ static void complete(napi_env env, napi_status status, void *data) {
           }
         } else value = NULL;
         break;
-      case CLOSE: case CLOSE_DIRECTORY:
+      case CLOSE: case CLOSE_DIRECTORY: case JOURNAL_REPLACE:
         if (napi_get_undefined(env, &value) != napi_ok) value = NULL;
         break;
     }
@@ -262,10 +400,10 @@ static void complete(napi_env env, napi_status status, void *data) {
   cleanup(env, t);
 }
 static napi_value invoke(napi_env env, napi_callback_info info) {
-  napi_value args[3], promise, label; size_t argc = 3; void *data;
+  napi_value args[6], promise, label; size_t argc = 6; void *data;
   if (napi_get_cb_info(env, info, &argc, args, NULL, &data) != napi_ok) return fail(env, "ERR_SOURCE_NAPI", "Invalid callback");
   operation op = (operation)(uintptr_t)data;
-  size_t expected = op == ROOT ? 0 : op == OPEN ? 3 : op == READ ? 2 : 1;
+  size_t expected = op == ROOT ? 0 : op == OPEN ? 3 : op == JOURNAL_REPLACE ? 5 : (op == READ || op == JOURNAL_READ) ? 2 : 1;
   if (argc != expected) return reject_errno(env, EINVAL);
   capability *cap = NULL;
   if (op != ROOT) {
@@ -277,6 +415,31 @@ static napi_value invoke(napi_env env, napi_callback_info info) {
   task *t = calloc(1, sizeof(*t));
   if (!t) return reject_errno(env, ENOMEM);
   t->op = op; t->cap = cap; t->result_fd = -1; t->fd = cap ? cap->fd : -1; t->stream = cap ? cap->stream : NULL;
+  if (op == JOURNAL_READ || op == JOURNAL_REPLACE) {
+    if (!component(env, args[1], t->name) || strlen(t->name) != 69 || !journal_hex(t->name, 64) || strcmp(t->name + 64, ".json")) {
+      free(t); return reject_errno(env, EINVAL);
+    }
+    t->journal = calloc(1, sizeof(*t->journal));
+    if (!t->journal) { free(t); return reject_errno(env, ENOMEM); }
+    if (op == JOURNAL_REPLACE) {
+      napi_valuetype type; void *bytes; size_t length; bool buffer;
+      if (napi_typeof(env, args[2], &type) != napi_ok) goto invalid_journal;
+      t->journal->expected_absent = type == napi_null;
+      if (!t->journal->expected_absent) {
+        if (napi_is_buffer(env, args[2], &buffer) != napi_ok || !buffer || napi_get_buffer_info(env, args[2], &bytes, &length) != napi_ok || length > JOURNAL_CAP) goto invalid_journal;
+        memcpy(t->journal->expected, bytes, length); t->journal->expected_length = length;
+      }
+      if (napi_is_buffer(env, args[3], &buffer) != napi_ok || !buffer || napi_get_buffer_info(env, args[3], &bytes, &length) != napi_ok || !length || length > JOURNAL_CAP) goto invalid_journal;
+      memcpy(t->journal->replacement, bytes, length); t->journal->replacement_length = length;
+      char nonce[NAME_MAX + 1];
+      if (!component(env, args[4], nonce) || strlen(nonce) != 32 || !journal_hex(nonce, 32)) goto invalid_journal;
+      memcpy(t->journal->nonce, nonce, 33);
+    }
+    goto valid_journal;
+invalid_journal:
+    free(t->journal); free(t); return reject_errno(env, EINVAL);
+valid_journal:;
+  }
   if (op == OPEN) {
     char kind[16]; size_t length;
     if (!component(env, args[1], t->name) || napi_get_value_string_utf8(env, args[2], kind, sizeof(kind), &length) != napi_ok ||
@@ -306,7 +469,7 @@ static napi_value invoke(napi_env env, napi_callback_info info) {
   return promise;
 }
 static napi_value init(napi_env env, napi_value exports) {
-  const char *names[] = { "openRoot", "openAt", "stat", "read", "close", "openDirectory", "readDirectory", "closeDirectory" };
+  const char *names[] = { "openRoot", "openAt", "stat", "read", "close", "openDirectory", "readDirectory", "closeDirectory", "journalRead", "journalReplace" };
   for (uintptr_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
     napi_value fn;
     if (napi_create_function(env, names[i], NAPI_AUTO_LENGTH, invoke, (void *)i, &fn) != napi_ok ||
@@ -318,7 +481,7 @@ static napi_value init(napi_env env, napi_value exports) {
 #else
   const char *name = "linux";
 #endif
-  if (!number(env, exports, "abiVersion", 1) || napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &platform) != napi_ok ||
+  if (!number(env, exports, "provenanceAbiVersion", 1) || !number(env, exports, "abiVersion", 1) || napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &platform) != napi_ok ||
       napi_set_named_property(env, exports, "platform", platform) != napi_ok) return fail(env, "ERR_SOURCE_NAPI", "Cannot initialize binding ABI");
   return exports;
 }

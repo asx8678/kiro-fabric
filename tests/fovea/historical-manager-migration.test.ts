@@ -309,8 +309,12 @@ test.each(['profile-published', 'owner-committed'])('SIGKILL during cross-schema
     expect(Buffer.from(transaction.controls.manifest.before, 'base64')).toEqual(f.oldOwner);
     const controls = await f.controls();
     expect(f.run(['doctor', '--json'], 7, oldDigest).outcome).toBe('recovery-required');
-    const refusal = f.run(['recover', '--yes', '--json'], 5, oldDigest);
-    expect(refusal).toMatchObject({ error: 'Manifest identity', committed: false, dataPreserved: true });
+    // New schema-2 identity sidecars are intentionally unreadable by this
+    // strict archived manager; refusal precedes schema-2 bundle admission.
+    expect(transaction.schemaVersion).toBe(2);
+    expect(JSON.parse(evidence[1]!.toString()).schemaVersion).toBe(2);
+    const refusal = f.run(['recover', '--yes', '--json'], 7, oldDigest);
+    expect(refusal).toMatchObject({ error: 'recovery-required: invalid journal fields', recoveryRequired: true, committed: false, dataPreserved: true });
     expect(await Promise.all([journal, candidate].map(file => fs.readFile(file)))).toEqual(evidence);
     expect(await f.controls()).toEqual(controls);
     const recovered = f.source(newManager, undefined, 'recover');

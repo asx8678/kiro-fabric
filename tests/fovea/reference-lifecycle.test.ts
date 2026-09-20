@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createNativeLifecyclePlatform } from './fixtures/native-lifecycle-platform.js';
+import * as nativeLoader from '../../src/fovea/native-source-loader.js';
 import { lifecycleArgs, runLifecycle } from '../../scripts/fovea-lifecycle-harness.mjs';
 import { archivePinnedReference, PINNED } from '../../scripts/fovea-reference-harness.mjs';
 import { createScope } from '../../scripts/fovea-capability-probe.mjs';
@@ -29,6 +31,9 @@ function pinnedObject(directory: string, commit: string): boolean {
 const available = fs.existsSync(options.parser) && pinnedObject(options.reference, PINNED.upstreamCommit) && pinnedObject(options.hostReference, PINNED.referenceHostCommit);
 const hash = (text: string | Buffer): string => createHash('sha256').update(text).digest('hex');
 
+let nativeFixture: Awaited<ReturnType<typeof createNativeLifecyclePlatform>> | undefined;
+const nativeEntrypoint = () => nativeFixture?.entrypoint ?? path.resolve('dist/fovea/engine-entry.js');
+
 const route = (name: string) => `const app: any = {};\nexport function handler() { return 1; }\napp.get("/${name}", handler);\n`;
 const projection = (): KiroProjectionResult => {
   const text = 'committed result; retryProgram: false';
@@ -46,7 +51,7 @@ async function nativeMutationFixture(label: string, parser: { version: string; s
     fs.rmSync(scope.root, { recursive: true, force: true });
   };
   const make = async (conversationId: string) => {
-    const host = new FoveaHost({ dataRoot: scope.root, configFile: path.join(scope.root, 'config.json'), parser: { ...parser, path: options.parser }, entrypoint: path.resolve('dist/fovea/engine-entry.js') });
+    const host = new FoveaHost({ dataRoot: scope.root, configFile: path.join(scope.root, 'config.json'), parser: { ...parser, path: options.parser }, entrypoint: nativeEntrypoint() });
     hosts.push(host);
     const client = host.bind({ canonicalPath: root, deviceId: String(stat.dev), fileId: String(stat.ino), conversationId, conversationEpoch: 1, authorizationEpoch: 1 });
     const registry = new ActionRegistry();
@@ -74,7 +79,7 @@ async function nativeMutationFixture(label: string, parser: { version: string; s
   };
   try {
     return { root, file, a: await make('fixture-conversation'), b: await make('foreign-conversation'), close,
-      journal: () => new FoveaProvenanceJournal(path.join(scope.root, 'fovea')).read(worktree) };
+      journal: () => new FoveaProvenanceJournal(path.join(scope.root, 'fovea'), nativeFixture?.platform).read(worktree) };
   } catch (error) { await close(); throw error; }
 }
 
@@ -118,8 +123,17 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
     const result = await runLifecycle(options); scope = path.dirname(result.report);
     report = JSON.parse(fs.readFileSync(result.report, 'utf8'));
     expect(result.status, `retained diagnostics: ${result.report}`).toBe('executed');
+    if (process.platform === 'darwin') nativeFixture = await createNativeLifecyclePlatform();
   }, 150000);
-  afterAll(() => { if (scope && report?.status === 'executed') fs.rmSync(scope, { recursive: true, force: true }); });
+  afterAll(() => {
+    vi.restoreAllMocks(); nativeFixture?.close(); nativeFixture = undefined;
+    if (scope && report?.status === 'executed') fs.rmSync(scope, { recursive: true, force: true });
+  });
+  beforeEach(() => {
+    // Darwin exercises actual native journal/source I/O and a real child engine.
+    // Admission alone is fixture-owned; installed-generation loading is separate.
+    if (nativeFixture) vi.spyOn(nativeLoader, 'loadManagedSourcePlatform').mockResolvedValue(nativeFixture.platform);
+  });
   const at = (label: string) => report.trace.checkpoints.find((row: any) => row.label === label);
   const asserted = (id: string) => expect(report.trace.assertions).toContain(id);
   it('executes both pinned references and binds the driver/parser/source closure', () => {
@@ -171,7 +185,7 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
     for (const id of ['own-write', 'mixed-edit', 'lost-ack-write', 'failed-write', 'denied-write']) expect(report.trace.events.filter((e: any) => e.id === id).map((e: any) => e.type)).toEqual(['tool_execution_start', 'tool_call', 'tool_result', 'tool_execution_end']);
     expect(report.trace.events.filter((e: any) => e.id === 'cancelled-write').map((e: any) => e.type)).toEqual(['tool_execution_start', 'tool_call']);
   });
-  it.skipIf(process.platform !== 'linux').each(['own', 'foreign', 'mixed', 'external'])('compares %s origin using real local publications, two native hosts and pinned semantic deltas', async label => {
+  it.skipIf(!['linux', 'darwin'].includes(process.platform)).each(['own', 'foreign', 'mixed', 'external'])('compares %s origin using real local publications, two native hosts and pinned semantic deltas', async label => {
     const f = await nativeMutationFixture(label, report.parser);
     try {
       await f.a.baseline(); await f.b.baseline();
@@ -192,7 +206,7 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       expect(actual).toMatchObject({ red: true, delivered: false, automaticContinuation: false, details: { provenance: expected.provenance, added: expected.added, removed: expected.removed } });
       expect((await f.a.sync()).noticeId).toBe(actual.noticeId);
       expect(await f.a.status()).toMatchObject({ capabilities: { automatic: false, continuation: false } });
-      const records = f.journal().records;
+      const records = (await f.journal()).records;
       expect(records).toHaveLength(label === 'external' ? 0 : label === 'mixed' ? 2 : 1);
       if (records.length) {
         expect(records[0]).toMatchObject({ path: 'routes.ts', beforeSha256: hash(before) });
@@ -214,7 +228,7 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       asserted(`${label}-repeat-clean-turn-silent`);
     } finally { await f.close(); }
   }, 60000);
-  it.skipIf(process.platform !== 'linux')('native denied/failed/pre-publication cancellation publish no access, transition or enrollment', async () => {
+  it.skipIf(!['linux', 'darwin'].includes(process.platform))('native denied/failed/pre-publication cancellation publish no access, transition or enrollment', async () => {
     const f = await nativeMutationFixture('denied', report.parser);
     try {
       const before = fs.readFileSync(f.file, 'utf8');
@@ -226,11 +240,11 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       expect(f.a.events.filter(e => ['access', 'committed'].includes(e.phase))).toEqual([]);
       expect(fs.readFileSync(f.file, 'utf8')).toBe(before);
       expect(await f.a.status()).toMatchObject({ engineStarts: 0, observations: { attentionPaths: 0 }, notices: { pending: 0 } });
-      expect(f.journal().records).toEqual([]);
+      expect((await f.journal()).records).toEqual([]);
       asserted('denied-failed-mutations-no-journal'); asserted('cancel-before-publication-no-transition-or-notice');
     } finally { await f.close(); }
   }, 60000);
-  it.skipIf(process.platform !== 'linux')('native cancellation retains sync notice identity and suppresses only advisory before transport', async () => {
+  it.skipIf(!['linux', 'darwin'].includes(process.platform))('native cancellation retains sync notice identity and suppresses only advisory before transport', async () => {
     const f = await nativeMutationFixture('cancelled-sync', report.parser);
     const ledger = new FoveaResponseDelivery();
     try {
@@ -255,7 +269,7 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       asserted('revoked-sync-does-not-advance-baseline');
     } finally { ledger.close(); await f.close(); }
   }, 60000);
-  it.skipIf(process.platform !== 'linux')('documents intentional native lost-ack improvement using exact publication evidence', async () => {
+  it.skipIf(!['linux', 'darwin'].includes(process.platform))('documents intentional native lost-ack improvement using exact publication evidence', async () => {
     const f = await nativeMutationFixture('lost-ack', report.parser);
     const rename = fs.renameSync;
     try {
@@ -277,18 +291,18 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       expect(f.a.events.find(e => e.phase === 'committed')?.transitions).toEqual([transition]);
       vi.restoreAllMocks();
       const red = await f.a.sync(), expected = mutation('lost-ack');
-      expect(f.journal().records).toMatchObject([{ ...transition, path: 'routes.ts' }]);
+      expect((await f.journal()).records).toMatchObject([{ ...transition, path: 'routes.ts' }]);
       expect(red).toMatchObject({ red: true, details: { provenance: { kind: 'current-session' }, added: expected.added, removed: expected.removed } });
       expect(expected.provenance.kind).toBe('unattributed');
       asserted('pinned-failed-result-loses-commit-attribution');
     } finally { vi.restoreAllMocks(); await f.close(); }
   }, 60000);
-  it.skipIf(process.platform !== 'linux')('compares shared native-host invariants through the real registry/guest, not invented Kiro lifecycle events', async () => {
+  it.skipIf(!['linux', 'darwin'].includes(process.platform))('compares shared native-host invariants through the real registry/guest, not invented Kiro lifecycle events', async () => {
     const native = createScope(), root = native.workspace;
     const source = 'export function calculateTotal(n: number) { return n + 1; }\nexport function checkout() { return calculateTotal(2); }\n';
     fs.writeFileSync(path.join(root, 'math.ts'), source, { mode: 0o600 });
     const stat = fs.statSync(root, { bigint: true });
-    const host = new FoveaHost({ dataRoot: native.root, configFile: path.join(native.root, 'fovea.v1.json'), parser: report.parser && { ...report.parser, path: options.parser }, entrypoint: path.resolve('dist/fovea/engine-entry.js') });
+    const host = new FoveaHost({ dataRoot: native.root, configFile: path.join(native.root, 'fovea.v1.json'), parser: report.parser && { ...report.parser, path: options.parser }, entrypoint: nativeEntrypoint() });
     const authority = { canonicalPath: root, deviceId: String(stat.dev), fileId: String(stat.ino), conversationId: 'fixture-conversation', conversationEpoch: 1, authorizationEpoch: 1 };
     const client = host.bind(authority), registry = new ActionRegistry();
     registry.register(new FoveaProvider(client)); registry.register(new LocalCodingProvider({ root, lockRoot: path.join(native.root, 'locks') }));

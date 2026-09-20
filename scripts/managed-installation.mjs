@@ -7,6 +7,7 @@ import { validateBundle, validateInstalledBundle, checkManifest, checkInstalledM
 import { checkReleaseAdmission } from './release-trust.mjs';
 import { generateAgentProfile } from './agent-profile.mjs';
 import { readGenerationProfiles, retainGenerationProfile } from './installer-profile-store.mjs';
+import { captureDirectoryIdentity, assertDirectoryIdentity, validateDirectoryIdentity } from './installer-directory-identity.mjs';
 import { acquireInstallationLock, inspectInstallationLock } from './installer-lock.mjs';
 import { transactionPaths, readControl, readTransaction, syncDirectory, recoverInstallTransaction, activateInstallTransaction } from './install-transaction.mjs';
 
@@ -86,7 +87,18 @@ export async function inspectCompleteInstallation(kiroHome,{verifyGenerations=tr
 }
 function candidatePath(p){return path.join(p.base,'.transactions/candidate.json');}
 function candidateRecord(p) {
- const raw=readControl(candidatePath(p));if(!raw)return null;const c=JSON.parse(raw.toString());exact(c,['schemaVersion','transactionId','kiroHome','baseIdentity','stageIdentity','purpose','manifest']);exact(c.baseIdentity,['dev','ino']);if(c.stageIdentity!==null){exact(c.stageIdentity,['dev','ino']);if(!/^\d+$/.test(c.stageIdentity.dev)||!/^\d+$/.test(c.stageIdentity.ino))throw Error('candidate inode identity');}const st=fs.lstatSync(p.base);if(!['activate','validate-retained'].includes(c.purpose)||c.schemaVersion!==1||c.kiroHome!==path.dirname(p.base)||!TX.test(c.transactionId)||c.baseIdentity.dev!==String(st.dev)||c.baseIdentity.ino!==String(st.ino))throw Error('recovery-required: candidate identity');checkManifest(c.manifest);return c;
+ const raw=readControl(candidatePath(p));if(!raw)return null;const c=JSON.parse(raw.toString());exact(c,['schemaVersion','transactionId','kiroHome','baseIdentity','stageIdentity','purpose','manifest']);
+ if(!['activate','validate-retained'].includes(c.purpose)||![1,2].includes(c.schemaVersion)||c.kiroHome!==path.dirname(p.base)||!TX.test(c.transactionId))throw Error('recovery-required: candidate identity');
+ assertDirectoryIdentity(p.base,c.baseIdentity,c.schemaVersion);
+ if(c.stageIdentity!==null)validateDirectoryIdentity(c.stageIdentity,c.schemaVersion);
+ checkManifest(c.manifest);return c;
+}
+function validateCandidateRoots(p,c) {
+ const target=path.join(p.runtime,c.manifest.digest),stage=path.join(p.runtime,'.candidate-'+c.transactionId);
+ for(const root of c.purpose==='activate'?[target,stage]:[stage])if(s.lstat(root)){
+  if(!c.stageIdentity)throw Error('recovery-required: candidate root identity changed');
+  assertDirectoryIdentity(root,c.stageIdentity,c.schemaVersion);
+ }
 }
 // Only remove the exact bounded subset recorded before copying. Unknown or
 // partially-written bytes are conflicts, never an excuse for recursive rm.
@@ -101,7 +113,7 @@ async function recoverCandidate(p) {
  const c=candidateRecord(p);if(!c)return {recovered:false};
  const raw=readControl(p.manifest),o=raw?JSON.parse(raw.toString()):null;
  const target=path.join(p.runtime,c.manifest.digest),stage=path.join(p.runtime,'.candidate-'+c.transactionId);
- for(const root of c.purpose==='activate'?[target,stage]:[stage]){const st=s.lstat(root);if(st&&(!c.stageIdentity||String(st.dev)!==c.stageIdentity.dev||String(st.ino)!==c.stageIdentity.ino))throw Error('recovery-required: candidate root identity changed');}
+ validateCandidateRoots(p,c);
  if(c.purpose==='validate-retained'&&!(o?.schemaVersion===3&&o.runtimeGenerations?.some(r=>r.name===c.manifest.digest)))throw Error('recovery-required: retained validation owner missing');
  if(o?.schemaVersion===3&&o.runtimeGenerations?.some(r=>r.name===c.manifest.digest)){validateOwner(o,p,path.dirname(p.base));const b=await validateBundle(target);if(canonical(b.manifest)!==canonical(c.manifest))throw Error('candidate committed mismatch');}
  else discardCandidateTree(target,c.manifest);
@@ -109,12 +121,12 @@ async function recoverCandidate(p) {
 }
 async function publishGeneration(bundle,p,transactionId,onPhase,validateCandidate,retained=false,profile=bytes(profileFor(p,bundle.digest))) {
  const disk=fs.statfsSync(p.base,{bigint:true});if(disk.bavail*disk.bsize<BigInt(bundle.bytes)*2n+16n*1024n*1024n)throw Error('insufficient free space for candidate and bounded transaction backups');
- const marker=candidatePath(p);if(s.lstat(marker))throw Error('pending candidate');const st=fs.lstatSync(p.base);
+ const marker=candidatePath(p);if(s.lstat(marker))throw Error('pending candidate');
  const stage=path.join(p.runtime,'.candidate-'+transactionId),target=path.join(p.runtime,bundle.digest);if(s.lstat(stage)||(!retained&&s.lstat(target)))throw Error('unowned candidate collision');
- const record={schemaVersion:1,transactionId,kiroHome:path.dirname(p.base),baseIdentity:{dev:String(st.dev),ino:String(st.ino)},stageIdentity:null,purpose:retained?'validate-retained':'activate',manifest:bundle.manifest};
+ const record={schemaVersion:2,transactionId,kiroHome:path.dirname(p.base),baseIdentity:captureDirectoryIdentity(p.base),stageIdentity:null,purpose:retained?'validate-retained':'activate',manifest:bundle.manifest};
  s.atomicWrite(marker,bytes(record));await onPhase('candidate-journal-synced');
  if(!retained&&s.lstat(target))throw Error('unowned candidate collision');fs.mkdirSync(stage,{mode:0o700});syncDirectory(p.runtime);
- const stageStat=fs.lstatSync(stage);record.stageIdentity={dev:String(stageStat.dev),ino:String(stageStat.ino)};s.atomicWrite(marker,bytes(record));await onPhase('candidate-root-owned');
+ record.stageIdentity=captureDirectoryIdentity(stage);s.atomicWrite(marker,bytes(record));await onPhase('candidate-root-owned');
  for(const r of [...bundle.inventory,{path:'bundle-manifest.json',mode:0o600,size:Buffer.byteLength(canonical(bundle.manifest)+'\n'),sha256:s.hash(canonical(bundle.manifest)+'\n')}]){
  await onPhase('before-copy:'+r.path);const source=path.join(bundle.root,r.path),destination=path.join(stage,r.path);mkdir(path.dirname(destination));const data=await readRegular(source,r.size);if(data.length!==r.size||s.hash(data)!==r.sha256)throw Error('source changed while copying');fs.writeFileSync(destination,data,{flag:'wx',mode:r.mode});await onPhase('copied-bytes:'+r.path);const fd=fs.openSync(destination,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}syncDirectory(path.dirname(destination));await onPhase('copied:'+r.path);
  }
@@ -122,13 +134,15 @@ async function publishGeneration(bundle,p,transactionId,onPhase,validateCandidat
  await onPhase('before-candidate-validation');await validateCandidate(stage,{profile:JSON.parse(profile.toString()),kiroHome:path.dirname(p.base),dataRoot:p.data});await onPhase('candidate-validated');
  await validateBundle(stage);await validateBundle(bundle.root);
  if(retained){await recoverCandidate(p);return await validateBundle(bundle.root);}
- const syncTree=dir=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true}))if(entry.isDirectory())syncTree(path.join(dir,entry.name));syncDirectory(dir);};syncTree(stage);await onPhase('candidate-synced');if(s.lstat(target))throw Error('unowned generation appeared before publication');const verifiedStage=fs.lstatSync(stage);if(String(verifiedStage.dev)!==record.stageIdentity.dev||String(verifiedStage.ino)!==record.stageIdentity.ino)throw Error('candidate root changed before publication');fs.renameSync(stage,target);syncDirectory(p.runtime);await onPhase('generation-published');return await validateBundle(target);
+ const syncTree=dir=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true}))if(entry.isDirectory())syncTree(path.join(dir,entry.name));syncDirectory(dir);};syncTree(stage);await onPhase('candidate-synced');if(s.lstat(target))throw Error('unowned generation appeared before publication');assertDirectoryIdentity(stage,record.stageIdentity,record.schemaVersion);fs.renameSync(stage,target);syncDirectory(p.runtime);await onPhase('generation-published');return await validateBundle(target);
 }
 // Verify the semantic controls as well as journal hashes BEFORE restoring or
 // deleting any evidence. The offline entrypoint must not "clean" an unknown
 // owner/profile/release schema and only discover the conflict after cleanup.
 function validateRecoveryEvidence(kiroHome,p) {
  const journal=readTransaction(kiroHome),candidate=candidateRecord(p);if(!journal&&!candidate)return;
+ // Refuse an unbound candidate BEFORE transaction replay restores any controls.
+ if(candidate)validateCandidateRoots(p,candidate);
  const current=readControl(p.manifest),selected=current?JSON.parse(current.toString()):null;
  const known=new Set();let legacy=false;
  const verify=(raw,profile,launcher,trust)=>{
@@ -198,7 +212,7 @@ async function commit(state,ctx,o,trust,profile=o.status==='retired'?null:bytes(
  // Recheck all old immutable resources immediately before the first live write.
  // A candidate marker is expected here, so verify via the already bound records.
  for(const r of o.runtimeGenerations){const retained=old?.runtimeGenerations.some(prior=>prior.name===r.name&&prior.manifestSha256===r.manifestSha256);const b=await (retained?validateInstalledBundle:validateBundle)(path.join(p.runtime,r.name));if(b.digest!==r.name||s.hash(canonical(b.manifest)+'\n')!==r.manifestSha256)throw Error('generation changed before activation');}
- const candidate=candidateRecord(p);if(candidate){const st=fs.lstatSync(path.join(p.runtime,candidate.manifest.digest));if(String(st.dev)!==candidate.stageIdentity?.dev||String(st.ino)!==candidate.stageIdentity?.ino)throw Error('candidate inode changed before activation');}
+ const candidate=candidateRecord(p);if(candidate)assertDirectoryIdentity(path.join(p.runtime,candidate.manifest.digest),candidate.stageIdentity,candidate.schemaVersion);
  if(state.legacy){if(!readControl(p.manifest)?.equals(state.legacy.bytes)||digest(readControl(p.profile))!==state.legacy.manifest.profileSha256||readControl(p.launcher,0o700)!==null||readControl(p.releaseState)!==null)throw Error('legacy controls changed');legacyNames(o.legacy,p);}
  const allowed=new Set([...o.runtimeGenerations.map(r=>r.name),...legacyNames(o.legacy,p)]);for(const name of fs.readdirSync(p.runtime))if(!allowed.has(name))throw Error('unowned runtime appeared before activation');
  if(digest(profile)!==o.profileSha256)throw Error('Profile activation binding mismatch');

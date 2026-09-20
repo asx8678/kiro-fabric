@@ -1,6 +1,14 @@
 # Fovea acceptance report — 2026-09-20
 
-## Claim boundaries
+## Current follow-up
+
+[completion-ledger.md](completion-ledger.md) owns the latest eight-item
+implementation and verification state. The results below retain their original
+revision, platform and scope; they are not fresh counts for the current tree.
+Authenticated Darwin arm64 explicit navigation now works. Neither a successful
+login nor one explicit tool call qualifies the complete native lifecycle gates.
+
+## Historical claim boundaries (Linux revision)
 
 Native deterministic analysis, persistent hosting, explicit typed queries,
 source composition, successful-operation observation, hash-transition provenance,
@@ -14,7 +22,7 @@ remain unfinished. Source/component, native-TUI parity and release readiness are
 separate claims. See [parity-matrix.md](parity-matrix.md) and
 [implementation-status.md](implementation-status.md).
 
-## Current verification and remaining gates
+## Historical Linux verification and remaining gates
 
 See [verification-current.md](verification-current.md#final-serial-verification)
 for the latest complete rerun: `pnpm run check` **exit 0**, **3,026 passed /
@@ -56,7 +64,7 @@ implementation work; macOS execution is environment-blocked. Production Darwin
 stays unavailable. Full native Kiro integration and public release remain
 **incomplete/unqualified**.
 
-## Remaining-work follow-up (current source)
+## Historical remaining-work follow-up
 
 - **Production cold batching:** implemented and tested, port 0.1.1/core cache
   header 17. Real native multi-file/multi-rule runs repeat byte-for-byte and match

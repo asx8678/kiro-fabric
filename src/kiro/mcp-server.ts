@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { foveaHookCapability } from "./fovea-native.js";
 import { collectFoveaContext, FoveaResponseDelivery, type FoveaPostToolCapability } from "./fovea-context.js";
 import { FabricDeadline } from "../runtime/deadline.js";
 import { FoveaHost, type FoveaBoundClient } from "../fovea/host.js";
@@ -202,6 +203,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     entrypoint: path.join(options.runtimeRoot, "fovea", "engine-entry.js") });
   const foveaClients = new WeakMap<KiroRuntime, FoveaBoundClient>();
   const foveaDelivery = new FoveaResponseDelivery();
+  // This identifies the MCP owner, NOT a native chat. KAS may pool MCP servers
+  // across sessions and tools/call supplies no native session ID. Do not route
+  // hook session_id through this value, cwd, arguments, or process ancestry.
   const foveaConversation = `host_${randomBytes(24).toString("hex")}`;
   const fabricApprover = new KiroPowerApprover({
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
@@ -408,6 +412,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       tracing: tracer.enabled ? { enabled: true, file: tracer.file } : { enabled: false },
       lifecycle: lifecycleInfo, interpreter, actions: actionCatalog.actions, catalog: actionCatalog.catalog,
       nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
+      fovea: { nativeHooks: foveaHookCapability(),
+        postToolContext: options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true ? "trusted-embedder-visible" : "disabled",
+        nativeSessionAssociation: "unavailable", modelInputAcknowledged: false },
     };
   };
 

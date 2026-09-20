@@ -9,7 +9,7 @@ import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
 import { buildAgentDev } from "../scripts/build-agent-dev.mjs";
 import { packagingFixture, put } from "./installer-packaging-fixture.js";
 const roots: string[] = [];
-const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
+const fixture = () => { const root = packagingFixture(process.platform === "darwin"); roots.push(root); return root; };
 const copyPackageFixture = (source: string, destination: string): void => {
   fs.cpSync(source, destination, { recursive: true });
   // cpSync creates every destination directory using the ambient umask.

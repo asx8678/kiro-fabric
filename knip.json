@@ -18,5 +18,5 @@
   ],
   "project": ["src/**/*.{ts,mjs}", "tests/**/*.ts", "scripts/**/*.mjs"],
   "exclude": ["duplicates"],
-  "ignoreBinaries": ["mkfifo", "helm", "pwsh", "cc"]
+  "ignoreBinaries": ["mkfifo", "helm", "pwsh"]
 }

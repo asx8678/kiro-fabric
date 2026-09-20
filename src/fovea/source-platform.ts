@@ -32,8 +32,8 @@ export function assertSourceComponent(name: string): void {
 }
 
 /** No platform names, helper paths or bindings are accepted from source/rules,
- * guest arguments, PATH or environment. Darwin remains closed until the owner
- * supplies a reviewed, pinned native binding (see platform-source.md). */
+ * guest arguments, PATH or environment. This unbound factory stays Linux-only;
+ * the managed engine separately admits a generation-verified Darwin binding. */
 export function sourcePlatform(platform: NodeJS.Platform = process.platform): SourcePlatform {
   if (platform !== 'linux') throw new SourcePlatformUnavailableError(platform, platform === 'darwin'
     ? 'missing trusted native openat/fdopendir binding (DarwinSourceBinding ABI 1); /dev/fd is not a substitute'

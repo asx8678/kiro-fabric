@@ -6,6 +6,7 @@ import { builtinModules, createRequire } from "node:module";
 import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 import { sharedEsbuildOptions } from "./esbuild-common.mjs";
+import { buildFoveaNative } from "./build-fovea-native.mjs";
 
 import { captureBuildInputs, assertBuildInputs } from "./build-inputs.mjs";
 import { renderAgentGuidance } from "./generate-agent-guidance.mjs";
@@ -121,6 +122,7 @@ for (const name of ["component.json", "upstream.json", "ast-grep-LICENSE.txt"]) 
   fs.copyFileSync(path.join(root, "src/fovea", name), path.join(outdir, "fovea", name));
 }
 fs.copyFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), path.join(outdir, "fovea/UPSTREAM-LICENSE.txt"));
+buildFoveaNative(root, path.join(outdir, "fovea"));
 const noticeParts = ["Kiro Fabric bundled third-party license notices\n",
   "\n===== Vendored Fovea (MIT; see fovea/component.json) =====\n",
   fs.readFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), "utf8"),

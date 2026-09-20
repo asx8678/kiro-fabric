@@ -1,13 +1,14 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, realpathSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { chmod, link, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { once } from 'node:events';
 import { Worker } from 'node:worker_threads';
+import { compileSourceBinding } from '../../scripts/build-fovea-native.mjs';
 import { SourceAccess } from '../../src/fovea/source-access.js';
 import { openSourceDirectory, sourcePlatform, type SourcePlatform } from '../../src/fovea/source-platform.js';
 import {
@@ -41,17 +42,10 @@ async function nativeDirectory(path: string): Promise<NativeSourceToken> {
 // Missing compiler/headers fail this prerequisite explicitly, never fake a pass.
 describe.skipIf(!['linux', 'darwin'].includes(process.platform))('compiled POSIX source binding', () => {
   beforeAll(async () => {
-    const headers = [resolve(dirname(realpathSync(process.execPath)), '../include/node'), '/usr/include/node', '/usr/local/include/node']
-      .find(path => existsSync(join(path, 'node_api.h')));
-    expect(headers, 'Local Node headers required; no downloads in this test').toBeDefined();
     await mkdir('.tmp', { recursive: true });
     artifact = await mkdtemp(resolve('.tmp/source-platform-native-'));
     await chmod(artifact, 0o700); compiled = join(artifact, 'source-platform.node');
-    const flags = process.platform === 'darwin' ? ['-bundle', '-undefined', 'dynamic_lookup'] : ['-shared'];
-    const result = spawnSync('cc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-D_FILE_OFFSET_BITS=64', ...flags,
-      `-I${headers!}`, resolve('src/fovea/source-platform-native.c'), '-o', compiled], { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024 });
-    expect(result.error, `Native compiler spawn failed: ${String(result.error)}`).toBeUndefined();
-    expect(result.status, result.stderr).toBe(0);
+    compileSourceBinding(process.cwd(), compiled);
     native = createRequire(import.meta.url)(compiled) as PosixSourceBinding;
   });
   afterEach(async () => { await Promise.all(dirs.splice(0).map(path => rm(path, { recursive: true, force: true }))); });
@@ -91,6 +85,22 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform))('compiled POSIX
       const reference = await new SourceAccess(sourcePlatform()).captureSourceSnapshot(root, join(base, 'reference'));
       expect(shot.hashes).toEqual(reference.hashes); expect(shot.id).toBe(reference.id); expect(shot.coverage).toEqual(reference.coverage);
     }
+  });
+
+  it('excludes native host/cache storage before it can exhaust the source budget', async () => {
+    const { root, destination } = await fixture();
+    for (const name of ['.tmp', '.fabric', '.kiro']) {
+      await mkdir(join(root, name));
+      await writeFile(join(root, name, 'cached.ts'), 'x'.repeat(4096));
+    }
+    await mkdir(join(root, '.source'));
+    await writeFile(join(root, '.source', 'keep.ts'), 'abc');
+    await writeFile(join(root, 'real.ts'), 'def');
+    const shot = await new SourceAccess(createNativeSourcePlatform(native)).captureSourceSnapshot(root, destination, undefined, { maxFiles: 2, maxBytes: 6 });
+    expect([...shot.hashes.keys()]).toEqual(['.source/keep.ts', 'real.ts']);
+    expect(shot.coverage.counts).toMatchObject({ excluded: 3 });
+    expect(shot.coverage.capped).toBe(false);
+    expect(shot.coverage.sourceBytes).toBe(6);
   });
 
   it('preserves rules, exclusions, file/byte budgets and coverage with the actual binding', async () => {

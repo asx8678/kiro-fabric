@@ -197,16 +197,21 @@ import {
   createFoveaDirectory,
   decodeResponse,
   encodeFrame,
+  loadManagedSourcePlatform,
   privateFoveaDirectory,
   record,
   validProvenanceTransition
-} from "./chunk-HSB6OBVL.js";
+} from "./chunk-Q6MGBQ3L.js";
+import "./chunk-OLJUXTSO.js";
 import {
   MAX_FABRIC_JSON_CHARS,
   assertFabricJsonBudget,
   fabricJsonText,
   jsonStringPrefix
 } from "./chunk-WZ4PGM3F.js";
+import {
+  foveaHookCapability
+} from "./chunk-7LWVZOGJ.js";
 import "./chunk-G3LABT6U.js";
 import "./chunk-NWYPLJ5N.js";
 import {
@@ -7453,7 +7458,7 @@ import { createHash as createHash3, randomBytes as randomBytes5 } from "node:cry
 import fs from "node:fs";
 import path from "node:path";
 function resolveFoveaGit(explicit) {
-  const candidate = explicit ?? "/usr/bin/git";
+  const candidate = explicit ?? (process.platform === "darwin" ? "/Library/Developer/CommandLineTools/usr/bin/git" : "/usr/bin/git");
   let canonical;
   try {
     canonical = fs.realpathSync(candidate);
@@ -8210,10 +8215,10 @@ var FoveaHost = class {
     this.options = options;
     const root = createFoveaDirectory(options.dataRoot, "fovea"), instances = createFoveaDirectory(root, "instances");
     const storageRoot = createFoveaDirectory(instances, this.hostInstanceId);
-    try {
-      this.#journal = new FoveaProvenanceJournal(root);
-    } catch {
-    }
+    this.#journal = (async () => {
+      const platform = process.platform === "darwin" && options.parser ? await loadManagedSourcePlatform(options.parser, createFoveaDirectory(storageRoot, "provenance-native")) : void 0;
+      return new FoveaProvenanceJournal(root, platform);
+    })().catch(() => void 0);
     privateFoveaDirectory(path4.dirname(options.configFile));
     const gitPath = resolveFoveaGit(options.gitPath);
     if (options.parser) this.#process = new FoveaEngineProcess({ parser: options.parser, storageRoot, ...options.entrypoint ? { entrypoint: options.entrypoint } : {}, ...gitPath ? { gitPath } : {} });
@@ -8273,6 +8278,7 @@ var FoveaHost = class {
       this.#scheduler.close();
       this.#results.clear();
       await this.#journalTail;
+      await this.#journal;
       await this.#process?.close();
       this.#conversations.clear();
     })();
@@ -8323,12 +8329,15 @@ var FoveaHost = class {
         copied.push(item);
       }
       this.#pendingTransitions += copied.length;
-      this.#journalTail = this.#journalTail.then(() => {
+      this.#journalTail = this.#journalTail.then(async () => {
         try {
           this.#lifetime.signal.throwIfAborted();
           this.#leases.check(lease);
-          if (!this.#journal) throw new Error("Provenance storage unavailable");
-          this.#journal.append(lease.worktreeId, this.#origin(lease), copied);
+          const journal = await this.#journal;
+          this.#lifetime.signal.throwIfAborted();
+          this.#leases.check(lease);
+          if (!journal) throw new Error("Provenance storage unavailable");
+          await journal.append(lease.worktreeId, this.#origin(lease), copied, AbortSignal.any([this.#lifetime.signal, lease.signal]));
         } catch {
           state.gap = true;
           state.dirty = true;
@@ -8448,12 +8457,15 @@ var FoveaHost = class {
         this.#check(lease, args, context);
         const state = this.#observation(lease);
         try {
-          if (!this.#journal) throw new Error("Provenance storage unavailable");
-          parameters.nativeProvenance = { origin: this.#origin(lease), journal: this.#journal.read(lease.worktreeId), gap: state.gap };
+          const journal = await this.#journal;
+          this.#check(lease, args, context);
+          if (!journal) throw new Error("Provenance storage unavailable");
+          parameters.nativeProvenance = { origin: this.#origin(lease), journal: await journal.read(lease.worktreeId), gap: state.gap };
         } catch {
           state.gap = true;
           parameters.nativeProvenance = { origin: this.#origin(lease), gap: true };
         }
+        this.#check(lease, args, context);
       }
       const observedRevision = this.#observed.get(lease.rootId)?.operations;
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation) && parameters.maxTokens === void 0) parameters.maxTokens = config.tools.defaultBudget;
@@ -21640,7 +21652,13 @@ var createKiroMcpServer = async (options) => {
       interpreter,
       actions: actionCatalog.actions,
       catalog: actionCatalog.catalog,
-      nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false }
+      nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
+      fovea: {
+        nativeHooks: foveaHookCapability(),
+        postToolContext: options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true ? "trusted-embedder-visible" : "disabled",
+        nativeSessionAssociation: "unavailable",
+        modelInputAcknowledged: false
+      }
     };
   };
   server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {

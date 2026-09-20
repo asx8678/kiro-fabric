@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { buildSync } from 'esbuild';
 import { assessGates, CHAT_PROMPT, createScope, executeNativeProbes, GATES, LIMITS, main, marker, prepareNativeScope, runBounded, sanitizeProbe } from '../../scripts/fovea-capability-probe.mjs';
 import { foveaHookCapability } from '../../src/kiro/fovea-hook.js';
 const roots: string[] = [];
@@ -53,13 +54,20 @@ describe('capability qualification safety', () => {
     expect(assessGates()[3]!.status).toBe('untested');
   });
   it('hook never starts an engine or guesses session routing', () => {
-    expect(foveaHookCapability()).toEqual({ schemaVersion: 1, status: 'host-blocked', reason: 'native-session-rendezvous-unavailable', dispatched: false });
+    expect(foveaHookCapability()).toEqual({ schemaVersion: 1, status: 'host-blocked', reason: 'native-session-rendezvous-unavailable', dispatched: false, automatic: false, modelContextDelivered: false });
   });
-  it('hook executable exits promptly with a bounded fail-closed report', () => {
-    const result = spawnSync(process.execPath, ['src/kiro/fovea-hook.ts'], { encoding: 'utf8', timeout: 15000, maxBuffer: 4096, input: '{"session":"do-not-route","prompt":"do-not-forward"}' });
-    expect(result.error).toBeUndefined(); expect(result.status).toBe(3);
-    expect(JSON.parse(result.stdout)).toEqual(foveaHookCapability());
-    expect(result.stdout).not.toContain('do-not-forward');
+  it('hook emits diagnostics only on explicit --status, never automatic stdout', () => {
+    const scope = createScope(); roots.push(scope.root);
+    const entry = path.join(scope.root, 'hook.mjs');
+    buildSync({ entryPoints: ['src/kiro/fovea-hook.ts'], outfile: entry, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
+    for (const args of [[], ['--status'], ['--unknown']]) {
+      const result = spawnSync(process.execPath, [entry, ...args], { encoding: 'utf8', timeout: 15000, maxBuffer: 4096, input: '{"session_id":"do-not-route","prompt":"do-not-forward"}' });
+      expect(result.error).toBeUndefined();
+      expect(result.status).toBe(args[0] === '--status' ? 0 : 3);
+      if (args[0] === '--status') expect(JSON.parse(result.stdout)).toEqual(foveaHookCapability());
+      else { expect(result.stdout).toBe(''); expect(result.stderr).toContain('automatic hooks disabled'); }
+      expect(result.stdout + result.stderr).not.toMatch(/do-not-forward|do-not-route/);
+    }
   });
   it('restricts native executable access and denies browser handoff without changing trust', () => {
     if (process.platform !== 'linux') return;

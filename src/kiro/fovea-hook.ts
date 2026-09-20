@@ -3,22 +3,19 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-export interface FoveaHookCapability {
-  schemaVersion: 1;
-  status: "host-blocked";
-  reason: "native-session-rendezvous-unavailable";
-  dispatched: false;
-}
+import { foveaHookCapability } from "./fovea-native.js";
+export { foveaHookCapability, type FoveaHookCapability } from "./fovea-native.js";
 
-export function foveaHookCapability(): FoveaHookCapability {
-  return { schemaVersion: 1, status: "host-blocked", reason: "native-session-rendezvous-unavailable", dispatched: false };
-}
-
-// Deliberately does not consume stdin or user-controlled hook payloads: there
-// is no qualified native session association to route them to. Status is not
-// supplementary model context or proof that a hook fired in the native client.
-export function runFoveaHook(): number {
-  process.stdout.write(JSON.stringify(foveaHookCapability()) + "\n");
+// Kiro TUI forwards successful hook stdout into context. Never emit a status
+// report on that channel by default: it is not an advisory or a delivery receipt.
+// Real TUI stdin has session_id, but native MCP initialize/tools/call does not
+// carry that identity. Cwd, tool arguments and process ancestry cannot bridge it.
+export function runFoveaHook(argv = process.argv.slice(2)): number {
+  if (argv.length === 1 && argv[0] === "--status") {
+    process.stdout.write(JSON.stringify(foveaHookCapability()) + "\n");
+    return 0;
+  }
+  process.stderr.write("Fovea automatic hooks disabled: no supported native session-to-MCP association. Use --status for diagnostics.\n");
   return 3;
 }
 

@@ -24,6 +24,24 @@ export interface PosixSourceBinding {
   closeDirectory(stream: NativeSourceToken): Promise<void>;
 }
 
+/** Additive, separately gated ABI. Old source-only binaries remain usable for
+ * reads, but never qualify as provenance writers. Only private journal names,
+ * bounded bytes and opaque directory capabilities cross this boundary. */
+export interface PosixProvenanceBinding extends PosixSourceBinding {
+  readonly provenanceAbiVersion: 1;
+  journalRead(directory: NativeSourceToken, name: string): Promise<Buffer | null>;
+  journalReplace(directory: NativeSourceToken, name: string, expected: Buffer | null, replacement: Buffer, nonce: string): Promise<void>;
+}
+export interface NativeProvenanceOperations {
+  read(directory: SourceHandle, name: string): Promise<Buffer | null>;
+  replace(directory: SourceHandle, name: string, expected: Buffer | null, replacement: Buffer, nonce: string): Promise<void>;
+}
+const provenance = new WeakMap<SourcePlatform, NativeProvenanceOperations>();
+export function nativeProvenanceOperations(platform: SourcePlatform): NativeProvenanceOperations {
+  const operations = provenance.get(platform);
+  if (!operations) throw new SourcePlatformUnavailableError(process.platform, 'missing trusted native provenance ABI 1');
+  return operations;
+}
 /** Shared actual POSIX implementation: Linux probes compile the same C source
  * without pretending that its platform is Darwin. A host must authenticate the
  * native binary before passing these exports; ABI checks are not authentication. */
@@ -74,7 +92,7 @@ export function createNativeSourcePlatform(binding: PosixSourceBinding): SourceP
     handles.set(handle, value);
     return handle;
   };
-  return {
+  const platform: SourcePlatform = {
     async openRootDirectory() { return retain(await binding.openRoot()); },
     async openChild(directory, name, kind) {
       assertSourceComponent(name);
@@ -92,6 +110,14 @@ export function createNativeSourcePlatform(binding: PosixSourceBinding): SourceP
       } finally { await binding.closeDirectory(stream); }
     },
   };
+  const journal = binding as Partial<PosixProvenanceBinding>;
+  if (journal.provenanceAbiVersion === 1 && typeof journal.journalRead === 'function' && typeof journal.journalReplace === 'function') {
+    provenance.set(platform, {
+      read: (directory, name) => journal.journalRead!(token(directory), name),
+      replace: (directory, name, expected, replacement, nonce) => journal.journalReplace!(token(directory), name, expected, replacement, nonce),
+    });
+  }
+  return platform;
 }
 
 /** Owner's verified Darwin loader can feed this into createDarwinSourcePlatform.

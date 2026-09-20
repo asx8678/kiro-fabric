@@ -1,6 +1,25 @@
 # Current-source verification supplement — 2026-09-20
 
+## Current follow-up
+
+[completion-ledger.md](completion-ledger.md) owns the latest eight-item
+implementation and verification state. The results below retain their original
+revision, platform and scope; they are not fresh counts for the current tree.
+Authenticated Darwin arm64 explicit navigation now works. Neither a successful
+login nor one explicit tool call qualifies the complete native lifecycle gates.
+
+## Historical macOS activation follow-up
+
+[macos-activation.md](macos-activation.md) records the later Darwin arm64
+implementation, source installation and actual native Kiro `repo.focus()` pass.
+It supersedes the source-loader/packaging blocker for explicit analysis only.
+The full-suite counts below belong to the earlier Linux source, not this patch;
+automatic H01–H12 qualification remains unfinished. Darwin provenance is now
+implemented and component-tested; see the completion ledger for fresh evidence.
+
 ## Final serial verification
+
+Historical Linux evidence follows; see the macOS follow-up above for this patch.
 
 Current user-requested rerun, 2026-09-20. No product-code change was needed.
 The already-running check was allowed to finish; the installer and then the
@@ -46,7 +65,7 @@ retained in `.tmp/fovea-final-build.exit`, with output in
 `.tmp/fovea-final-build.log`; artifact freshness is rechecked afterwards.
 Documentation-only changes do not alter captured source inputs.
 
-### Exact remaining work
+### Historical remaining work at the Linux verification revision
 
 - **Native Kiro implementation:** the hook is still status-only. Authenticated
   session/rendezvous routing, prompt/turn/hidden delivery, restoration and

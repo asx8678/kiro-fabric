@@ -7,17 +7,24 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 import {
+  assertSourceComponent,
   decodeRequest,
   encodeFrame,
+  loadManagedSourcePlatform,
+  openSourceDirectory,
   projectEngineJson,
+  readSourceBounded,
+  sourceLimit,
+  sourcePlatform,
   validateProvenanceJournal
-} from "../chunks/chunk-HSB6OBVL.js";
+} from "../chunks/chunk-Q6MGBQ3L.js";
+import "../chunks/chunk-OLJUXTSO.js";
 import "../chunks/chunk-WZ4PGM3F.js";
 import "../chunks/chunk-AE4E2KSU.js";
 
 // src/fovea/engine.ts
 import { createHash as createHash10, randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir2, mkdtemp, lstat as lstat3, realpath as realpath3, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
+import { mkdir as mkdir2, mkdtemp, lstat as lstat3, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, join as join10, resolve as resolve5 } from "node:path";
 
 // src/fovea/core/context.ts
@@ -3984,9 +3991,9 @@ var maskSyntax = (text, hashComments) => {
   }
   return chars.join("");
 };
-var closingBrace = (text, open4) => {
+var closingBrace = (text, open3) => {
   let depth = 0;
-  for (let i = open4; i < text.length; i++) {
+  for (let i = open3; i < text.length; i++) {
     if (text[i] === "{") depth++;
     else if (text[i] === "}" && --depth === 0) return i;
   }
@@ -3996,10 +4003,10 @@ var syntaxBlocks = (text, pattern) => {
   pattern.lastIndex = 0;
   const out = [];
   for (let match; match = pattern.exec(text); ) {
-    const open4 = match.index + match[0].lastIndexOf("{");
-    const close = closingBrace(text, open4);
+    const open3 = match.index + match[0].lastIndexOf("{");
+    const close = closingBrace(text, open3);
     if (close === void 0) continue;
-    out.push({ match, open: open4, close });
+    out.push({ match, open: open3, close });
     pattern.lastIndex = close + 1;
   }
   return out;
@@ -4010,7 +4017,7 @@ var declarationBlocks = (text, pattern) => {
   for (let match; match = pattern.exec(text); ) {
     let parentheses = 0;
     let brackets = 0;
-    let open4;
+    let open3;
     for (let i = pattern.lastIndex; i < text.length; i++) {
       const char = text[i];
       if ((char === "\n" || char === "\r") && parentheses === 0 && brackets === 0) {
@@ -4022,16 +4029,16 @@ var declarationBlocks = (text, pattern) => {
       else if (char === "[") brackets++;
       else if (char === "]") brackets = Math.max(0, brackets - 1);
       else if (char === "{" && parentheses === 0 && brackets === 0) {
-        open4 = i;
+        open3 = i;
         break;
       } else if ((char === "}" || char === ";") && parentheses === 0 && brackets === 0) {
         break;
       }
     }
-    if (open4 === void 0) continue;
-    const close = closingBrace(text, open4);
+    if (open3 === void 0) continue;
+    const close = closingBrace(text, open3);
     if (close === void 0) continue;
-    out.push({ match, open: open4, close });
+    out.push({ match, open: open3, close });
     pattern.lastIndex = close + 1;
   }
   return out;
@@ -7002,100 +7009,6 @@ async function resolveParserDescriptor(descriptor, storageRoot, signal) {
   return { ...descriptor, path };
 }
 
-// src/fovea/source-platform.ts
-import { constants as constants3 } from "node:fs";
-import { open as open3, opendir as opendir2, realpath as realpath2 } from "node:fs/promises";
-import { posix as posix4 } from "node:path";
-var SourcePlatformUnavailableError = class extends Error {
-  constructor(platform, prerequisite) {
-    super(`Scope-safe source access unavailable on ${platform}: ${prerequisite}`);
-    this.platform = platform;
-    this.prerequisite = prerequisite;
-    this.name = "SourcePlatformUnavailableError";
-  }
-  platform;
-  prerequisite;
-  code = "FOVEA_SOURCE_PLATFORM_UNAVAILABLE";
-};
-function assertSourceComponent(name) {
-  if (!name || name === "." || name === ".." || name.includes("/") || name.includes("\0")) throw new Error("Invalid source path component");
-}
-function sourcePlatform(platform = process.platform) {
-  if (platform !== "linux") throw new SourcePlatformUnavailableError(platform, platform === "darwin" ? "missing trusted native openat/fdopendir binding (DarwinSourceBinding ABI 1); /dev/fd is not a substitute" : "missing descriptor-relative source adapter");
-  const owned3 = /* @__PURE__ */ new WeakSet();
-  const retain = (handle) => {
-    owned3.add(handle);
-    return handle;
-  };
-  const fd = (handle) => {
-    if (!owned3.has(handle) || handle.fd < 0) throw new Error("Invalid source directory handle");
-    return handle.fd;
-  };
-  return {
-    async openRootDirectory() {
-      return retain(await open3("/", constants3.O_RDONLY | constants3.O_DIRECTORY | constants3.O_NOFOLLOW));
-    },
-    async openChild(directory, name, kind) {
-      assertSourceComponent(name);
-      return retain(await open3(`/proc/self/fd/${fd(directory)}/${name}`, constants3.O_RDONLY | constants3.O_NOFOLLOW | (kind === "directory" ? constants3.O_DIRECTORY : constants3.O_NONBLOCK)));
-    },
-    async *entries(directory) {
-      const stream = await opendir2(`/proc/self/fd/${fd(directory)}`, { bufferSize: 128 });
-      for await (const entry of stream) yield entry.name;
-    }
-  };
-}
-async function openSourceDirectory(platform, path, signal) {
-  signal?.throwIfAborted();
-  if (!posix4.isAbsolute(path) || posix4.normalize(path) !== path || await realpath2(path) !== path) throw new Error("Source root must be canonical");
-  let handle = await platform.openRootDirectory();
-  try {
-    for (const part of path.split("/").filter(Boolean)) {
-      signal?.throwIfAborted();
-      assertSourceComponent(part);
-      const next = await platform.openChild(handle, part, "directory");
-      try {
-        await handle.close();
-      } catch (error) {
-        await next.close();
-        throw error;
-      }
-      handle = next;
-    }
-    signal?.throwIfAborted();
-    return handle;
-  } catch (error) {
-    await handle.close();
-    throw error;
-  }
-}
-async function readSourceBounded(handle, cap, signal) {
-  sourceLimit(cap, 128 * 1024 * 1024, "read bytes");
-  const parts = [];
-  let size = 0;
-  for (; ; ) {
-    signal?.throwIfAborted();
-    const part = Buffer.alloc(Math.min(64 * 1024, cap + 1 - size));
-    let filled = 0;
-    while (filled < part.length) {
-      signal?.throwIfAborted();
-      const { bytesRead } = await handle.read(part, filled, part.length - filled, null);
-      if (!Number.isSafeInteger(bytesRead) || bytesRead < 0 || bytesRead > part.length - filled) throw new Error("Invalid source read result");
-      signal?.throwIfAborted();
-      if (!bytesRead) return Buffer.concat([...parts, part.subarray(0, filled)], size);
-      size += bytesRead;
-      filled += bytesRead;
-      if (size > cap) return void 0;
-    }
-    parts.push(part);
-  }
-}
-function sourceLimit(value, ceiling, name) {
-  const limit = value ?? ceiling;
-  if (!Number.isSafeInteger(limit) || limit < 0 || limit > ceiling) throw new Error(`Invalid source ${name} limit (0..${ceiling})`);
-  return limit;
-}
-
 // src/fovea/source-access.ts
 function unchangedFile(before, after, length) {
   return after.isFile() && before.nlink === 1 && after.nlink === 1 && before.dev === after.dev && before.ino === after.ino && before.mode === after.mode && before.uid === after.uid && before.gid === after.gid && before.size === length && before.size === after.size && before.mtimeMs === after.mtimeMs && before.ctimeMs === after.ctimeMs;
@@ -7161,7 +7074,7 @@ var SourceAccess = class {
           report("untrustedProjectRules", path);
           continue;
         }
-        if (excluded(path) || discoveryExclusionReason(path) || /(^|\/)(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|\.npmrc|\.netrc)$/.test(path)) {
+        if ([".tmp", ".fabric", ".kiro"].includes(name) || excluded(path) || discoveryExclusionReason(path) || /(^|\/)(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|\.npmrc|\.netrc)$/.test(path)) {
           report("excluded", path);
           continue;
         }
@@ -7306,12 +7219,6 @@ var SourceAccess = class {
     }
   }
 };
-async function captureSourceSnapshot(root, destination, signal, options = {}) {
-  return new SourceAccess(sourcePlatform()).captureSourceSnapshot(root, destination, signal, options);
-}
-async function readScopeSafeFile(root, path, maxBytes) {
-  return new SourceAccess(sourcePlatform()).readScopeSafeFile(root, path, maxBytes);
-}
 function relativeStorageExclusion(root, storageRoot) {
   const rel = relative5(root, storageRoot);
   if (!rel) throw new Error("Storage root cannot be the authorized source root");
@@ -7339,6 +7246,7 @@ var FoveaEngine = class {
   tail = Promise.resolve();
   directory;
   parser;
+  source;
   git;
   roots = /* @__PURE__ */ new Map();
   conversations = /* @__PURE__ */ new Map();
@@ -7365,7 +7273,7 @@ var FoveaEngine = class {
     if (this.parser) return;
     await mkdir2(this.options.storageRoot, { recursive: true, mode: 448 });
     const info = await lstat3(this.options.storageRoot);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 63 || info.uid !== process.getuid?.() || await realpath3(this.options.storageRoot) !== this.options.storageRoot) {
+    if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 63 || info.uid !== process.getuid?.() || await realpath2(this.options.storageRoot) !== this.options.storageRoot) {
       throw new Error("Fovea storageRoot must be canonical, private, and owned");
     }
     const directory = await mkdtemp(join10(this.options.storageRoot, "engine-"));
@@ -7377,10 +7285,12 @@ var FoveaEngine = class {
         git = join10(directory, "git");
         await writeFile3(git, bytes, { flag: "wx", mode: 320 });
       }
+      const source = new SourceAccess(process.platform === "darwin" ? await loadManagedSourcePlatform(this.options.parser, directory) : sourcePlatform());
       signal.throwIfAborted();
       this.directory = directory;
       this.parser = parser;
       this.git = git;
+      this.source = source;
     } catch (error) {
       await rm(directory, { recursive: true, force: true });
       throw error;
@@ -7418,7 +7328,7 @@ var FoveaEngine = class {
       hotRootLimit: 2,
       conversationLoaded: this.conversations.has(conversationKey),
       parser: { version: this.options.parser.version, sha256: this.options.parser.sha256, verified: !!this.parser },
-      sourceAccess: process.platform === "linux" ? "descriptor-relative" : "unsupported",
+      sourceAccess: this.source || process.platform === "linux" ? "descriptor-relative" : "requires-managed-native-binding",
       gitConfigured: !!this.options.gitPath
     };
     if (operation === "reset" || operation === "reload") {
@@ -7429,7 +7339,7 @@ var FoveaEngine = class {
       return { status: "ok", operation, reset: "conversation-root", ...operation === "reload" ? { graphInvalidated: true } : {} };
     }
     await this.initialize(signal);
-    if (!isAbsolute6(request.root) || await realpath3(request.root) !== request.root) throw new Error("Fovea root must be canonical");
+    if (!isAbsolute6(request.root) || await realpath2(request.root) !== request.root) throw new Error("Fovea root must be canonical");
     let root = this.roots.get(rootKey2);
     if (!root) {
       if (this.roots.size >= 32) {
@@ -7466,7 +7376,7 @@ var FoveaEngine = class {
       gitPath: this.git,
       readGitMetadata: async (path) => {
         signal.throwIfAborted();
-        const text = await readScopeSafeFile(request.root, resolve5(request.root, path), 1024 * 1024);
+        const text = await this.source.readScopeSafeFile(request.root, resolve5(request.root, path), 1024 * 1024);
         if (text === void 0) throw new Error("Git shallow metadata unavailable");
         return text;
       },
@@ -7478,7 +7388,7 @@ var FoveaEngine = class {
     };
     return coreContext.run(ctx, async () => {
       try {
-        const snapshot2 = await captureSourceSnapshot(request.root, stage, signal, {
+        const snapshot2 = await this.source.captureSourceSnapshot(request.root, stage, signal, {
           exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
           trustedRulesSha256: typeof args.trustedRulesSha256 === "string" ? args.trustedRulesSha256 : void 0
         });

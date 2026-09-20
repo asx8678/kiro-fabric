@@ -40,6 +40,12 @@ const dependencies = { provenance: sourceProvenance, compileManager, acquireTool
 function contextFor(root, target, initialBuild, deps) {
   target ??= detectInstallerPlatform().target;
   if (!["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].includes(target)) throw new Error("Unsupported bundle target");
+  const nativeMetadata = path.join(root, 'dist/kiro-agent-closure/fovea/source-platform.json');
+  if (fs.existsSync(nativeMetadata)) {
+    const native = JSON.parse(fs.readFileSync(nativeMetadata, 'utf8'));
+    if (native.platform !== 'darwin' || native.schemaVersion !== 1 || native.abiVersion !== 1 ||
+        `${native.platform}-${native.arch}` !== target) throw new Error('Native source artifact does not match bundle target; build on that native host');
+  }
   const provenance = deps.provenance(root), rawToolchain = fs.readFileSync(path.join(root, "build-toolchain.json"));
   const pins = JSON.parse(rawToolchain.toString("utf8")).targets[target]; checkToolPins(pins, undefined, target);
   const identity = { schema: 1, inputs: initialBuild.buildInputs.digest, closure: sha256(fs.readFileSync(path.join(root, "dist/kiro-agent-closure/closure-manifest.json"))), toolchain: sha256(rawToolchain), target,

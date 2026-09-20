@@ -60,7 +60,10 @@ export class SourceAccess {
         const path = prefix ? `${prefix}/${name}` : name;
         assertSourceComponent(name);
         if ((name === '.fovea' && (!trustedRulesSha256 || prefix !== '')) || (prefix === '.fovea' && name !== 'rules.json')) { report('untrustedProjectRules', path); continue; }
-        if (excluded(path) || discoveryExclusionReason(path) || /(^|\/)(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|\.npmrc|\.netrc)$/.test(path)) {
+        // Native host/test caches are not repository source. Exclude before
+        // opening or charging budgets; this is adapter policy, not a core fork
+        // or a claim that arbitrary .gitignore rules have been evaluated.
+        if (['.tmp', '.fabric', '.kiro'].includes(name) || excluded(path) || discoveryExclusionReason(path) || /(^|\/)(?:\.env(?:\..*)?|\.ssh|\.aws|\.gnupg|\.npmrc|\.netrc)$/.test(path)) {
           report('excluded', path); continue;
         }
         let handle: SourceHandle;

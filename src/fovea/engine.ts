@@ -13,7 +13,9 @@ import { observeSessionPaths } from './core/session.js';
 import { loadRepoRules, DEFAULT_PACK } from './core/anchors.js';
 import { aggregateFiles, promote, posterior } from './core/discover.js';
 import { boundResultDetails } from './core/result-budget.js';
-import { captureSourceSnapshot, relativeStorageExclusion, readScopeSafeFile } from './source-access.js';
+import { SourceAccess, relativeStorageExclusion } from './source-access.js';
+import { sourcePlatform } from './source-platform.js';
+import { loadManagedSourcePlatform } from './native-source-loader.js';
 import { resolveParserDescriptor, readVerifiedExecutable, type ParserDescriptor } from './parser-executable.js';
 
 export interface FoveaEngineOptions {
@@ -74,6 +76,7 @@ export class FoveaEngine {
   private tail: Promise<unknown> = Promise.resolve();
   private directory: string | undefined;
   private parser: ParserDescriptor | undefined;
+  private source: SourceAccess | undefined;
   private git: string | undefined;
   private readonly roots = new Map<string, RootState>();
 
@@ -114,8 +117,10 @@ export class FoveaEngine {
         git = join(directory, 'git');
         await writeFile(git, bytes, { flag: 'wx', mode: 0o500 });
       }
+      const source = new SourceAccess(process.platform === 'darwin'
+        ? await loadManagedSourcePlatform(this.options.parser, directory) : sourcePlatform());
       signal.throwIfAborted();
-      this.directory = directory; this.parser = parser; this.git = git;
+      this.directory = directory; this.parser = parser; this.git = git; this.source = source;
     } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
   }
   private async execute(request: EngineRequest, signal: AbortSignal): Promise<EngineResult> {
@@ -143,7 +148,7 @@ export class FoveaEngine {
     }
     if (operation === 'status') return { status: 'ok', initialized: !!this.parser, roots: this.roots.size, hotRoots: [...this.roots.values()].filter(r => r.hot).length, rootLimit: 32, hotRootLimit: 2,
       conversationLoaded: this.conversations.has(conversationKey), parser: { version: this.options.parser.version, sha256: this.options.parser.sha256, verified: !!this.parser },
-      sourceAccess: process.platform === 'linux' ? 'descriptor-relative' : 'unsupported', gitConfigured: !!this.options.gitPath };
+      sourceAccess: this.source || process.platform === 'linux' ? 'descriptor-relative' : 'requires-managed-native-binding', gitConfigured: !!this.options.gitPath };
     if (operation === 'reset' || operation === 'reload') {
       signal.throwIfAborted();
       this.conversations.delete(conversationKey);
@@ -185,14 +190,14 @@ export class FoveaEngine {
       storageRoot: this.directory!, sourceRoot: request.root, snapshotRoot: root.path, gitPath: this.git,
       readGitMetadata: async path => {
         signal.throwIfAborted();
-        const text = await readScopeSafeFile(request.root, resolve(request.root, path), 1024 * 1024);
+        const text = await this.source!.readScopeSafeFile(request.root, resolve(request.root, path), 1024 * 1024);
         if (text === undefined) throw new Error('Git shallow metadata unavailable');
         return text;
       },
       signal, gitFailures: [], focusKey: focusId, spills: new Map(), artifactLabel: operation => `retained:${operation}` };
     return coreContext.run(ctx, async () => {
       try {
-        const snapshot = await captureSourceSnapshot(request.root, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
+        const snapshot = await this.source!.captureSourceSnapshot(request.root, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
           trustedRulesSha256: typeof args.trustedRulesSha256 === 'string' ? args.trustedRulesSha256 : undefined });
         signal.throwIfAborted();
         const snapshotReused = root.snapshotId === snapshot.id;

@@ -1,8 +1,18 @@
 # Fovea remaining-work execution plan (all five items)
 
-Owner-selected scope, 2026-09-20.
+Owner-selected original scope, 2026-09-20.
 
-## Execution outcome
+## Current follow-up
+
+[completion-ledger.md](completion-ledger.md) owns the latest eight-item
+implementation and verification state. The results below retain their original
+revision, platform and scope; they are not fresh counts for the current tree.
+Authenticated Darwin arm64 explicit navigation now works. Neither a successful
+login nor one explicit tool call qualifies the complete native lifecycle gates.
+
+
+
+## Historical execution outcome
 
 | Item | Current result |
 | --- | --- |
@@ -17,7 +27,7 @@ Final evidence: [remaining-verification.md](remaining-verification.md) and
 remain the acceptance contract, not a declaration that all gates are complete.
 
 
-## Execution outcome
+## Historical execution outcome
 
 The current acceptance ledger and exact test/exit evidence are in
 [verification-current.md](verification-current.md). Items 1 and 4 have passing

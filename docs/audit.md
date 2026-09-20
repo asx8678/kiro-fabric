@@ -494,10 +494,14 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `src/fovea/scheduler.ts` — native integration, managed distribution or isolated qualification support.
 - `src/fovea/source-access.ts` — bounded SHA-256 snapshot policy over descriptor capabilities; no source-path reopen.
 - `src/fovea/source-platform.ts` — Linux descriptor-relative operations, complete bounded reads, closed platform selection and canonical root traversal.
-- `src/fovea/source-platform-darwin.ts` — trusted Darwin ABI adapter contract; production provisioning and native Darwin execution unqualified, no `/dev/fd` or PATH fallback.
-- `src/fovea/source-platform-native.ts` — opaque capability bridge for a trusted POSIX binding; no production binary loader or guest-selected path.
-- `src/fovea/source-platform-native.c` — N-API openat/fdopendir implementation exercised by fixture compilation; not packaged or enabled in production.
-- `tests/fovea/source-platform-native.test.ts` — compiled native POSIX capture, descriptor ownership, no-follow, resource bounds and cleanup probes; Linux execution is not Darwin qualification.
+- `src/fovea/source-platform-darwin.ts` — trusted Darwin ABI adapter contract; no `/dev/fd` or PATH fallback.
+- `src/fovea/source-platform-native.ts` — opaque capability bridge for a trusted POSIX binding; binary admission remains separate, with no guest-selected path.
+- `src/fovea/source-platform-native.c` — N-API openat/fdopendir implementation, compiled for managed Darwin source access and native POSIX fixtures.
+- `src/fovea/native-source-loader.ts` — complete-generation, Node/parser, source-hash and Mach-O identity checks before loading captured native bytes from private engine storage.
+- `scripts/build-fovea-native.mjs` — build-time local compilation and source-bound native artifact metadata; no runtime compilation or downloads.
+- `tests/fovea/native-source-loader.test.ts` — native artifact identity, generation admission and build/loader regression coverage.
+- `tests/fovea/git-executable.test.ts` — fixed trusted Darwin/Linux Git selection and executable/ancestry rejection coverage.
+- `tests/fovea/source-platform-native.test.ts` — compiled native POSIX capture, descriptor ownership, no-follow, resource bounds and cleanup probes on the actual host; this is not automatic native-client qualification.
 - `tests/fovea/source-platform.test.ts` — descriptor-relative capture and platform contract/race probes.
 - `tests/fovea/source-platform-bounds.test.ts` — shared enumeration/read budgets, short reads, mutation checks and cleanup.
 - `tests/fovea/production-batching.test.ts` — ordered bounded source publication, real batched parser repeatability and cache-header invalidation.
@@ -523,9 +527,20 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/cold-inputs.test.ts` — fail-closed parser tape identity, exact output/error bytes, quota/corruption/unconsumed-request guards and source-read scheduling recovery.
 - `tests/fovea/fixtures/cold-inputs.mjs` — development-only generated subprocess entry; FIFO source-read dependency adapter and exact parser tape. Not shipped or a production determinism claim.
 - `tests/fovea/reference.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `scripts/qualify-fovea-references.mjs` — opt-in exact-pinned prerequisite admission and full lifecycle/differential execution; rejects unexplained skips and preserves the full-suite report.
+- `tests/fovea/reference-qualification.test.ts` — missing pins, missing modules, failures and unexpected skips cannot grant qualification.
 
 ## Native Fovea implementation and acceptance
 
+- `scripts/installer-directory-identity.mjs` — APFS volume-UUID and inode binding across device renumbering; legacy mismatch remains recovery-required, never automatically reanchored.
+- `tests/installer-directory-identity.test.ts` — stable-volume matching, adversarial identity refusal and historical snapshot/transaction evidence preservation.
+- `src/kiro/fovea-native.ts` — shared fail-closed native capability diagnostics; MCP ownership is not native chat identity.
+- `scripts/fovea-native-probe.mjs` — explicit authenticated scratch-profile TUI/headless contract probe, not Fabric execution or qualification.
+- `tests/fovea/native-probe.test.ts` — protocol evidence summarization and exact native hook shape/matcher regression.
+- `tests/fovea/native-status.test.ts` — quiet default hook and explicit status behavior; no fabricated context delivery.
+- `tests/fovea/provenance-native.test.ts` — compiled descriptor-relative journal CAS, cross-session publication, revocation and adversarial failure coverage.
+- `tests/fovea/fixtures/native-lifecycle-platform.ts` — Darwin component lifecycle native-binding fixture; generation admission alone is substituted, not engine/IPC/provenance behavior.
+- `tests/fovea/qualification-records.test.ts` — current qualification/parity agreement and separation from historical isolated authentication/platform evidence.
 - `tests/fovea/provenance.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
 - `src/kiro/fovea-context.ts` — bounded host-owned post-settlement collection and transport emission ledger; activation requires a trusted qualified capability.
 - `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.

@@ -15,6 +15,7 @@ import { FoveaScheduler } from "./scheduler.js";
 import { FoveaOutbox, type FoveaDeliveryClaim } from "./delivery.js";
 import { record, type FoveaParserDescriptor } from "./protocol.js";
 import type { FoveaObservation, FoveaObserver } from "./observations.js";
+import { loadManagedSourcePlatform } from './native-source-loader.js';
 import { FoveaProvenanceJournal, PROVENANCE_MAX_RECORDS, validProvenanceTransition, type ProvenanceTransition } from "./provenance-journal.js";
 
 export interface FoveaHostOptions { dataRoot: string; configFile: string; parser?: FoveaParserDescriptor; entrypoint?: string; gitPath?: string }
@@ -41,7 +42,7 @@ export class FoveaHost {
   readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string> }>();
   readonly #process: FoveaEngineProcess | undefined;
   readonly #observed = new Map<string, { paths: Set<string>; dirty: boolean; gap: boolean; operations: number }>();
-  readonly #journal: FoveaProvenanceJournal | undefined;
+  readonly #journal: Promise<FoveaProvenanceJournal | undefined>;
   #journalTail: Promise<void> = Promise.resolve();
   #pendingTransitions = 0;
   readonly #preparations = new Map<string, { noticeId: string; preparationId: string; generation: number }>();
@@ -49,7 +50,13 @@ export class FoveaHost {
   constructor(readonly options: FoveaHostOptions) {
     const root = createFoveaDirectory(options.dataRoot, "fovea"), instances = createFoveaDirectory(root, "instances");
     const storageRoot = createFoveaDirectory(instances, this.hostInstanceId);
-    try { this.#journal = new FoveaProvenanceJournal(root); } catch { /* gap reported on observation/sync */ }
+    this.#journal = (async () => {
+      // Reuse complete-generation authentication, but capture in a host-owned
+      // directory distinct from the engine's read-only binding copy.
+      const platform = process.platform === 'darwin' && options.parser
+        ? await loadManagedSourcePlatform(options.parser, createFoveaDirectory(storageRoot, 'provenance-native')) : undefined;
+      return new FoveaProvenanceJournal(root, platform);
+    })().catch(() => undefined); // unavailable storage is reported as a gap
     privateFoveaDirectory(path.dirname(options.configFile));
     const gitPath = resolveFoveaGit(options.gitPath);
     if (options.parser) this.#process = new FoveaEngineProcess({ parser: options.parser, storageRoot, ...(options.entrypoint ? { entrypoint: options.entrypoint } : {}), ...(gitPath ? { gitPath } : {}) });
@@ -75,7 +82,7 @@ export class FoveaHost {
     return state;
   }
   async close(): Promise<void> {
-    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); await this.#journalTail; await this.#process?.close(); this.#conversations.clear(); })();
+    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); })();
     return this.#closeTask;
   }
   #observation(lease: FoveaLease): { paths: Set<string>; dirty: boolean; gap: boolean; operations: number } {
@@ -108,11 +115,13 @@ export class FoveaHost {
         copied.push(item);
       }
       this.#pendingTransitions += copied.length;
-      this.#journalTail = this.#journalTail.then(() => {
+      this.#journalTail = this.#journalTail.then(async () => {
         try {
           this.#lifetime.signal.throwIfAborted(); this.#leases.check(lease);
-          if (!this.#journal) throw new Error('Provenance storage unavailable');
-          this.#journal.append(lease.worktreeId, this.#origin(lease), copied);
+          const journal = await this.#journal;
+          this.#lifetime.signal.throwIfAborted(); this.#leases.check(lease);
+          if (!journal) throw new Error('Provenance storage unavailable');
+          await journal.append(lease.worktreeId, this.#origin(lease), copied, AbortSignal.any([this.#lifetime.signal, lease.signal]));
         } catch { state.gap = true; state.dirty = true; }
         finally { this.#pendingTransitions -= copied.length; }
       });
@@ -208,9 +217,12 @@ export class FoveaHost {
         this.#check(lease, args, context);
         const state = this.#observation(lease);
         try {
-          if (!this.#journal) throw new Error('Provenance storage unavailable');
-          parameters.nativeProvenance = { origin: this.#origin(lease), journal: this.#journal.read(lease.worktreeId), gap: state.gap };
+          const journal = await this.#journal;
+          this.#check(lease, args, context);
+          if (!journal) throw new Error('Provenance storage unavailable');
+          parameters.nativeProvenance = { origin: this.#origin(lease), journal: await journal.read(lease.worktreeId), gap: state.gap };
         } catch { state.gap = true; parameters.nativeProvenance = { origin: this.#origin(lease), gap: true }; }
+        this.#check(lease, args, context); // Native reads introduced an asynchronous revocation boundary.
       }
       const observedRevision = this.#observed.get(lease.rootId)?.operations;
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation) && parameters.maxTokens === undefined) parameters.maxTokens = config.tools.defaultBudget;

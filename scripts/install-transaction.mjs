@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { installerSafety as s } from './install-agent-user.mjs';
 import { validateInstalledBundle, canonical } from './bundle-contract.mjs';
+import { captureDirectoryIdentity, assertDirectoryIdentity } from './installer-directory-identity.mjs';
 
 const MAX = 8 * 1024 * 1024;
 const HASH = /^[a-f0-9]{64}$/;
@@ -31,12 +32,11 @@ function publishControl(file, bytes, mode=0o600) {
  try { const fd=fs.openSync(temporary,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);} fs.renameSync(temporary,file);syncDirectory(path.dirname(file)); }
  finally { if(s.lstat(temporary))fs.unlinkSync(temporary); }
 }
-function rootIdentity(base) { s.assertSafeDirectory(base,{private:true});const st=fs.lstatSync(base);return {dev:String(st.dev),ino:String(st.ino)}; }
 export function readTransaction(kiroHome) {
  const p=transactionPaths(kiroHome), raw=readControl(p.journal);if(raw===null)return null;
  const j=JSON.parse(raw.toString());fields(j,['schemaVersion','transactionId','kiroHome','baseIdentity','beforeOwnerSha256','afterOwnerSha256','controls']);
- fields(j.baseIdentity,['dev','ino']);
- if(j.schemaVersion!==1||!TX.test(j.transactionId)||j.kiroHome!==kiroHome||JSON.stringify(j.baseIdentity)!==JSON.stringify(rootIdentity(p.base))||!HASH.test(j.afterOwnerSha256)||(j.beforeOwnerSha256!==null&&!HASH.test(j.beforeOwnerSha256)))throw Error('recovery-required: journal identity');
+ if(![1,2].includes(j.schemaVersion)||!TX.test(j.transactionId)||j.kiroHome!==kiroHome||!HASH.test(j.afterOwnerSha256)||(j.beforeOwnerSha256!==null&&!HASH.test(j.beforeOwnerSha256)))throw Error('recovery-required: journal identity');
+ assertDirectoryIdentity(p.base,j.baseIdentity,j.schemaVersion);
  fields(j.controls,names);
  for(const name of names){const c=j.controls[name];fields(c,['before','after','beforeSha256','afterSha256']);if(identity(decode(c.before))!==c.beforeSha256||identity(decode(c.after))!==c.afterSha256)throw Error('recovery-required: backup identity');}
  if(j.controls.manifest.beforeSha256!==j.beforeOwnerSha256||j.controls.manifest.afterSha256!==j.afterOwnerSha256)throw Error('recovery-required: owner binding');
@@ -79,7 +79,7 @@ export async function activateInstallTransaction(kiroHome,{transactionId,after,o
  if(!TX.test(transactionId))throw Error('invalid transaction ID');const p=transactionPaths(kiroHome);
  if(s.lstat(p.journal))throw Error('recovery-required: pending transaction');fields(after,names);
  const controls={};for(const name of names){const before=readControl(p[name],modeFor(name)),next=after[name];if(next!==null&&!Buffer.isBuffer(next))throw Error('control bytes required');controls[name]={before:encode(before),after:encode(next),beforeSha256:identity(before),afterSha256:identity(next)};}
- const j={schemaVersion:1,transactionId,kiroHome,baseIdentity:rootIdentity(p.base),beforeOwnerSha256:controls.manifest.beforeSha256,afterOwnerSha256:controls.manifest.afterSha256,controls};
+ const j={schemaVersion:2,transactionId,kiroHome,baseIdentity:captureDirectoryIdentity(p.base),beforeOwnerSha256:controls.manifest.beforeSha256,afterOwnerSha256:controls.manifest.afterSha256,controls};
  const bytes=Buffer.from(JSON.stringify(j)+'\n');if(bytes.length>MAX)throw Error('transaction backup capacity');
  s.ensureDirectory(path.dirname(p.journal),{private:true},[]);s.atomicWrite(p.journal,bytes);readTransaction(kiroHome);await onPhase('journal-synced');
  try {

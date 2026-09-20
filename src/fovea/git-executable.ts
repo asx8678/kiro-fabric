@@ -3,7 +3,12 @@ import path from "node:path";
 /** Native analysis uses only an explicitly verified host Git or the fixed OS
  * Git. PATH, project configuration and environment never choose an executable. */
 export function resolveFoveaGit(explicit?: string): string | undefined {
-  const candidate = explicit ?? "/usr/bin/git";
+  // Apple's /usr/bin/git is a hard-linked xcrun shim. Select the fixed
+  // Command Line Tools binary on Darwin instead, retaining all trust checks.
+  // No PATH/xcode-select/environment fallback if the optional tool is absent.
+  const candidate = explicit ?? (process.platform === "darwin"
+    ? "/Library/Developer/CommandLineTools/usr/bin/git"
+    : "/usr/bin/git");
   let canonical: string;
   try { canonical = fs.realpathSync(candidate); } catch (error) { if (!explicit && (error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
   if (!path.isAbsolute(candidate) || canonical !== candidate) throw new Error("Fovea Git path must be canonical");

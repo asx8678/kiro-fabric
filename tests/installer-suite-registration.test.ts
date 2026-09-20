@@ -7,7 +7,7 @@ describe("executable installer/native acceptance registry", () => {
   it("registers every orchestration seam and only existing unique tests", () => {
     const files = installerSuiteFiles();
     expect(new Set(files).size).toBe(files.length);
-    for (const name of ["installer-configuration-backup", "installer-home", "installer-home-preparation", "installer-shell-integration", "installer-cli-contract", "install-manager-start", "launch-profile", "agent-launch-context", "managed-installation-lifecycle", "source-frontend-acceptance", "installer-smoke-acceptance", "qualification-failure-acceptance"]) expect(files).toContain(`tests/${name}.test.ts`);
+    for (const name of ["installer-configuration-backup", "installer-home", "installer-home-preparation", "installer-shell-integration", "installer-cli-contract", "install-manager-start", "launch-profile", "agent-launch-context", "managed-installation-lifecycle", "installer-directory-identity", "source-frontend-acceptance", "installer-smoke-acceptance", "qualification-failure-acceptance"]) expect(files).toContain(`tests/${name}.test.ts`);
     for (const file of files) expect(fs.existsSync(file), file).toBe(true);
     expect(installerSuiteFiles("contracts")).not.toContain("tests/installed-independence.test.ts");
     expect(installerSuiteFiles("bundle")).toContain("tests/installer-smoke-bundle-acceptance.test.ts");

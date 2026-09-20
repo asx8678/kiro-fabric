@@ -31,10 +31,11 @@ Machine-readable exact reference/target/test mapping: `docs/fovea/parity-matrix.
 
 ## Platform, migration and release follow-up
 
-- Shared source policy/Darwin contract and actual C/N-API source are implemented;
-  82 shared-policy and 27 compiled-binding tests pass on Linux. Trusted Darwin
-  loading/packaging, native macOS execution and provenance support remain
-  unfinished. See [platform-source.md](platform-source.md).
+- Darwin arm64 source loading/packaging is implemented and installed: a real
+  authenticated Kiro 2.22.1 `repo.focus()` returned source and callers. The earlier
+  Linux-only/no-macOS-host claims are historical, not current blockers. See
+  [macos-activation.md](macos-activation.md) and the current
+  [completion ledger](completion-ledger.md). Native H-gates are separate.
 - F22 now also has four real archived historical-manager schema-1 → schema-2
   handoff/rollback/recovery cases, registered in installer acceptance. This
   qualifies the trusted source path, not old-manager maintenance with a newer
@@ -46,18 +47,31 @@ Machine-readable exact reference/target/test mapping: `docs/fovea/parity-matrix.
   No F/H row is promoted to complete parity. Exact counts and exit evidence:
   [verification-current.md](verification-current.md).
 
+## Current native protocol observations
+
+Authenticated Kiro 2.22.1 TUI hooks and a subsequent stop-hook continuation MCP
+call were observed; headless emitted no hooks. Neither MCP surface supplies a
+native chat/session identity, so supported hook-to-host routing remains missing.
+No intended-model-input acknowledgment was observed. The table below records
+**complete gate qualification**, not whether any constituent event was witnessed.
+Details: [host-capability-probes.md](host-capability-probes.md).
+
+Darwin descriptor-safe provenance and all 15 pinned lifecycle component cases
+now pass without skips; fixture generation admission is not installed/native-Kiro
+session qualification. See [completion-ledger.md](completion-ledger.md).
+
 ## Native client gates
 
 | ID | Gate | Status |
 | --- | --- | --- |
-| H01 | same session and MCP instance across multiple turns | environment-blocked |
-| H02 | concurrent session-to-host mapping and ambiguity rejection | environment-blocked |
+| H01 | same session and MCP instance across multiple turns | untested (authentication available) |
+| H02 | concurrent session-to-host mapping and ambiguity rejection | untested (authentication available) |
 | H03 | readiness, authorized binding and first-hook ordering | untested |
 | H04 | prompt marker delivered to intended model turn | untested |
 | H05 | post-tool marker delivered without changing result or error | untested |
 | H06 | stop marker causes bounded continuation, not merely hook firing | untested |
 | H07 | cancel stops automatic work and queued user input wins | untested |
-| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | environment-blocked |
+| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | untested (authentication available) |
 | H09 | visible/model-only/disabled and status/settings/reset/reload | untested |
 | H10 | accepted/declined exact effects and workspace revocation | untested |
 | H11 | authoritative complete model-visible tool inventory | untested |
@@ -101,11 +115,11 @@ batching task, not the uncontrolled pristine-reference or native-host gates.
 
 ## Platform and distribution follow-up
 
-F09/F10 now include shared descriptor policy, the Darwin ABI bridge and actual
-`src/fovea/source-platform-native.c` compiled/probed on Linux (109 new source
-boundary cases). Native Darwin generation-local loading/packaging and provenance
-publication remain unfinished; real macOS execution is environment-blocked.
-There is no production Darwin fallback or platform pass claim.
+F09/F10 include shared descriptor policy and the generation-verified Darwin
+native binding. Actual Darwin arm64 compilation, installed loading and explicit
+analysis passed; historical Linux-only counts do not describe the current scope.
+There is no pathname or `/dev/fd` fallback. Cross-session provenance and native
+lifecycle evidence are tracked separately in [completion-ledger.md](completion-ledger.md).
 
 F22 additionally executes `tests/fovea/historical-manager-migration.test.ts`,
 registered in the dedicated installer/native bundle suite. Four actual
@@ -119,4 +133,4 @@ Separate claims: deterministic analysis, host lifecycle, functional controls,
 native UI presentation, installed packaging, and task effectiveness.
 No complete-parity or model-token saving claim is made.
 
-Follow-up: source collector/default-off MCP probes passed, but no native delivery gate passed. H01/H02/H08 hit isolated authentication failure; other unexercised gates are untested, not external host limitations. New bounded coverage and retained-read/rule inventory tests are listed in the machine-readable matrix. `ackClean` is an upstream UI-only notification (pinned index.ts), not model context; its native UI counterpart remains unqualified.
+Historical follow-up: source collector/default-off MCP probes passed, but no native delivery gate passed. H01/H02/H08 hit isolated authentication failure in the Linux harness. Authentication now works in the authorized Darwin scope; those gates are untested until their actual routing/lifecycle assertions run, not authentication-blocked and not passed by explicit navigation. New bounded coverage and retained-read/rule inventory tests are listed in the machine-readable matrix. `ackClean` is an upstream UI-only notification (pinned index.ts), not model context; its native UI counterpart remains unqualified.

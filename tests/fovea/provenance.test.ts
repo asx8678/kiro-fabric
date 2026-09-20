@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createRequire } from 'node:module';
+import { compileSourceBinding } from '../../scripts/build-fovea-native.mjs';
+import { createNativeSourcePlatform, type PosixSourceBinding } from '../../src/fovea/source-platform-native.js';
+import type { SourcePlatform } from '../../src/fovea/source-platform.js';
+import * as nativeLoader from '../../src/fovea/native-source-loader.js';
 import { FoveaHost } from '../../src/fovea/host.js';
 import { FoveaProvenanceJournal, PROVENANCE_MAX_RECORDS } from '../../src/fovea/provenance-journal.js';
 import { FoveaEngine, type EngineRequest } from '../../src/fovea/engine.js';
@@ -12,7 +17,24 @@ import { decodeRequest, encodeFrame } from '../../src/fovea/protocol.js';
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const f of cleanup.splice(0).reverse()) await f(); vi.restoreAllMocks(); });
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
-const parser = { path: path.resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+// Explicit fixture selector only; never a production executable override.
+const parserPath = path.resolve(process.env.FOVEA_PROVENANCE_TEST_PARSER ?? '.tmp/fovea-parser/ast-grep');
+const parser = { path: parserPath, sha256: fs.existsSync(parserPath) ? createHash('sha256').update(fs.readFileSync(parserPath)).digest('hex') : '0'.repeat(64), version: '0.45.3' };
+let nativePlatform: SourcePlatform | undefined, nativeBuild = '';
+beforeAll(() => {
+  if (process.platform !== 'darwin') return;
+  fs.mkdirSync('.tmp', { recursive: true });
+  nativeBuild = fs.mkdtempSync(path.resolve('.tmp/provenance-binding-'));
+  const binary = path.join(nativeBuild, 'source-platform.node');
+  compileSourceBinding(process.cwd(), binary);
+  nativePlatform = createNativeSourcePlatform(createRequire(import.meta.url)(binary) as PosixSourceBinding);
+});
+beforeEach(() => {
+  // These test real native I/O and real src host/engine, not bundle admission.
+  // The authenticated loader is covered independently by packaging tests.
+  if (nativePlatform) vi.spyOn(nativeLoader, 'loadManagedSourcePlatform').mockResolvedValue(nativePlatform);
+});
+afterAll(() => { if (nativeBuild) fs.rmSync(nativeBuild, { recursive: true, force: true }); });
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-provenance-'))); fs.chmodSync(base, 0o700);
   cleanup.push(() => fs.rmSync(base, { recursive: true, force: true }));
@@ -41,7 +63,7 @@ function committed(client: ReturnType<ReturnType<typeof fixture>['make']>, befor
 const text = 'export function calculateTotal() { return 1; }\n';
 const syncArgs = { scope: 'repository', pushFocus: false };
 
-describe.skipIf(process.platform !== 'linux')('native workspace provenance journal', () => {
+describe.skipIf(!['linux', 'darwin'].includes(process.platform))('native workspace provenance journal', () => {
   it('copies exact transitions, preserves commits after outer failure, shares only bounded private facts', async () => {
     const f = fixture(), a = f.make(), b = f.make();
     const event = { sequence: 1, operationId: 'do-not-share', ref: 'local.edit', phase: 'committed' as const, paths: ['math.ts'], transitions: [{ path: 'math.ts', beforeSha256: sha('before'), afterSha256: sha('after') }] };
@@ -50,42 +72,61 @@ describe.skipIf(process.platform !== 'linux')('native workspace provenance journ
     // A later file cannot fabricate either endpoint.
     fs.writeFileSync(path.join(f.root, 'math.ts'), 'read-later');
     await a.invoke('status', {}, f.context);
-    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'));
-    expect(journal.read(f.worktree).records).toMatchObject([{ path: 'math.ts', beforeSha256: sha('before'), afterSha256: sha('after') }]);
+    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform);
+    expect((await journal.read(f.worktree)).records).toMatchObject([{ path: 'math.ts', beforeSha256: sha('before'), afterSha256: sha('after') }]);
     committed(b, sha('after'), sha('second')); await b.invoke('status', {}, f.context);
-    const doc = journal.read(f.worktree); expect(new Set(doc.records.map(r => r.origin)).size).toBe(2);
+    const doc = await journal.read(f.worktree); expect(new Set(doc.records.map(r => r.origin)).size).toBe(2);
     const serialized = JSON.stringify(doc);
     for (const secret of ['private_conversation', 'do-not-share', 'local.edit', 'read-later', 'focus', 'permission', f.root]) expect(serialized).not.toContain(secret);
     expect(fs.statSync(path.join(journal.directory, `${f.worktree}.json`)).mode & 0o777).toBe(0o600);
-    expect(journal.read(sha('another physical worktree')).records).toEqual([]);
+    expect((await journal.read(sha('another physical worktree'))).records).toEqual([]);
   });
   it('bounds overflow and rejects malformed/version/privacy/link/lock inputs without changing commit results', async () => {
     const f = fixture(), a = f.make();
-    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'));
-    for (let i = 0; i < PROVENANCE_MAX_RECORDS + 3; i++) journal.append(f.worktree, sha('owner'), [{ path: 'math.ts', beforeSha256: sha(String(i)), afterSha256: sha(String(i + 1)) }]);
-    const doc = journal.read(f.worktree); expect(doc.records).toHaveLength(PROVENANCE_MAX_RECORDS); expect(doc.records[0]!.sequence).toBe(4);
+    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform);
+    for (let i = 0; i < PROVENANCE_MAX_RECORDS + 3; i++) await journal.append(f.worktree, sha('owner'), [{ path: 'math.ts', beforeSha256: sha(String(i)), afterSha256: sha(String(i + 1)) }]);
+    const doc = await journal.read(f.worktree); expect(doc.records).toHaveLength(PROVENANCE_MAX_RECORDS); expect(doc.records[0]!.sequence).toBe(4);
     const target = path.join(journal.directory, `${f.worktree}.json`);
     for (const bad of [{ ...doc, version: 2 }, { ...doc, prompt: 'private' }, { ...doc, records: [{ ...doc.records[0], path: '../escape' }] }]) {
-      fs.writeFileSync(target, JSON.stringify(bad)); expect(() => journal.read(f.worktree)).toThrow();
+      fs.writeFileSync(target, JSON.stringify(bad)); await expect(journal.read(f.worktree)).rejects.toThrow();
     }
     expect(() => committed(a, sha('known-before'), sha('known-after'))).not.toThrow();
     expect(await a.invoke('status', {}, f.context)).toMatchObject({ observations: { gap: true } });
-    fs.unlinkSync(target); fs.symlinkSync(path.join(f.root, 'secret'), target); expect(() => journal.read(f.worktree)).toThrow(); fs.unlinkSync(target);
+    fs.unlinkSync(target); fs.symlinkSync(path.join(f.root, 'secret'), target); await expect(journal.read(f.worktree)).rejects.toThrow(); fs.unlinkSync(target);
     fs.writeFileSync(target + '.lock', '', { mode: 0o600 });
-    expect(() => journal.append(f.worktree, sha('owner'), [])).toThrow();
+    await expect(journal.append(f.worktree, sha('owner'), [])).rejects.toThrow();
     expect(fs.existsSync(target + '.lock')).toBe(true);
+  });
+  it.skipIf(process.platform !== 'darwin')('reports a gap after native loader rejection without pathname fallback or source-result failure', async () => {
+    vi.mocked(nativeLoader.loadManagedSourcePlatform).mockRejectedValue(new Error('untrusted generation'));
+    const query = vi.spyOn(FoveaEngineProcess.prototype, 'query').mockResolvedValue({ red: false });
+    const f = fixture(), a = f.make();
+    expect(() => committed(a, sha('before'), sha('after'))).not.toThrow();
+    expect(await a.invoke('status', {}, f.context)).toMatchObject({ observations: { gap: true } });
+    expect(await a.invoke('sync', {}, f.context)).toMatchObject({ observationGap: true });
+    expect(query.mock.calls.at(-1)![0].args.nativeProvenance).toMatchObject({ gap: true });
+    expect(query.mock.calls.at(-1)![0].args.nativeProvenance).not.toHaveProperty('journal');
+    expect(fs.existsSync(path.join(f.base, 'fovea', 'provenance'))).toBe(false);
+  });
+  it.skipIf(process.platform !== 'darwin')('revokes an admission queued behind native loader initialization', async () => {
+    let release!: (platform: SourcePlatform) => void;
+    vi.mocked(nativeLoader.loadManagedSourcePlatform).mockImplementation(() => new Promise(resolve => { release = resolve; }));
+    const f = fixture(), a = f.make(); committed(a, sha('a'), sha('b'));
+    await Promise.resolve(); await a.close(); release(nativePlatform!);
+    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform);
+    expect(await journal.read(f.worktree)).toMatchObject({ sequence: 0, records: [] });
   });
   it('revokes queued admissions and rejects private guest acknowledgment/provenance fields', async () => {
     const f = fixture(), a = f.make(); committed(a, sha('a'), sha('b')); await a.close();
     const b = f.make(); await b.invoke('status', {}, f.context);
-    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea')); expect(journal.read(f.worktree).records).toEqual([]);
-    committed(a, sha('b'), sha('c')); await b.invoke('status', {}, f.context); expect(journal.read(f.worktree).sequence).toBe(0);
+    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform); expect((await journal.read(f.worktree)).records).toEqual([]);
+    committed(a, sha('b'), sha('c')); await b.invoke('status', {}, f.context); expect((await journal.read(f.worktree)).sequence).toBe(0);
     for (const key of ['commitPreparationId', 'nativeProvenance', 'trustedRulesSha256']) await expect(b.invoke('sync', { [key]: 'forged' }, f.context)).rejects.toThrow('Private');
     await expect(a.acknowledgeDelivery('notice', f.context)).rejects.toThrow('revoked');
   });
 });
 
-describe.skipIf(process.platform !== 'linux' || !fs.existsSync(parser.path))('source host/engine provenance integration', () => {
+describe.skipIf(!['linux', 'darwin'].includes(process.platform) || !fs.existsSync(parser.path))('source host/engine provenance integration', () => {
   it('two hosts share matching own/foreign transitions, not navigation, and only trusted delivery commits baseline', async () => {
     const transport = sourceTransport(), f = fixture(), a = f.make(), b = f.make(); fs.writeFileSync(path.join(f.root, 'math.ts'), text);
     const focused = await a.invoke('focus', { query: 'calculateTotal' }, f.context);
@@ -150,9 +191,9 @@ describe.skipIf(process.platform !== 'linux' || !fs.existsSync(parser.path))('so
     sourceTransport(); const f = fixture(), a = f.make(); fs.writeFileSync(path.join(f.root, 'math.ts'), text);
     a.observer.observe({ sequence: 1, operationId: 'read', ref: 'local.read', phase: 'access', paths: ['math.ts'] });
     await a.invoke('sync', syncArgs, f.context);
-    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'));
-    for (let i = 0; i < PROVENANCE_MAX_RECORDS + 1; i++) journal.append(f.worktree, sha('foreign'), [{ path: 'other.ts', beforeSha256: sha(String(i)), afterSha256: sha(String(i + 1)) }]);
-    fs.unlinkSync(path.join(f.root, 'math.ts')); journal.append(f.worktree, sha('foreign'), [{ path: 'math.ts', beforeSha256: sha(text), afterSha256: null }]);
+    const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform);
+    for (let i = 0; i < PROVENANCE_MAX_RECORDS + 1; i++) await journal.append(f.worktree, sha('foreign'), [{ path: 'other.ts', beforeSha256: sha(String(i)), afterSha256: sha(String(i + 1)) }]);
+    fs.unlinkSync(path.join(f.root, 'math.ts')); await journal.append(f.worktree, sha('foreign'), [{ path: 'math.ts', beforeSha256: sha(text), afterSha256: null }]);
     const overflow = await a.invoke('sync', syncArgs, f.context);
     expect(overflow).toMatchObject({ observationGap: true, details: { provenance: { kind: 'unattributed' } } });
     fs.writeFileSync(path.join(journal.directory, `${f.worktree}.json`), '{');

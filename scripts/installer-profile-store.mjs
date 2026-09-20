@@ -3,11 +3,10 @@ import path from 'node:path';
 import { installerSafety as s } from './install-agent-user.mjs';
 import { readControl, syncDirectory } from './install-transaction.mjs';
 import { publishImmutableProfile } from './installer-profile-publication.mjs';
+import { captureDirectoryIdentity, assertDirectoryIdentity } from './installer-directory-identity.mjs';
 
 const KIND='kiro-fabric-generation-profile';
 const bytes=value=>Buffer.from(JSON.stringify(value,null,2)+'\n');
-const id=file=>{const st=fs.lstatSync(file);return {dev:String(st.dev),ino:String(st.ino)};};
-const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 const directory=p=>path.join(p.base,'profile-snapshots');
 const exact=(v,keys)=>{if(!v||Object.getPrototypeOf(v)!==Object.prototype||Object.keys(v).sort().join()!==keys.sort().join())throw Error('Invalid profile snapshot fields');};
 
@@ -27,7 +26,8 @@ export function readGenerationProfiles(p,owner,{validateOwner,validateProfile}) 
     if(!match)throw Error('Unowned profile snapshot material preserved');
     const raw=readControl(path.join(dir,name));if(!raw||raw.length>256*1024||s.hash(raw)!==match[2])throw Error('Modified profile snapshot');
     const r=JSON.parse(raw.toString());exact(r,['schemaVersion','kind','kiroHome','installationId','baseIdentity','storeIdentity','generation','manifestSha256','ownerBase64','profileBase64']);
-    if(r.schemaVersion!==1||r.kind!==KIND||!owner||r.kiroHome!==owner.kiroHome||r.installationId!==owner.installationId||!equal(r.baseIdentity,id(p.base))||!equal(r.storeIdentity,id(dir))||r.generation!==match[1]||!raw.equals(bytes(r)))throw Error('Profile snapshot identity mismatch');
+    if(![1,2].includes(r.schemaVersion)||r.kind!==KIND||!owner||r.kiroHome!==owner.kiroHome||r.installationId!==owner.installationId||r.generation!==match[1]||!raw.equals(bytes(r)))throw Error('Profile snapshot identity mismatch');
+    assertDirectoryIdentity(p.base,r.baseIdentity,r.schemaVersion);assertDirectoryIdentity(dir,r.storeIdentity,r.schemaVersion);
     const record=owner.runtimeGenerations.find(g=>g.name===r.generation);
     if(!record||record.manifestSha256!==r.manifestSha256||profiles.has(r.generation))throw Error('Unbound or duplicate generation profile snapshot');
     if(typeof r.ownerBase64!=='string'||typeof r.profileBase64!=='string')throw Error('Invalid profile snapshot encoding');
@@ -52,7 +52,7 @@ export function retainGenerationProfile(p,owner,validators) {
   const existing=readGenerationProfiles(p,owner,validators).get(owner.currentRuntime);
   if(existing){if(!existing.equals(profile))throw Error('Original generation profile snapshot differs; preserve both controls');syncDirectory(directory(p));syncDirectory(p.base);return;}
   const dir=directory(p);s.ensureDirectory(dir,{private:true},[]);syncDirectory(p.base);
-  const record={schemaVersion:1,kind:KIND,kiroHome:owner.kiroHome,installationId:owner.installationId,baseIdentity:id(p.base),storeIdentity:id(dir),generation:owner.currentRuntime,manifestSha256:owner.runtimeGenerations.find(g=>g.name===owner.currentRuntime).manifestSha256,ownerBase64:bytes(owner).toString('base64'),profileBase64:profile.toString('base64')};
+  const record={schemaVersion:2,kind:KIND,kiroHome:owner.kiroHome,installationId:owner.installationId,baseIdentity:captureDirectoryIdentity(p.base),storeIdentity:captureDirectoryIdentity(dir),generation:owner.currentRuntime,manifestSha256:owner.runtimeGenerations.find(g=>g.name===owner.currentRuntime).manifestSha256,ownerBase64:bytes(owner).toString('base64'),profileBase64:profile.toString('base64')};
   const raw=bytes(record);publishImmutableProfile(path.join(dir,record.generation+'.'+s.hash(raw)+'.json'),raw);
   readGenerationProfiles(p,owner,validators);
 }

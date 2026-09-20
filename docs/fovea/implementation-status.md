@@ -4,7 +4,23 @@ Updated 2026-09-20. **Implemented components; full native integration remains
 unqualified/incomplete at explicit host/platform gates.** This is not a claim
 of complete parity or public-release readiness.
 
-## Current verification and remaining gates
+## Current follow-up
+
+[completion-ledger.md](completion-ledger.md) owns the latest eight-item
+implementation and verification state. The results below retain their original
+revision, platform and scope; they are not fresh counts for the current tree.
+Authenticated Darwin arm64 explicit navigation now works. Neither a successful
+login nor one explicit tool call qualifies the complete native lifecycle gates.
+
+## macOS explicit analysis activated
+
+The later [macOS activation report](macos-activation.md) supersedes the Darwin
+source-loading/packaging blocker for explicit read-only navigation: generation-
+verified native binding, installed Fabric 0.65.0, and a real Kiro 2.22.1 source
+match on Darwin arm64. It does **not** promote native H-gates, Darwin provenance,
+four-target release qualification, or the historical Linux test counts below.
+
+## Historical verification and remaining gates
 
 See [verification-current.md](verification-current.md#final-serial-verification)
 for the latest complete rerun: `pnpm run check` **exit 0**, **3,026 passed /
@@ -46,7 +62,7 @@ implementation work; macOS execution is environment-blocked. Production Darwin
 stays unavailable. Full native Kiro integration and public release remain
 **incomplete/unqualified**.
 
-## Remaining-work follow-up (current source)
+## Historical remaining-work follow-up
 
 - **Production cold batching:** implemented and tested, port 0.1.1/core cache
   header 17. Real native multi-file/multi-rule runs repeat byte-for-byte and match

@@ -46,6 +46,7 @@ export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worke
 // Older owned generations predate the sandbox worker. This historical contract
 // is for retained-installation verification only, never new bundle admission.
 export const FOVEA_REQUIRED_APP = [...REQUIRED_APP, 'app/fovea/engine-entry.js', 'app/kiro/fovea-hook.js', 'app/fovea/component.json', 'app/fovea/upstream.json', 'app/fovea/UPSTREAM-LICENSE.txt', 'app/fovea/ast-grep-LICENSE.txt', 'tools/ast-grep', 'resources/skills/fabric-exec/references/fovea.md'];
+const DARWIN_SOURCE_APP = ['app/fovea/source-platform.node', 'app/fovea/source-platform.json'];
 const HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter(p => p !== 'app/runtime/sandbox-worker-entry.js');
 /** Stable upstream platform contract; never derived from running node --version.
  * Evidence: https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md
@@ -156,13 +157,18 @@ export function manifestDigest(payload){return sha256('kiro-fabric.bundle.v1\0'+
 export function checkManifest(m){ return checkManifestFor(m, REQUIRED_APP); }
 /** Historical shape check only; caller must bind the manifest to owned installation evidence.
  * @param {any} m */
-export function checkInstalledManifest(m){ return checkManifestFor(m, HISTORICAL_REQUIRED_APP); }
-/** @param {any} m @param {string[]} requiredApp */
-function checkManifestFor(m, requiredApp){
+export function checkInstalledManifest(m){ return checkManifestFor(m, HISTORICAL_REQUIRED_APP, true); }
+/** @param {any} m @param {string[]} requiredApp @param {boolean} [historical] */
+function checkManifestFor(m, requiredApp, historical=false){
  exactFields(m,['compatibility','digest','inventory','product','provenance','schema','target','tools','version']);
  if(![1,2].includes(m.schema)||m.product!==PRODUCT||!TARGETS.includes(m.target)||!isStable(m.version))throw Error('Manifest identity');
  checkCompatibility(m.compatibility,m.target,m.schema);checkProvenance(m.provenance);
- const bytes=checkInventoryFor(m.inventory,m.schema===2?FOVEA_REQUIRED_APP:requiredApp);checkToolPins(m.tools,m.inventory,m.target,m.schema);
+ // A retained pre-native schema-2 generation may lack both assets, but any
+ // declared native pair remains mandatory. Callers must bind historical bytes
+ // to the recorded owner hash; this flag is never exposed to new admission.
+ const nativeRequired=m.target.startsWith('darwin-')&&(!historical||(Array.isArray(m.inventory)&&m.inventory.some(e=>DARWIN_SOURCE_APP.includes(e?.path))));
+ const required=m.schema===2?[...FOVEA_REQUIRED_APP,...(nativeRequired?DARWIN_SOURCE_APP:[])]:requiredApp;
+ const bytes=checkInventoryFor(m.inventory,required);checkToolPins(m.tools,m.inventory,m.target,m.schema);
  if(m.schema===1&&m.inventory.some((/** @type {any} */ e)=>e.path==='tools/ast-grep'))throw Error('Parser requires schema 2');
  const {digest,...payload}=m;if(!isHash(digest)||digest!==manifestDigest(payload))throw Error('Manifest digest mismatch');return bytes;
 }
@@ -253,11 +259,39 @@ async function scan(root){
 }
 /** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options */
 export async function createBundleManifest(root,options){ return createManifestFor(root,options,REQUIRED_APP); }
-/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options @param {string[]} requiredApp */
-async function createManifestFor(root,{version,target,compatibility,provenance,tools},requiredApp){
+/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options @param {string[]} requiredApp @param {boolean} [historical] */
+async function createManifestFor(root,{version,target,compatibility,provenance,tools},requiredApp,historical=false){
  const guard=await checkRoot(root);root=guard.root;
  const payload={schema:Object.hasOwn(tools,'ast-grep')?2:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
- guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifestFor(manifest,requiredApp);return manifest;
+ guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifestFor(manifest,requiredApp,historical);
+ await checkNativeSourceFiles(root,manifest,historical);guard.check();return manifest;
+}
+/** Inspect native bytes without executing them, independent of the validator host.
+ * Inventory hashes alone cannot detect rehashed omission or metadata lies.
+ * @param {string} root @param {any} manifest @param {boolean} [historical] */
+async function checkNativeSourceFiles(root, manifest, historical=false) {
+ const present = DARWIN_SOURCE_APP.some(name => manifest.inventory.some(e => e.path === name));
+ if (!present && (historical || !(manifest.schema === 2 && manifest.target.startsWith('darwin-')))) return;
+ if (manifest.schema !== 2 || !manifest.target.startsWith('darwin-')) throw Error('Native source target mismatch');
+ const capture = async (name, limit) => {
+  const entry = manifest.inventory.find(e => e.path === name);
+  if (!entry) throw Error('Native source artifact missing: ' + name);
+  const bytes = await readRegular(path.join(root, name), limit, { mode: 384 });
+  if (bytes.length !== entry.size || sha256(bytes) !== entry.sha256) throw Error('Native source inventory mismatch');
+  return bytes;
+ };
+ const bytes = await capture(DARWIN_SOURCE_APP[0], 2 * 1024 * 1024);
+ const metadata = JSON.parse((await capture(DARWIN_SOURCE_APP[1], 4096)).toString());
+ const closure = JSON.parse((await capture('app/closure-manifest.json', LIMITS.manifest)).toString());
+ const sources = closure.buildInputs?.files?.filter(e => e.path === 'src/fovea/source-platform-native.c');
+ exactFields(metadata, ['schemaVersion', 'abiVersion', 'platform', 'arch', 'minimumMacOS', 'sourceSha256', 'sha256']);
+ if (metadata.schemaVersion !== 1 || metadata.abiVersion !== 1 || metadata.platform !== 'darwin' ||
+     `darwin-${metadata.arch}` !== manifest.target || metadata.minimumMacOS !== '13.5' ||
+     sources?.length !== 1 || !isHash(sources[0].sha256) || metadata.sourceSha256 !== sources[0].sha256 ||
+     metadata.sha256 !== sha256(bytes)) throw Error('Native source artifact identity mismatch');
+ const cpu = metadata.arch === 'arm64' ? 0x0100000c : 0x01000007;
+ if (bytes.length < 32 || bytes.readUInt32LE(0) !== 0xfeedfacf || bytes.readUInt32LE(4) !== cpu ||
+     bytes.readUInt32LE(12) !== 8) throw Error('Native source Mach-O architecture/type mismatch');
 }
 /** Strict admission for all new builds, archives and candidates. @param {string} root */
 export async function validateBundle(root){ return validateBundleFor(root,REQUIRED_APP); }
@@ -265,13 +299,13 @@ export async function validateBundle(root){ return validateBundleFor(root,REQUIR
  * Caller must verify the owner-recorded manifest hash and generation digest.
  * Every declared file (including a declared sandbox worker) is still required.
  * @param {string} root */
-export async function validateInstalledBundle(root){ return validateBundleFor(root,HISTORICAL_REQUIRED_APP); }
-/** @param {string} root @param {string[]} requiredApp */
-async function validateBundleFor(root,requiredApp){
+export async function validateInstalledBundle(root){ return validateBundleFor(root,HISTORICAL_REQUIRED_APP,true); }
+/** @param {string} root @param {string[]} requiredApp @param {boolean} [historical] */
+async function validateBundleFor(root,requiredApp,historical=false){
  const guard=await checkRoot(root);root=guard.root;
  const raw=await readRegular(path.join(root,'bundle-manifest.json'),LIMITS.manifest,{mode:384}),manifest=JSON.parse(raw.toString('utf8'));
  if(!raw.equals(Buffer.from(canonical(manifest)+'\n')))throw Error('Noncanonical manifest bytes');
- const bytes=checkManifestFor(manifest,requiredApp),actual=await createManifestFor(root,manifest,requiredApp);
+ const bytes=checkManifestFor(manifest,requiredApp,historical),actual=await createManifestFor(root,manifest,requiredApp,historical);
  if(canonical(actual)!==canonical(manifest))throw Error('Bundle inventory mismatch');
  guard.check();return {root,digest:manifest.digest,manifest,version:manifest.version,inventory:manifest.inventory,bytes};
 }

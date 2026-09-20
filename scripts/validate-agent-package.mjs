@@ -149,6 +149,26 @@ const assertExactNames = (actual, expected, label) => {
   if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) fail(`${label} inventory drifted`);
 };
 
+// Kept builtin-only: this validator is also shipped in the standalone historical
+// installer script closure. Current Darwin Fovea packages must carry both assets;
+// the pinned pre-Fovea authority and Linux packages need neither.
+const validateNativeSourceClosure = (runtime, closure, seen) => {
+  const names = ['fovea/source-platform.node', 'fovea/source-platform.json'];
+  if (process.platform !== 'darwin' && !names.some(name => seen.has(name))) return;
+  for (const name of names) if (!seen.has(name)) fail(`Native source artifact missing: ${name}`);
+  const bytes = fs.readFileSync(path.join(runtime, names[0]));
+  const metadata = jsonFile(runtime, names[1]);
+  const sources = closure.buildInputs?.files?.filter(entry => entry.path === 'src/fovea/source-platform-native.c');
+  assertExactNames(Object.keys(metadata ?? {}), ['schemaVersion', 'abiVersion', 'platform', 'arch', 'minimumMacOS', 'sourceSha256', 'sha256'], 'Native source metadata');
+  if (metadata.schemaVersion !== 1 || metadata.abiVersion !== 1 || metadata.platform !== 'darwin' ||
+      !['arm64', 'x64'].includes(metadata.arch) || (process.platform === 'darwin' && metadata.arch !== process.arch) ||
+      metadata.minimumMacOS !== '13.5' || sources?.length !== 1 || !/^[a-f0-9]{64}$/u.test(sources[0].sha256 ?? '') ||
+      metadata.sourceSha256 !== sources[0].sha256 || metadata.sha256 !== hash(bytes)) fail('Native source artifact identity mismatch');
+  const cpu = metadata.arch === 'arm64' ? 0x0100000c : 0x01000007;
+  if (bytes.length < 32 || bytes.length > 2 * 1024 * 1024 || bytes.readUInt32LE(0) !== 0xfeedfacf ||
+      bytes.readUInt32LE(4) !== cpu || bytes.readUInt32LE(12) !== 8) fail('Native source Mach-O architecture/type mismatch');
+};
+
 const validateClosure = (root, fovea = false) => {
   const runtime = path.join(root, "runtime");
   const closure = jsonFile(root, "runtime/closure-manifest.json");
@@ -178,6 +198,7 @@ const validateClosure = (root, fovea = false) => {
     for (const name of ["fovea/engine-entry.js", "kiro/fovea-hook.js", "fovea/component.json", "fovea/upstream.json", "fovea/UPSTREAM-LICENSE.txt", "fovea/ast-grep-LICENSE.txt"]) {
       if (!seen.has(name) || !fs.statSync(path.join(runtime, name)).size) fail(`Fovea asset missing: ${name}`);
     }
+    validateNativeSourceClosure(runtime, closure, seen);
     if (!Array.isArray(closure.vendoredComponents) || !closure.vendoredComponents.some(component => component.name === "fovea-vendored-core")) fail("Fovea attribution missing");
   }
   if (contentDigest.digest("hex") !== closure.contentDigest) fail("closure content digest drifted");

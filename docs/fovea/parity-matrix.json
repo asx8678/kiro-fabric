@@ -1,6 +1,33 @@
 {
   "schemaVersion": 1,
   "generatedAt": "2026-09-20T18:26:33.585Z",
+  "currentCompletionVerification": {
+    "platform": "darwin-arm64",
+    "sourceDigest": "47d2ec45d8ede0f4c783145f4be596720239d6362e702814c764dc0ad8bb3271",
+    "fullCheck": { "exitCode": 0, "passed": 3148, "failed": 0, "skipped": 63, "passedFiles": 198, "skippedFiles": 5, "seconds": 1556, "log": ".tmp/fovea-completion-final-check.log", "report": ".tmp/fovea-completion-final.json", "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0 },
+    "initialFailedRun": { "exitCode": 1, "passed": 3134, "failed": 11, "skipped": 63, "report": ".tmp/fovea-completion-initial.json", "scope": "Darwin staging fixtures lacked mandatory native assets; archived-manager tests expected the old refusal instead of strict schema-2 sidecar refusal" },
+    "repairVerification": { "passed": 136, "skipped": 0, "files": 11, "report": ".tmp/fovea-completion-repairs.json" },
+    "review": "Independent source review found and confirmed repair of owner-bound historical Darwin schema-2 admission; no remaining blocking finding in reviewed scope",
+    "installed": { "exitCode": 0, "generation": "560326fe36292348477344be47979f3bec398bd3ff2bc949a530a6a0ffeef0b0", "doctor": "healthy", "sourceFocus": "passed", "evidence": ".tmp/fovea-completion-installed-evidence.json", "dataPreserved": true, "shellIntegration": "unchanged-disabled" },
+    "nativeQualified": false,
+    "releaseReady": false,
+    "evidence": "docs/fovea/completion-ledger.md"
+  },
+  "currentNativeProtocol": {
+    "client": "Kiro CLI 2.22.1",
+    "platform": "darwin-arm64",
+    "reports": [".tmp/fovea-native-contract/final-headless-report.json", ".tmp/fovea-native-contract/final-tui-report.json"],
+    "headless": { "selectedModeObserved": true, "hookEvents": 0, "successAndErrorMcpCalls": true },
+    "tui": { "hookSessionIdObserved": true, "events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"], "continuationMcpCallObserved": true },
+    "nativeSessionRouting": false,
+    "hiddenDelivery": false,
+    "actualModelInput": "not-observed",
+    "automatic": false,
+    "qualified": false,
+    "blocker": "Observed MCP initialize/tools/call carries no native session identity for supported hook session_id association; cwd, arguments and process ancestry are not safe routing authority",
+    "scope": "Authenticated harmless protocol fixture, not Fabric execution or complete H-gate qualification",
+    "darwinProvenance": { "implemented": true, "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0, "report": ".tmp/fovea-reference-qualification/run-PyYFeE/vitest.json", "generationAdmission": "fixture-substituted, not installed/native-client lifecycle proof" }
+  },
   "reference": {
     "repository": "monotykamary/pi-fovea",
     "commit": "b594483868d27b7eb37a9b185c59ce812f8a9c01",
@@ -395,7 +422,7 @@
       ],
       "status": "implemented-unverified",
       "evidenceScope": "Representative component tests; not complete-family or native-client qualification",
-      "remaining": "Pinned Fovea extension and Pi Fabric capture pipeline execute through a fixture runner; see docs/fovea/lifecycle-replay.md. Mutation/provenance and continuation-request fixture replay now execute; real Pi runner, actual model continuation and native Kiro hook rendezvous/restoration remain unfinished/unqualified, not established host incompatibilities. Isolated headless auth blocked; other real-client gates untested."
+      "remaining": "Pinned Fovea extension and Pi Fabric capture pipeline execute through a fixture runner; see docs/fovea/lifecycle-replay.md. Authenticated Darwin TUI hooks and one continuation MCP call observed in protocol fixtures; supported hook session_id-to-MCP association and actual model-input acknowledgment remain unavailable. Restoration, cancellation, queue precedence and full native lifecycle remain unqualified. Darwin provenance and 15 pinned lifecycle component cases pass; fixture generation admission is not native-client qualification."
     },
     {
       "id": "F17",
@@ -517,7 +544,7 @@
       ],
       "status": "implemented-unverified",
       "evidenceScope": "Representative component tests; not complete-family or native-client qualification",
-      "remaining": "Native hook rendezvous/restoration/continuation unfinished, not established host incompatibility. Isolated headless auth blocked; other real-client gates untested."
+      "remaining": "Authenticated Darwin TUI hooks and one continuation MCP call observed in protocol fixtures; supported hook session_id-to-MCP association and actual model-input acknowledgment remain unavailable. Restoration, cancellation, queue precedence and full native lifecycle remain unqualified. Darwin provenance and 15 pinned lifecycle component cases pass; fixture generation admission is not native-client qualification."
     },
     {
       "id": "F22",
@@ -546,6 +573,240 @@
     }
   ],
   "hostGates": [
+    {
+      "id": "H01",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "same session and MCP instance across multiple turns",
+      "blocker": null,
+      "remaining": "Correlate resumed turns with authoritative session and MCP instance identities.",
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
+    },
+    {
+      "id": "H02",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "concurrent session-to-host mapping and ambiguity rejection",
+      "blocker": null,
+      "remaining": "Correlate concurrent same-workspace sessions with hosts and exercise ambiguous routing rejection.",
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
+    },
+    {
+      "id": "H03",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "readiness, authorized binding and first-hook ordering",
+      "blocker": null,
+      "remaining": "Instrument real engine-ready, authorized binding and first-hook ordering.",
+      "evidence": []
+    },
+    {
+      "id": "H04",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "prompt marker delivered to intended model turn",
+      "blocker": null,
+      "remaining": "Observe hook marker in actual intended model input, not model prose or hook stdout.",
+      "evidence": []
+    },
+    {
+      "id": "H05",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "post-tool marker delivered without changing result or error",
+      "blocker": null,
+      "remaining": "Exercise successful and failed tool results plus next-step marker delivery.",
+      "evidence": []
+    },
+    {
+      "id": "H06",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "stop marker causes bounded continuation, not merely hook firing",
+      "blocker": null,
+      "remaining": "Exercise stop-hook bounded continuation through documented native semantics.",
+      "evidence": []
+    },
+    {
+      "id": "H07",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "cancel stops automatic work and queued user input wins",
+      "blocker": null,
+      "remaining": "Exercise native cancellation and queued-input precedence; process timeout is not cancellation evidence.",
+      "evidence": []
+    },
+    {
+      "id": "H08",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
+      "blocker": null,
+      "remaining": "Verify new/resume identity plus clear, compact and profile-swap signals or safe recovery.",
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
+    },
+    {
+      "id": "H09",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "visible/model-only/disabled and status/settings/reset/reload",
+      "blocker": null,
+      "remaining": "Exercise each presentation mode and status/settings/reset/reload on its claimed surface.",
+      "evidence": []
+    },
+    {
+      "id": "H10",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "accepted/declined exact effects and workspace revocation",
+      "blocker": null,
+      "remaining": "Native-TUI accept/decline/revoke exact effects not exercised; no effects authorized by this harness.",
+      "evidence": []
+    },
+    {
+      "id": "H11",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "authoritative complete model-visible tool inventory",
+      "blocker": null,
+      "remaining": "Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.",
+      "evidence": []
+    },
+    {
+      "id": "H12",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "old session retains generation-matched engine and hooks",
+      "blocker": null,
+      "remaining": "Generation update with a retained native session not exercised; no installer/activation in this harness.",
+      "evidence": []
+    }
+  ],
+  "parityClaims": [
+    "deterministic-analysis",
+    "integration-lifecycle",
+    "functional-control",
+    "native-ui-presentation",
+    "task-effectiveness"
+  ],
+  "coldFamilyQualification": {
+    "status": "failed-unqualified",
+    "test": "tests/fovea/reference-differential.test.ts",
+    "optIn": "FOVEA_COLD_FAMILY_PROBE=1",
+    "defaultSkippedCases": 2,
+    "reason": "Pristine upstream remains scheduling-dependent. Production v17 now independently repeats and equals explicitly scheduled reference; warmed operation test transcodes fixture header only.",
+    "evidence": "docs/fovea/lifecycle-replay.md"
+  },
+  "controlledColdCore": {
+    "status": "passed-component-only",
+    "contract": "fifo-source-rule-order-parser-tape-v2",
+    "tests": [
+      "tests/fovea/reference-differential.test.ts",
+      "tests/fovea/cold-inputs.test.ts"
+    ],
+    "budgets": [
+      512,
+      16000
+    ],
+    "independentCold": false,
+    "nativeQualified": false,
+    "outputNormalization": "scratch-root relocation only; no sorting, rule-ID remapping or tolerance change",
+    "scope": "Fresh cores/FIFO reads, exact scheduled-parser byte tape; no fact sharing. No claim that arbitrary upstream output order equals deterministic v17 order.",
+    "evidence": "docs/fovea/cold-input-contract.md"
+  },
+  "scheduledColdCore": {
+    "status": "passed-component-only",
+    "contract": "fifo-source-rule-order-live-parser-v1",
+    "tests": [
+      "tests/fovea/reference-differential.test.ts",
+      "tests/fovea/cold-inputs.test.ts"
+    ],
+    "budgets": [
+      512,
+      16000
+    ],
+    "independentParserExecutions": true,
+    "referenceRawByteIdentical": true,
+    "parserReplay": false,
+    "independentCold": false,
+    "nativeQualified": false,
+    "scope": "Fresh stores and real parser per process with explicit input scheduling; strict output comparison and byte-repeat assertions. Production batching now separately verified.",
+    "evidence": "docs/fovea/cold-input-contract.md"
+  },
+  "claim": "Explicit Darwin arm64 navigation is installed and observed. Linux historical evidence remains scoped; native lifecycle/delivery and signed four-target release are not qualified.",
+  "productionBatchedColdCore": {
+    "status": "passed-component-only",
+    "contract": "production-batched-v17-vs-scheduled-reference-v1",
+    "portVersion": "0.1.1",
+    "coreCacheHeader": 17,
+    "productionChanged": true,
+    "productionNativeWrappers": false,
+    "productionNativeFIFOAdapter": false,
+    "parserReplay": false,
+    "outputNormalization": "scratch-root relocation only; no sorting/remapping/tolerance change",
+    "intentionalDivergence": "Lossless declared rule/source/start/outer-before-inner publication replaces upstream scheduling-dependent order; old caches invalidated.",
+    "tests": [
+      "tests/fovea/production-batching.test.ts",
+      "tests/fovea/reference-differential.test.ts"
+    ],
+    "budgets": [
+      512,
+      16000
+    ],
+    "nativeRepeatByteIdentical": true,
+    "scheduledReferenceRepeatByteIdentical": true,
+    "nativeAndScheduledReferenceByteIdentical": true,
+    "referenceSchedule": "FIFO source reads; one-rule/one-thread real parser executions; pristine source unchanged",
+    "nativeQualified": false,
+    "reports": [
+      "/tmp/fovea-qualification-bh28r1/family-comparison.json",
+      "/tmp/fovea-qualification-27eF5T/family-comparison.json"
+    ],
+    "evidence": "docs/fovea/production-cold.md",
+    "remaining": "Uncontrolled pristine-upstream repeatability remains failed/unqualified; no universal corpus/native-host certificate."
+  },
+  "platformSource": {
+    "status": "darwin-arm64-explicit-installed",
+    "nativeSource": "src/fovea/source-platform-native.c",
+    "actualNativePlatforms": [
+      "linux",
+      "darwin-arm64"
+    ],
+    "productionPlatforms": [
+      "linux",
+      "darwin-arm64"
+    ],
+    "darwinExecution": "observed: installed explicit repo.focus through native Kiro 2.22.1",
+    "remainingImplementation": [
+      "native Kiro cross-session lifecycle qualification (Darwin provenance components now pass)",
+      "native lifecycle and automatic-delivery qualification",
+      "four-target release qualification"
+    ],
+    "evidence": "docs/fovea/macos-activation.md",
+    "scope": "Explicit installed analysis only, not automatic lifecycle or release parity"
+  },
+  "historicalManagerMigration": {
+    "status": "passed-linux-component",
+    "baseline": "1dd4df19aac5e3ab4e404a4b43a133e59da6488a",
+    "bundleSchemas": [
+      1,
+      2
+    ],
+    "ownershipSchema": 3,
+    "testsPassed": 4,
+    "test": "tests/fovea/historical-manager-migration.test.ts",
+    "installerRegistry": "scripts/test-installer.mjs#INSTALLER_SUITES.bundle",
+    "ciHistory": "fetch-depth: 0; persist-credentials: false",
+    "stagedGeneration": "f2e29f265b7bd17ca7bf51fae509c093e334428ada417dd5183825c98440de9e",
+    "scope": "Actual archived old manager/closure, trusted-new-source admission, concurrent old/new backends, exact-profile rollback, retained new settings, SIGKILL recovery",
+    "limitation": "Old manager doctor cannot inspect retained schema 2 after rollback; use trusted new management code. No deletion or mutation of retained generation/data.",
+    "nativeQualified": false,
+    "evidence": "docs/fovea/historical-manager-migration.md"
+  },
+  "historicalIsolatedHostGates": [
     {
       "id": "H01",
       "surface": "headless",
@@ -661,90 +922,7 @@
       "evidence": []
     }
   ],
-  "parityClaims": [
-    "deterministic-analysis",
-    "integration-lifecycle",
-    "functional-control",
-    "native-ui-presentation",
-    "task-effectiveness"
-  ],
-  "coldFamilyQualification": {
-    "status": "failed-unqualified",
-    "test": "tests/fovea/reference-differential.test.ts",
-    "optIn": "FOVEA_COLD_FAMILY_PROBE=1",
-    "defaultSkippedCases": 2,
-    "reason": "Pristine upstream remains scheduling-dependent. Production v17 now independently repeats and equals explicitly scheduled reference; warmed operation test transcodes fixture header only.",
-    "evidence": "docs/fovea/lifecycle-replay.md"
-  },
-  "controlledColdCore": {
-    "status": "passed-component-only",
-    "contract": "fifo-source-rule-order-parser-tape-v2",
-    "tests": [
-      "tests/fovea/reference-differential.test.ts",
-      "tests/fovea/cold-inputs.test.ts"
-    ],
-    "budgets": [
-      512,
-      16000
-    ],
-    "independentCold": false,
-    "nativeQualified": false,
-    "outputNormalization": "scratch-root relocation only; no sorting, rule-ID remapping or tolerance change",
-    "scope": "Fresh cores/FIFO reads, exact scheduled-parser byte tape; no fact sharing. No claim that arbitrary upstream output order equals deterministic v17 order.",
-    "evidence": "docs/fovea/cold-input-contract.md"
-  },
-  "scheduledColdCore": {
-    "status": "passed-component-only",
-    "contract": "fifo-source-rule-order-live-parser-v1",
-    "tests": [
-      "tests/fovea/reference-differential.test.ts",
-      "tests/fovea/cold-inputs.test.ts"
-    ],
-    "budgets": [
-      512,
-      16000
-    ],
-    "independentParserExecutions": true,
-    "referenceRawByteIdentical": true,
-    "parserReplay": false,
-    "independentCold": false,
-    "nativeQualified": false,
-    "scope": "Fresh stores and real parser per process with explicit input scheduling; strict output comparison and byte-repeat assertions. Production batching now separately verified.",
-    "evidence": "docs/fovea/cold-input-contract.md"
-  },
-  "claim": "Implemented components; production batching and genuine migration verified on Linux. Darwin loading/packaging/provenance, native-host and public-release gates remain incomplete.",
-  "productionBatchedColdCore": {
-    "status": "passed-component-only",
-    "contract": "production-batched-v17-vs-scheduled-reference-v1",
-    "portVersion": "0.1.1",
-    "coreCacheHeader": 17,
-    "productionChanged": true,
-    "productionNativeWrappers": false,
-    "productionNativeFIFOAdapter": false,
-    "parserReplay": false,
-    "outputNormalization": "scratch-root relocation only; no sorting/remapping/tolerance change",
-    "intentionalDivergence": "Lossless declared rule/source/start/outer-before-inner publication replaces upstream scheduling-dependent order; old caches invalidated.",
-    "tests": [
-      "tests/fovea/production-batching.test.ts",
-      "tests/fovea/reference-differential.test.ts"
-    ],
-    "budgets": [
-      512,
-      16000
-    ],
-    "nativeRepeatByteIdentical": true,
-    "scheduledReferenceRepeatByteIdentical": true,
-    "nativeAndScheduledReferenceByteIdentical": true,
-    "referenceSchedule": "FIFO source reads; one-rule/one-thread real parser executions; pristine source unchanged",
-    "nativeQualified": false,
-    "reports": [
-      "/tmp/fovea-qualification-bh28r1/family-comparison.json",
-      "/tmp/fovea-qualification-27eF5T/family-comparison.json"
-    ],
-    "evidence": "docs/fovea/production-cold.md",
-    "remaining": "Uncontrolled pristine-upstream repeatability remains failed/unqualified; no universal corpus/native-host certificate."
-  },
-  "platformSource": {
+  "historicalLinuxPlatformSource": {
     "status": "source-implemented-production-darwin-unavailable",
     "sourceTestsPassed": 82,
     "nativeLinuxTestsPassed": 27,
@@ -766,23 +944,5 @@
     ],
     "evidence": "docs/fovea/platform-source.md",
     "note": "Implemented and fixture-compiled actual asynchronous N-API/POSIX source, not only a mocked contract; no PATH/env runtime loader or /dev/fd fallback."
-  },
-  "historicalManagerMigration": {
-    "status": "passed-linux-component",
-    "baseline": "1dd4df19aac5e3ab4e404a4b43a133e59da6488a",
-    "bundleSchemas": [
-      1,
-      2
-    ],
-    "ownershipSchema": 3,
-    "testsPassed": 4,
-    "test": "tests/fovea/historical-manager-migration.test.ts",
-    "installerRegistry": "scripts/test-installer.mjs#INSTALLER_SUITES.bundle",
-    "ciHistory": "fetch-depth: 0; persist-credentials: false",
-    "stagedGeneration": "f2e29f265b7bd17ca7bf51fae509c093e334428ada417dd5183825c98440de9e",
-    "scope": "Actual archived old manager/closure, trusted-new-source admission, concurrent old/new backends, exact-profile rollback, retained new settings, SIGKILL recovery",
-    "limitation": "Old manager doctor cannot inspect retained schema 2 after rollback; use trusted new management code. No deletion or mutation of retained generation/data.",
-    "nativeQualified": false,
-    "evidence": "docs/fovea/historical-manager-migration.md"
   }
 }

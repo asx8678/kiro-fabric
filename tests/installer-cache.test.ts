@@ -43,8 +43,10 @@ describe("checkout cache GC", () => {
     expect(fs.existsSync(bundles.at(-1)!.root)).toBe(true); expect(result.overBudget).toBe(true); expect(result.retainedBytes).toBeGreaterThan(0);
   });
   it("preserves Agent staging pointers and only prunes validated inactive Agent generations", async () => {
-    const root = fixture(), first = await buildAgentDev({ root });
-    put(root, "src/fixture-entry.ts", "export const fixture = 'B';"); refreshFixtureClosure(root);
+    const root = fixture();
+    refreshFixtureClosure(root, process.platform === 'darwin');
+    const first = await buildAgentDev({ root });
+    put(root, "src/fixture-entry.ts", "export const fixture = 'B';"); refreshFixtureClosure(root, process.platform === 'darwin');
     const second = await buildAgentDev({ root });
     const result = await collectInstallerCache({ root, keep: 0, maxBytes: 0, apply: true });
     expect(names(result.removed)).toEqual([path.basename(first.generation)]);

@@ -113,6 +113,9 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
     includePowers: false,
     includeMcpJson: false,
     resources,
+    // Native TUI supports this array contract; headless currently does not fire
+    // hooks. Do not add Fovea automatic hooks: stdin session_id has no supported
+    // association with the potentially pooled MCP instance or its requests.
     hooks: guidanceMode === "minimal" ? [] : [{ name: "Fabric initial investigation", trigger: "UserPromptSubmit", action: { type: "command", command: firstPromptCommand }, timeout: 5 }],
     // V3 snapshots the model tool set at turn start. Headless prompts can arrive
     // before async MCP discovery completes; wait for Fabric without adding tools or trust.

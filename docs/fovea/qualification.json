@@ -37,13 +37,30 @@
     "artifactValidation": ".tmp/fovea-final-artifacts.json",
     "sourceDigest": "efbe53c962d852a01cb26a53665535dcb549d144e7ca3aba0e8185da6b3827d3",
     "bundleDigest": "f2e29f265b7bd17ca7bf51fae509c093e334428ada417dd5183825c98440de9e",
-    "candidate": {"exitCode": 1, "reason": "Exact-commit evidence requires no unstaged changes to tracked files", "log": ".tmp/fovea-final-release-candidate.log"},
-    "promotion": {"exitCode": 1, "reason": "Production release trust root unavailable: distribution BLOCKED", "log": ".tmp/fovea-final-promotion.log"},
-    "packagedHook": {"exitCode": 3, "status": "host-blocked", "reason": "native-session-rendezvous-unavailable", "dispatched": false},
-    "finalBuild": {"log": ".tmp/fovea-final-build.log", "exitEvidence": ".tmp/fovea-final-build.exit"},
+    "candidate": {
+      "exitCode": 1,
+      "reason": "Exact-commit evidence requires no unstaged changes to tracked files",
+      "log": ".tmp/fovea-final-release-candidate.log"
+    },
+    "promotion": {
+      "exitCode": 1,
+      "reason": "Production release trust root unavailable: distribution BLOCKED",
+      "log": ".tmp/fovea-final-promotion.log"
+    },
+    "packagedHook": {
+      "exitCode": 3,
+      "status": "host-blocked",
+      "reason": "native-session-rendezvous-unavailable",
+      "dispatched": false
+    },
+    "finalBuild": {
+      "log": ".tmp/fovea-final-build.log",
+      "exitEvidence": ".tmp/fovea-final-build.exit"
+    },
     "sourceImplementationComplete": false,
     "nativeQualified": false,
-    "releaseReady": false
+    "releaseReady": false,
+    "historical": true
   },
   "retryVerification": {
     "evidence": "docs/fovea/verification-current.md",
@@ -79,7 +96,8 @@
     "finalBuildExitCode": 0,
     "sourceClosureBundleIdentity": "verified-equal",
     "releaseReady": false,
-    "nativeQualified": false
+    "nativeQualified": false,
+    "historical": true
   },
   "scheduledColdCoreFollowup": {
     "status": "passed-component-only",
@@ -148,24 +166,22 @@
     {
       "id": "H01",
       "surface": "headless",
-      "status": "environment-blocked",
+      "status": "untested",
       "requirement": "same session and MCP instance across multiple turns",
-      "blocker": "isolated-auth-unavailable",
+      "blocker": null,
       "remaining": "Correlate resumed turns with authoritative session and MCP instance identities.",
-      "evidence": [
-        "chat-new"
-      ]
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H02",
       "surface": "headless",
-      "status": "environment-blocked",
+      "status": "untested",
       "requirement": "concurrent session-to-host mapping and ambiguity rejection",
-      "blocker": "isolated-auth-unavailable",
+      "blocker": null,
       "remaining": "Correlate concurrent same-workspace sessions with hosts and exercise ambiguous routing rejection.",
-      "evidence": [
-        "chat-new"
-      ]
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H03",
@@ -215,13 +231,12 @@
     {
       "id": "H08",
       "surface": "headless",
-      "status": "environment-blocked",
+      "status": "untested",
       "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
-      "blocker": "isolated-auth-unavailable",
+      "blocker": null,
       "remaining": "Verify new/resume identity plus clear, compact and profile-swap signals or safe recovery.",
-      "evidence": [
-        "chat-new"
-      ]
+      "evidence": [],
+      "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H09",
@@ -349,7 +364,7 @@
     ],
     "privateReport": "/tmp/fovea-qualification-uGuIzO/reference-report.json",
     "inventory": "all pinned tests/fixture files SHA-256; inventory does not mean execution",
-    "differentialStatus": "v17: exact oracle fact bytes under explicit fixture-only 16→17 header transcode; not production cache compatibility; cold production comparison separately recorded",
+    "differentialStatus": "v17: exact oracle fact bytes under explicit fixture-only 16\u219217 header transcode; not production cache compatibility; cold production comparison separately recorded",
     "hostReference": {
       "required": "2ee51683452dc359702880f408e0b8a4bfcb9646",
       "checkoutHead": "0ed499ed3e14d331d5d8cfa88655a5d1dadafe4e",
@@ -385,7 +400,8 @@
     "ACP, headless and native TUI remain separate qualification surfaces.",
     "Full suite/build/installer are coordinated serially by main.",
     "New candidate smoke and installed independence tests exercise exact parser, hash-bound focus, cross-execution dwell and removal of acquisition files. Fake Kiro launcher plus real MCP, not authenticated native TUI.",
-    "Follow-up isolated native chat/listing attempted; authentication bootstrap failed before native JSON events. No credentials or live home accessed."
+    "Follow-up isolated native chat/listing attempted; authentication bootstrap failed before native JSON events. No credentials or live home accessed.",
+    "Current authorized Darwin explicit activation supersedes the isolated-auth prerequisite blocker, not H01-H12 qualification. Historical records retain their original source/platform scope."
   ],
   "automatic": false,
   "privateProbeReport": "/tmp/fovea-qualification-9J4VMw/report.json",
@@ -496,7 +512,8 @@
       "log": ".tmp/fovea-owner-build.log"
     },
     "acceptanceProbeHarnessRepair": "First final consistency probe compared 88 checksummed entries to the 89-file complete closure, overlooking the manifest itself. Corrected probe checks physical file count and byte total; production build and bundle unchanged.",
-    "scope": "Historical conversation-control revision; superseded by remainingWorkVerification"
+    "scope": "Historical conversation-control revision; superseded by remainingWorkVerification",
+    "historical": true
   },
   "lifecycleComponentFollowup": {
     "surface": "pinned-components-fixture-runner",
@@ -809,7 +826,8 @@
     "generatedAt": "2026-09-20T17:27:52.293Z",
     "surface": "headless",
     "qualified": false,
-    "scopeRemoved": true
+    "scopeRemoved": true,
+    "historical": true
   },
   "followup": {
     "source": "execution-owned post-settlement collector, shared outbox claims and transport emission ledger; host-only capability, managed profiles inactive",
@@ -865,27 +883,24 @@
     "remaining": "Uncontrolled pristine-upstream repeatability remains failed/unqualified; no universal corpus/native-host certificate."
   },
   "platformSourceFollowup": {
-    "status": "source-implemented-production-darwin-unavailable",
-    "sourceTestsPassed": 82,
-    "nativeLinuxTestsPassed": 27,
-    "tests": [
-      "tests/fovea/source-platform.test.ts",
-      "tests/fovea/source-platform-bounds.test.ts",
-      "tests/fovea/source-platform-native.test.ts"
-    ],
+    "status": "darwin-arm64-explicit-installed",
     "nativeSource": "src/fovea/source-platform-native.c",
-    "actualNativePlatform": "linux",
+    "actualNativePlatforms": [
+      "linux",
+      "darwin-arm64"
+    ],
     "productionPlatforms": [
-      "linux"
+      "linux",
+      "darwin-arm64"
     ],
-    "darwinExecution": "environment-blocked: no macOS host",
+    "darwinExecution": "observed: installed explicit repo.focus through native Kiro 2.22.1",
     "remainingImplementation": [
-      "fixed generation-local authenticated addon loader",
-      "manifest/hash/architecture binding, reproducible builds and packaging",
-      "Darwin provenance journal publication"
+      "native Kiro cross-session lifecycle qualification (Darwin provenance components now pass)",
+      "native lifecycle and automatic-delivery qualification",
+      "four-target release qualification"
     ],
-    "evidence": "docs/fovea/platform-source.md",
-    "note": "Implemented and fixture-compiled actual asynchronous N-API/POSIX source, not only a mocked contract; no PATH/env runtime loader or /dev/fd fallback."
+    "evidence": "docs/fovea/macos-activation.md",
+    "scope": "Explicit installed analysis only, not automatic lifecycle or release parity"
   },
   "historicalManagerMigration": {
     "status": "passed-linux-component",
@@ -1019,6 +1034,183 @@
       "files": 2,
       "log": ".tmp/fovea-remaining-boundary.log",
       "scope": "preserved newly visible package-import changes and package boundary; separate from unchanged full-suite report"
+    },
+    "historical": true
+  },
+  "historicalIsolatedHostGates": [
+    {
+      "id": "H01",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "same session and MCP instance across multiple turns",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Correlate resumed turns with authoritative session and MCP instance identities.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H02",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "concurrent session-to-host mapping and ambiguity rejection",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Correlate concurrent same-workspace sessions with hosts and exercise ambiguous routing rejection.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H03",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "readiness, authorized binding and first-hook ordering",
+      "blocker": null,
+      "remaining": "Instrument real engine-ready, authorized binding and first-hook ordering.",
+      "evidence": []
+    },
+    {
+      "id": "H04",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "prompt marker delivered to intended model turn",
+      "blocker": null,
+      "remaining": "Observe hook marker in actual intended model input, not model prose or hook stdout.",
+      "evidence": []
+    },
+    {
+      "id": "H05",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "post-tool marker delivered without changing result or error",
+      "blocker": null,
+      "remaining": "Exercise successful and failed tool results plus next-step marker delivery.",
+      "evidence": []
+    },
+    {
+      "id": "H06",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "stop marker causes bounded continuation, not merely hook firing",
+      "blocker": null,
+      "remaining": "Exercise stop-hook bounded continuation through documented native semantics.",
+      "evidence": []
+    },
+    {
+      "id": "H07",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "cancel stops automatic work and queued user input wins",
+      "blocker": null,
+      "remaining": "Exercise native cancellation and queued-input precedence; process timeout is not cancellation evidence.",
+      "evidence": []
+    },
+    {
+      "id": "H08",
+      "surface": "headless",
+      "status": "environment-blocked",
+      "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
+      "blocker": "isolated-auth-unavailable",
+      "remaining": "Verify new/resume identity plus clear, compact and profile-swap signals or safe recovery.",
+      "evidence": [
+        "chat-new"
+      ]
+    },
+    {
+      "id": "H09",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "visible/model-only/disabled and status/settings/reset/reload",
+      "blocker": null,
+      "remaining": "Exercise each presentation mode and status/settings/reset/reload on its claimed surface.",
+      "evidence": []
+    },
+    {
+      "id": "H10",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "accepted/declined exact effects and workspace revocation",
+      "blocker": null,
+      "remaining": "Native-TUI accept/decline/revoke exact effects not exercised; no effects authorized by this harness.",
+      "evidence": []
+    },
+    {
+      "id": "H11",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "authoritative complete model-visible tool inventory",
+      "blocker": null,
+      "remaining": "Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.",
+      "evidence": []
+    },
+    {
+      "id": "H12",
+      "surface": "headless",
+      "status": "untested",
+      "requirement": "old session retains generation-matched engine and hooks",
+      "blocker": null,
+      "remaining": "Generation update with a retained native session not exercised; no installer/activation in this harness.",
+      "evidence": []
     }
+  ],
+  "historicalLinuxPlatformSource": {
+    "status": "source-implemented-production-darwin-unavailable",
+    "sourceTestsPassed": 82,
+    "nativeLinuxTestsPassed": 27,
+    "tests": [
+      "tests/fovea/source-platform.test.ts",
+      "tests/fovea/source-platform-bounds.test.ts",
+      "tests/fovea/source-platform-native.test.ts"
+    ],
+    "nativeSource": "src/fovea/source-platform-native.c",
+    "actualNativePlatform": "linux",
+    "productionPlatforms": [
+      "linux"
+    ],
+    "darwinExecution": "environment-blocked: no macOS host",
+    "remainingImplementation": [
+      "fixed generation-local authenticated addon loader",
+      "manifest/hash/architecture binding, reproducible builds and packaging",
+      "Darwin provenance journal publication"
+    ],
+    "evidence": "docs/fovea/platform-source.md",
+    "note": "Implemented and fixture-compiled actual asynchronous N-API/POSIX source, not only a mocked contract; no PATH/env runtime loader or /dev/fd fallback."
+  },
+  "currentCompletionVerification": {
+    "platform": "darwin-arm64",
+    "sourceDigest": "47d2ec45d8ede0f4c783145f4be596720239d6362e702814c764dc0ad8bb3271",
+    "fullCheck": { "exitCode": 0, "passed": 3148, "failed": 0, "skipped": 63, "passedFiles": 198, "skippedFiles": 5, "seconds": 1556, "log": ".tmp/fovea-completion-final-check.log", "report": ".tmp/fovea-completion-final.json", "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0 },
+    "initialFailedRun": { "exitCode": 1, "passed": 3134, "failed": 11, "skipped": 63, "report": ".tmp/fovea-completion-initial.json", "scope": "Darwin staging fixtures lacked mandatory native assets; archived-manager tests expected the old refusal instead of strict schema-2 sidecar refusal" },
+    "repairVerification": { "passed": 136, "skipped": 0, "files": 11, "report": ".tmp/fovea-completion-repairs.json" },
+    "review": "Independent source review found and confirmed repair of owner-bound historical Darwin schema-2 admission; no remaining blocking finding in reviewed scope",
+    "installed": { "exitCode": 0, "generation": "560326fe36292348477344be47979f3bec398bd3ff2bc949a530a6a0ffeef0b0", "doctor": "healthy", "sourceFocus": "passed", "evidence": ".tmp/fovea-completion-installed-evidence.json", "dataPreserved": true, "shellIntegration": "unchanged-disabled" },
+    "nativeQualified": false,
+    "releaseReady": false,
+    "evidence": "docs/fovea/completion-ledger.md"
+  },
+  "currentNativeProtocol": {
+    "client": "Kiro CLI 2.22.1",
+    "platform": "darwin-arm64",
+    "reports": [".tmp/fovea-native-contract/final-headless-report.json", ".tmp/fovea-native-contract/final-tui-report.json"],
+    "headless": { "selectedModeObserved": true, "hookEvents": 0, "successAndErrorMcpCalls": true },
+    "tui": { "hookSessionIdObserved": true, "events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"], "continuationMcpCallObserved": true },
+    "nativeSessionRouting": false,
+    "hiddenDelivery": false,
+    "actualModelInput": "not-observed",
+    "automatic": false,
+    "qualified": false,
+    "blocker": "Observed MCP initialize/tools/call carries no native session identity for supported hook session_id association; cwd, arguments and process ancestry are not safe routing authority",
+    "scope": "Authenticated harmless protocol fixture, not Fabric execution or complete H-gate qualification",
+    "darwinProvenance": { "implemented": true, "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0, "report": ".tmp/fovea-reference-qualification/run-PyYFeE/vitest.json", "generationAdmission": "fixture-substituted, not installed/native-client lifecycle proof" }
+  },
+  "currentEvidence": {
+    "baselineCommit": "020d86c37178ab17453d9a03ec6e60318fcda243",
+    "scope": "Authorized macOS implementation follow-up; no historical Linux run relabeled as current",
+    "explicitActivation": "docs/fovea/completion-ledger.md#installed-verification",
+    "installedGeneration": "560326fe36292348477344be47979f3bec398bd3ff2bc949a530a6a0ffeef0b0",
+    "installedSourceDigest": "47d2ec45d8ede0f4c783145f4be596720239d6362e702814c764dc0ad8bb3271",
+    "nativeQualified": false,
+    "releaseReady": false,
+    "latestWork": "docs/fovea/completion-ledger.md"
   }
 }
