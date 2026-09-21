@@ -35,6 +35,10 @@ const hash = (text: string): string => createHash("sha256").update(text).digest(
 export const MAX_FOVEA_PROJECT_PROFILES = 128;
 export interface FoveaConfigurationState {
   config: FoveaConfig;
+  /** Presentation only: never persisted or included in revision hashes. */
+  settingSupport: {
+    "sync.ackClean": { supported: false; requested: boolean; effective: false; reason: string };
+  };
   /** Effective revision; session updates continue to use this token. */
   revision: string;
   scope: "session" | "project" | "global" | "defaults";
@@ -61,6 +65,8 @@ export class FoveaConfiguration {
     const session = this.#session ? { config: structuredClone(this.#session), revision: hash(fabricJsonText(this.#session)) } : undefined;
     const effective = session ?? project ?? global ?? { config: structuredClone(DEFAULT_FOVEA_CONFIG), revision: "absent" };
     return { ...effective, scope: session ? "session" : project ? "project" : global ? "global" : "defaults",
+      settingSupport: { "sync.ackClean": { supported: false, requested: effective.config.sync.ackClean, effective: false,
+        reason: "Stored for compatibility only; native clean-state UI notifications are unsupported. This setting does not deliver model context or enable automatic sync." } },
       revisions: { global: global?.revision ?? "absent", ...(projectFile ? { project: project?.revision ?? "absent" } : {}), ...(session ? { session: session.revision } : {}) } };
   }
   update(value: unknown, scope: "session" | "global" | "project", expectedRevision: string, worktreeId?: string): FoveaConfigurationState {

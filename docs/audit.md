@@ -546,6 +546,11 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.
 - `tests/fovea/coverage-contract.test.ts` — real engine coverage packet/schema and guest typing checks.
 - `tests/fovea/mcp-context.test.ts` — real built MCP collector/default-off integration; not native-client evidence.
+- `scripts/fovea-control-cases.mjs` — exact-hash adoption, mode-setting and matched native approval/effect diagnostics; no automated approvals or native UI qualification claims.
+- `scripts/fovea-session-probe.mjs` — real-Fabric TUI compact/swap/clear and same-MCP deferred-detach diagnostics, with bounded driver and witnessed transition acknowledgments.
+- `tests/fovea/native-control-cases.test.ts` — generated guest typing, matched decisions and negative rule/mode/lifecycle/revocation evidence cases.
+- `scripts/fovea-controls-probe.mjs` — opt-in current-bundle real-Fabric settings/reset/reload/resume diagnostic; private fixtures, exact native call evidence, no auto-approval or lifecycle pass claims.
+- `tests/fovea/native-controls.test.ts` — rejects replay, wrong call/mode/session/input and false control-effect evidence; validates generated checked guest programs and opt-in profile boundaries.
 - `scripts/fovea-approval-probe.mjs` — opt-in actual built-Fabric native form diagnostic with private ask-policy fixtures, correlated native/trace evidence and no auto-approval; never complete human or inventory qualification.
 - `tests/fovea/native-approval.test.ts` — actual recorder envelopes, typed response identity, missing-handler versus decline, final-mode guards and unchanged effects.
 - `scripts/fovea-lifecycle-probe.mjs` — opt-in bounded native resume/cancel/queue fixture with fresh recorder nonces and correlated acknowledgments; not actual Fabric lifecycle qualification.

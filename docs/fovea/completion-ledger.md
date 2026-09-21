@@ -1,5 +1,15 @@
 # Fovea completion ledger
 
+**Native controls/lifecycle closeout:** [plan and results](native-controls-closeout.md).
+Full trusted-Node check: **3,294 passed / 63 skipped / 0 failed**. Real Fabric
+compact/swap/clear and post-detach denial were observed; clear retained the prior
+focus across native chat IDs, so isolation remains unqualified. Human approval
+is pending; rule/mode mutations cancelled before dispatch. Automatic stays off.
+
+**Settings/control follow-up:** [scope, acceptance and verification](control-lifecycle-plan.md).
+Unsupported-setting presentation and reproducible real-Fabric control/resume probes
+are local implementation work; they do not supersede the native gates below.
+
 **Latest follow-up (2026-09-21):** [native acceptance ledger](native-acceptance-2026-09-21.md).
 Real Fabric approval is host-blocked by Kiro's missing form handler; observed
 inventory is incomplete. Native cancellation/queued execution and read-only

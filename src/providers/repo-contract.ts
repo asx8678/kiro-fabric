@@ -102,8 +102,8 @@ export const REPO_ACTION_DESCRIPTORS: FabricActionDescriptor[] = [
   descriptor("anchors", "Bounded feature anchor inventory with rule/source evidence and uncertainty.", object({ ...base(), offset: integer(0, 1_000_000), limit: integer(1, 100) })),
   descriptor("rules", "Inspect built-in rules and discovered hypotheses; inspection does not adopt repository rules.", object({ ...base(), offset: integer(0, 1_000_000), limit: integer(1, 100) })),
   descriptor("adoptRules", "Approve session trust for an existing .fovea/rules.json at the exact local.read SHA-256. Publish declarations first using normal local.write. This grants no executable or extra-root authority.", object({ ...base(), expectedSha256: string(64) }, ["expectedSha256"]), true),
-  descriptor("settings", "Inspect separate fovea.v1 configuration, revision and capability gating; old Fabric config remains unchanged.", object(base())),
-  descriptor("configure", "Approved session/project/global Fovea settings update. Use settings.revision for session, revisions.project/global for persistent layers; strict versioned config, no executable or extra-root authority.", object({ ...base(), scope: choices(["session", "project", "global"]), expectedRevision: string(64), config: { type: "object" } }, ["scope", "expectedRevision", "config"]), true),
+  descriptor("settings", "Inspect separate fovea.v1 configuration, revisions and settingSupport. sync.ackClean is stored but ineffective: native clean notifications are unsupported.", object(base())),
+  descriptor("configure", "Approved session/project/global Fovea settings update. Use settings.revision for session, revisions.project/global for persistent layers; strict versioned config, no executable or extra-root authority. Returns settingSupport; stored sync.ackClean does not enable native notifications.", object({ ...base(), scope: choices(["session", "project", "global"]), expectedRevision: string(64), config: { type: "object" } }, ["scope", "expectedRevision", "config"]), true),
   descriptor("reset", "Reset this conversation/root navigation and retained results, not the host lifetime or source files.", object(base()), true),
   descriptor("reload", "Reload configuration and restart the same-generation engine. New code requires product update and a new session.", object(base()), true),
   descriptor("sync", "Explicit authorized reconciliation; returns prepared context, never claims it was delivered. No automatic agent restart.", object(base())),
@@ -149,6 +149,7 @@ type RepoReadWindow = { path: string; offset: number; limit: number; expectedSha
 type RepoNavigationPacket = { schemaVersion: 1; status: "ok" | "no-match"; advisory: true; resultId: string; rootId: string; sourceSnapshotId: string; graphGeneration: string; text: string; estimatedTokens: number; coverage: RepoCoverage; reads: RepoReadWindow[]; truncated: boolean; focusId?: string; focusRevision?: number };
 type RepoFocusArguments = { query: string; rootId?: string; path?: string; language?: string; kind?: "function" | "method" | "class" | "interface" | "type" | "field" | "decl" | "file" | "anchor"; fresh?: boolean; maxTokens?: number; focusId?: string };
 type RepoConfig = { schemaVersion: 1; sync: { mode: "enabled" | "hidden" | "disabled"; scope: "session" | "repository"; budget: number; ackClean: boolean; steerThreshold: number; pushFocus: boolean }; tools: { defaultBudget: number; grepMode: "off" | "augment" | "replace"; grepAugmentBudget: number } };
+type RepoSettings = { config: RepoConfig; revision: string; revisions: {global: string; project: string; session?: string}; scope: "session" | "project" | "global" | "defaults"; settingSupport: {"sync.ackClean": {supported: false; requested: boolean; effective: false; reason: string}} };
 declare const repo: {
  status(args?: {rootId?: string}): Promise<JsonObject>;
  sketch(args?: {rootId?: string; maxTokens?: number}): Promise<RepoNavigationPacket>;
@@ -163,8 +164,8 @@ declare const repo: {
  anchors(args?: {rootId?: string; offset?: number; limit?: number}): Promise<JsonObject>;
  rules(args?: {rootId?: string; offset?: number; limit?: number}): Promise<JsonObject>;
  adoptRules(args: {rootId?: string; expectedSha256: string}): Promise<JsonObject>;
- settings(args?: {rootId?: string}): Promise<{config: RepoConfig; revision: string; revisions: {global: string; project: string}; scope: "session" | "project" | "global" | "defaults"}>;
- configure(args: {rootId?: string; scope: "session" | "project" | "global"; expectedRevision: string; config: RepoConfig}): Promise<JsonObject>;
+ settings(args?: {rootId?: string}): Promise<RepoSettings>;
+ configure(args: {rootId?: string; scope: "session" | "project" | "global"; expectedRevision: string; config: RepoConfig}): Promise<RepoSettings>;
  reset(args?: {rootId?: string}): Promise<JsonObject>;
  reload(args?: {rootId?: string}): Promise<JsonObject>;
  sync(args?: {rootId?: string}): Promise<JsonObject>;

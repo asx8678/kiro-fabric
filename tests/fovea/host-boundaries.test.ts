@@ -100,6 +100,20 @@ it('isolates session settings by conversation and epoch while retaining same-con
   expect(await roaming.invoke('settings', {}, ctx)).toMatchObject({ scope: 'session', config: session });
 });
 
+it('presents unsupported settings through every public control without starting analysis', async () => {
+  const f = fixture();
+  const host = new FoveaHost({ dataRoot: f.base, configFile: path.join(f.base, 'config.json') }); cleanup.push(() => host.close());
+  const provider = new FoveaProvider(host.bind(f.authority)), ctx = { cwd: f.root };
+  const initial = await provider.invoke('settings', {}, ctx) as { revision: string; settingSupport: unknown };
+  const config = structuredClone(DEFAULT_FOVEA_CONFIG); config.sync.ackClean = true;
+  const changed = await provider.invoke('configure', { config, scope: 'session', expectedRevision: initial.revision }, ctx) as { settingSupport: unknown };
+  expect(await provider.invoke('settings', {}, ctx)).toEqual(changed);
+  expect(changed.settingSupport).toEqual({ 'sync.ackClean': expect.objectContaining({ supported: false, requested: true, effective: false }) });
+  expect(await provider.invoke('status', {}, ctx)).toMatchObject({ engineStarts: 0, requested: config, settingSupport: changed.settingSupport, capabilities: { automatic: false } });
+  expect((await provider.describe('settings'))?.description).toContain('settingSupport');
+  expect((await provider.describe('configure'))?.risk).toBe('write');
+});
+
 it('bounds retained conversation controls without revoking active conversations or leaking failed bindings', async () => {
   const f = fixture();
   const host = new FoveaHost({ dataRoot: f.base, configFile: path.join(f.base, 'config.json') }); cleanup.push(() => host.close());

@@ -17,6 +17,30 @@ function fixture() {
 function config(budget: number) { const value = structuredClone(DEFAULT_FOVEA_CONFIG); value.tools.defaultBudget = budget; return value; }
 
 describe('exact-worktree private project settings', () => {
+  it.each(['session', 'project', 'global'] as const)('presents unsupported ackClean without changing %s storage or revision semantics', scope => {
+    const f = fixture();
+    const initial = f.store.read('A');
+    expect(initial.settingSupport['sync.ackClean']).toMatchObject({ supported: false, requested: false, effective: false });
+    const value = config(1024); value.sync.ackClean = true;
+    const written = f.store.update(value, scope, 'absent', 'A');
+    expect(written.config).toEqual(value);
+    expect(written.settingSupport['sync.ackClean']).toMatchObject({ supported: false, requested: true, effective: false, reason: expect.stringContaining('UI notifications are unsupported') });
+    expect(f.store.read('A')).toEqual(written);
+    // Presentation data cannot become an authority/configuration field.
+    expect(() => f.store.update({ ...value, settingSupport: written.settingSupport }, scope, written.revision, 'A')).toThrow(/Invalid/);
+    if (scope === 'session') {
+      expect(fs.readdirSync(f.dir)).toEqual([]);
+      expect(written.revision).toBe(createHash('sha256').update(JSON.stringify(value)).digest('hex'));
+      f.store.reload('A'); expect(f.store.read('A')).toEqual(initial);
+    } else {
+      const text = fs.readFileSync(scope === 'global' ? f.file : f.profile('A'), 'utf8');
+      expect(JSON.parse(text)).toEqual(value); expect(text).not.toContain('settingSupport');
+      expect(written.revision).toBe(createHash('sha256').update(text).digest('hex'));
+      f.store.reload('A'); expect(f.store.read('A')).toEqual(written);
+    }
+    const returned = f.store.read('A'); returned.settingSupport['sync.ackClean'].reason = 'caller changed';
+    expect(f.store.read('A').settingSupport['sync.ackClean'].reason).not.toBe('caller changed');
+  });
   it('isolates A/B, child and linked-worktree identities and never reads workspace files', () => {
     const f = fixture(), a = 'verified-A', b = 'verified-B';
     fs.mkdirSync(path.join(f.dir, '.fovea'), { mode: 0o700 });

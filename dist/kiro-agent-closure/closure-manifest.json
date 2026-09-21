@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "c5da2bc49617f28bc4ba6da1c6db4f437566f26bbac1f5c7a06d217eeefb054b"
+        "sha256": "42d6670dd1e4788744d2031370431cbadb01e2805293433ad8039a60de8749f9"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -321,11 +321,11 @@
       },
       {
         "path": "src/fovea/config.ts",
-        "sha256": "57ec24367fd45b645f95ff1b1c5fa02e0845cf4f01547241e03819f443c120d7"
+        "sha256": "b258002958e38b2986dac69021fea4324a32a4573c23ae4cb88f2d0ebaafe8ff"
       },
       {
         "path": "src/fovea/core/PORT.md",
-        "sha256": "d755286e07522925cb9aaf6bdfd90b2e81b6a27f66bf44b1d9ff453f86ec4d8c"
+        "sha256": "2772ceb906a77057433cfee1e455d413d573fd4537deccf2df4c1a4bb8a5fcf2"
       },
       {
         "path": "src/fovea/core/UPSTREAM-LICENSE.txt",
@@ -453,7 +453,7 @@
       },
       {
         "path": "src/fovea/host.ts",
-        "sha256": "f2616c1ef7d0e76e4a1d647dcdfce8912dccb9e39dcbc7cba383701a45c17743"
+        "sha256": "5e83e94512aaf3ec6a0d229d6495cce518645a35cc229b113ecf94c87aee6a17"
       },
       {
         "path": "src/fovea/native-source-loader.ts",
@@ -725,7 +725,7 @@
       },
       {
         "path": "src/providers/repo-contract.ts",
-        "sha256": "fd8a1caf5b9af324e0ecd4bab93778c5862a93ad7dee3660a02e7800ef839456"
+        "sha256": "ff8299cfe545d43a90f68fc9c69bdcacd583684a00460063542e10b4f0dbf0b4"
       },
       {
         "path": "src/providers/repo-provider.ts",
@@ -816,7 +816,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "0ddc73522d8339ca3f8203ddf49974f11d598674638d6854cd41fc98d49dce46"
+    "digest": "18c8e75a0d60b5d9d9b82e0033e8587ed7d671d49b7469c14f8013bf44a7eb6d"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1176,11 +1176,6 @@
       "sha256": "33dd7d0dbae71d408f6a5cb2a7bcb7732fcfc49cf2c8412f9a57b485782a3521"
     },
     {
-      "path": "chunks/chunk-Q6MGBQ3L.js",
-      "bytes": 32215,
-      "sha256": "f3acc8507842c9bcb46f58f92838162ec5869cb95023afeb9c7c98238fa69e30"
-    },
-    {
       "path": "chunks/chunk-QSJV7I3G.js",
       "bytes": 529841,
       "sha256": "41e815e4e58059cbeef42809b10231ec57c881f9caf56f4700e3a8f57e821266"
@@ -1194,6 +1189,11 @@
       "path": "chunks/chunk-XJTFSUKV.js",
       "bytes": 3911,
       "sha256": "d290c376465bd7abd8c81e8a2ad1788250839fe558aed5627238e388c6b0575e"
+    },
+    {
+      "path": "chunks/chunk-YI22F3B2.js",
+      "bytes": 32544,
+      "sha256": "82d34cd18a9e5df5637afc187361181e4fc449d6a57f12c9ae1673efff79ef6b"
     },
     {
       "path": "chunks/dist-SK2TVSKX.js",
@@ -1506,9 +1506,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-UVRAKP22.js",
-      "bytes": 1104500,
-      "sha256": "3c4431d556123a64c4b9a8267e5b2d94eaac2e85dd0047e7dea97d3a7c70c528"
+      "path": "chunks/mcp-server-CFCSK553.js",
+      "bytes": 1104833,
+      "sha256": "a972dd27101d9491e0397cdf8760954c9222358a28cd8858f1b6af05795741b4"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1543,7 +1543,7 @@
     {
       "path": "fovea/engine-entry.js",
       "bytes": 301375,
-      "sha256": "698d6afed849539a4deed6332a2663e842a04231fe7aab85a6fe99da3625b068"
+      "sha256": "0c5b719ee16566dbc9d2b1ee1b13213b09e889830ddee0fb57eaa76f60e88bb5"
     },
     {
       "path": "fovea/source-platform.json",
@@ -1568,7 +1568,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 56455,
-      "sha256": "349ff64a7c9f9712e85979bb21fc9cf2ad9223dcf8f767b4915edb9c3c1720bd"
+      "sha256": "583f4f96582c46aa26d7d3cf17453170e770b0362e4d97f5963533c66290ffcc"
     },
     {
       "path": "package.json",
@@ -1586,5 +1586,5 @@
       "sha256": "0fe0c3bcef742ee1abd02ae00f0764c389b3b60aedb81daa9d2d9e475b8f3afd"
     }
   ],
-  "contentDigest": "1ee7ae241fadbbf4cf647e7f025aeb0ad3c4d168fca4c64e35150688a1e346d7"
+  "contentDigest": "68be5091ce6c0d25306ffb1a953cfb1f9aafc29b10b79de2ae29f98dd341e34a"
 }

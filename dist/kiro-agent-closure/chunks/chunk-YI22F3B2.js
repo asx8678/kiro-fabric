@@ -133,6 +133,12 @@ var FoveaConfiguration = class {
     return {
       ...effective,
       scope: session ? "session" : project ? "project" : global ? "global" : "defaults",
+      settingSupport: { "sync.ackClean": {
+        supported: false,
+        requested: effective.config.sync.ackClean,
+        effective: false,
+        reason: "Stored for compatibility only; native clean-state UI notifications are unsupported. This setting does not deliver model context or enable automatic sync."
+      } },
       revisions: { global: global?.revision ?? "absent", ...projectFile ? { project: project?.revision ?? "absent" } : {}, ...session ? { session: session.revision } : {} }
     };
   }

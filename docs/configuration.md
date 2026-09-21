@@ -4,6 +4,24 @@ The Agent reads only `$KIRO_HOME/kiro-fabric/data/fabric/config/config.json`; co
 
 `KIRO_FABRIC_RUNTIME_ROOT` and `KIRO_FABRIC_DATA_ROOT` are installer-owned launch values. `KIRO_FABRIC_DEBUG=1|0` controls tracing. Do not inject reserved `KIRO_FABRIC_*` variables from untrusted launch contexts.
 
+## Fovea setting support
+
+`repo.settings()` and approved `repo.configure()` return the requested `config`,
+layer/revision metadata and `settingSupport`. `repo.status()` also exposes the same
+support metadata alongside `requested`. These are separate from Fabric config.
+
+`settingSupport["sync.ackClean"]` always reports `supported:false` and
+`effective:false`, with the stored boolean as `requested` and a reason. This
+upstream clean-state **UI notification** has no native Kiro implementation; setting
+it to true does not deliver model context or enable automatic sync. The requested
+value is retained for configuration compatibility. Support metadata is read-only
+presentation, not an accepted configuration field, and does not change stored
+bytes or revision hashes. Other automatic lifecycle limitations remain explicit
+in `repo.status().capabilities`.
+
+See the [control/lifecycle implementation plan](fovea/control-lifecycle-plan.md)
+for reproducible native verification and the remaining host gates.
+
 ## Browser-backed web search
 
 Fabric exposes `web.search` and `web.open` inside checked `fabric_exec` for on-demand fact grounding. They use the optional external `browser-harness-js` CLI and the user's running Chromium browser, not a paid search API or a Pi extension. `gsearch` is not required. The CLI/browser are **not bundled or installed automatically**. Install the CLI following its upstream instructions (Node 24+, Bash and curl for the current CLI), enable browser remote debugging with private-context support, and verify `browser-harness-js --status` / `browser-harness-js 'await session.connect()'` outside Fabric. Never expose a debugging port publicly. Prefer a dedicated, logged-out browser profile and daemon with recording disabled. Every call additionally requires a fresh CDP browser context; transports (including relays) without Target.createBrowserContext/disposeBrowserContext fail closed, never falling back to logged-in cookies.

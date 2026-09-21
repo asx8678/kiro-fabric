@@ -46,7 +46,11 @@ vectors. Same-stat edits are detected by bytes, not timestamps. Suggested reads
 carry extracted SHA-256, omit approximate locations, split at 2000 lines, and
 report deferred tails. Raw cached facts are never an authorization source.
 
-## Acceptance evidence (2026-09-20)
+## Historical acceptance evidence (2026-09-20)
+
+These are the original port checkpoint results, not current full-product or
+native-client qualification. See `docs/fovea/completion-ledger.md` for subsequent
+verification and `docs/fovea/control-lifecycle-plan.md` for the scoped follow-up.
 
 - `pnpm exec tsc --noEmit`: passed.
 - Targeted seven-file run: **36 passed**, no skips (private parser 0.45.3).
@@ -66,15 +70,21 @@ report deferred tails. Raw cached facts are never an authorization source.
 
 ## Explicit boundaries / remaining qualification
 
-- Descriptor-relative source access currently supports Linux only. Other
-  platforms fail closed; a portable native openat-equivalent is still needed.
+- Descriptor-relative source access supports Linux and managed Darwin. The
+  unbound `sourcePlatform()` factory is Linux-only; the engine admits Darwin
+  through `native-source-loader.ts` with a generation-verified ABI-1 binding.
+  Missing or mismatched bindings fail closed. See `docs/fovea/platform-source.md`.
 - Shallow history whose metadata is outside the authorized root (e.g. some
   linked-worktree/subroot layouts) degrades explicitly with Git coverage; it is
   not treated as complete history. In-scope shallow ledgers use bounded no-follow
   metadata reads rather than reading the private source mirror's absent `.git`.
-- Core provenance algorithms are preserved, but native host mutation transition
-  journals are not connected: no synthetic own/foreign attribution is produced.
-- Host must connect confirmed delivery to the private sync acknowledgment; merely
-  computing, returning, or preparing context does not acknowledge it.
-- Final serial build/full-suite/packaging/client gates belong to integration
-  owner. This worker ran no full suite/build and made no commits.
+- Core provenance algorithms are connected to the host mutation-transition
+  journal and scope-safe snapshot hashes. Fabric-observed transitions can carry
+  host-session attribution; uninstrumented changes remain unattributed. This
+  does not establish native Kiro chat identity or cross-resume association.
+- The host has private delivery acknowledgment plumbing for qualified embedders,
+  but native Kiro intended-turn delivery remains unqualified and automatic
+  integration stays disabled. Computing, returning, or preparing context is not
+  delivery acknowledgment.
+- Build, full-suite, packaging and native-client claims have separate scopes.
+  The historical core checkpoint above does not certify the current release.
