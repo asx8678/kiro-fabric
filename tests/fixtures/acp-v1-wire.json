@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "protocol": "Agent Client Protocol v1",
+  "sources": [
+    "https://agentclientprotocol.com/protocol/v1/initialization",
+    "https://agentclientprotocol.com/protocol/v1/session-setup",
+    "https://agentclientprotocol.com/protocol/v1/prompt-turn",
+    "https://agentclientprotocol.com/protocol/v1/tool-calls",
+    "https://agentclientprotocol.com/protocol/v1/cancellation"
+  ],
+  "verifiedAgainst": "agentclientprotocol.com, 2026-09-21",
+  "notes": "Normative wire examples transcribed from the published ACP v1 documentation. The capability probe and its tests must stay in sync with these shapes; change this fixture only against a re-read of the sources. The probe intentionally advertises no clientCapabilities even though the initialize example shows a full client: a capability probe must never enable fs or terminal access.",
+  "initializeRequest": {
+    "jsonrpc": "2.0",
+    "id": 0,
+    "method": "initialize",
+    "params": {
+      "protocolVersion": 1,
+      "clientCapabilities": {
+        "fs": { "readTextFile": true, "writeTextFile": true },
+        "terminal": true
+      },
+      "clientInfo": { "name": "my-client", "title": "My Client", "version": "1.0.0" }
+    }
+  },
+  "initializeResponse": {
+    "jsonrpc": "2.0",
+    "id": 0,
+    "result": {
+      "protocolVersion": 1,
+      "agentCapabilities": {
+        "loadSession": true,
+        "promptCapabilities": { "image": true, "audio": true, "embeddedContext": true },
+        "mcpCapabilities": { "http": true, "sse": true }
+      },
+      "agentInfo": { "name": "my-agent", "title": "My Agent", "version": "1.0.0" },
+      "authMethods": []
+    }
+  },
+  "sessionNewRequest": {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "session/new",
+    "params": {
+      "cwd": "/home/user/project",
+      "mcpServers": [
+        { "name": "filesystem", "command": "/path/to/mcp-server", "args": ["--stdio"], "env": [] }
+      ]
+    }
+  },
+  "sessionNewResponse": { "jsonrpc": "2.0", "id": 1, "result": { "sessionId": "sess_abc123def456" } },
+  "promptRequest": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "session/prompt",
+    "params": {
+      "sessionId": "sess_abc123def456",
+      "prompt": [
+        { "type": "text", "text": "Can you analyze this code for potential issues?" }
+      ]
+    }
+  },
+  "promptResponseEndTurn": { "jsonrpc": "2.0", "id": 2, "result": { "stopReason": "end_turn" } },
+  "promptResponseCancelled": { "jsonrpc": "2.0", "id": 2, "result": { "stopReason": "cancelled" } },
+  "stopReasons": ["end_turn", "refusal", "cancelled"],
+  "cancelNotification": { "jsonrpc": "2.0", "method": "session/cancel", "params": { "sessionId": "sess_abc123def456" } },
+  "permissionRequest": {
+    "jsonrpc": "2.0",
+    "id": 5,
+    "method": "session/request_permission",
+    "params": {
+      "sessionId": "sess_abc123def456",
+      "toolCall": { "toolCallId": "call_001" },
+      "options": [
+        { "optionId": "allow-once", "name": "Allow once", "kind": "allow_once" },
+        { "optionId": "reject-once", "name": "Reject", "kind": "reject_once" }
+      ]
+    }
+  },
+  "permissionOptionKinds": ["allow_once", "allow_always", "reject_once", "reject_always"],
+  "permissionResponseSelected": { "jsonrpc": "2.0", "id": 5, "result": { "outcome": { "outcome": "selected", "optionId": "reject-once" } } },
+  "permissionResponseCancelled": { "jsonrpc": "2.0", "id": 5, "result": { "outcome": { "outcome": "cancelled" } } },
+  "rejectedShapes": [
+    {
+      "id": "prompt-with-content-params",
+      "frame": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "session/prompt",
+        "params": {
+          "sessionId": "sess_abc123def456",
+          "content": [{ "type": "text", "text": "..." }]
+        }
+      },
+      "reason": "session/prompt params must carry a `prompt` array of content blocks; ACP v1 has no `content` field"
+    },
+    {
+      "id": "permission-deny-outcome",
+      "frame": { "jsonrpc": "2.0", "id": 5, "result": { "outcome": { "outcome": "deny" } } },
+      "reason": "permission replies must use the `selected` (with optionId) or `cancelled` outcomes; ACP v1 has no `deny` outcome"
+    }
+  ]
+}

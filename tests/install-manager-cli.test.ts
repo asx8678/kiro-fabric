@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { syncBuiltinESMExports } from "node:module";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { checkKiro, managerErrorResult, parseManagerArguments, selectedHome, shellQuote } from "../scripts/install-manager.mjs";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 describe("installed manager command contract", () => {
   it("preserves commit truth and classifies structured failures without substring matches", () => {
     expect(managerErrorResult(Object.assign(new Error("EIO: fsync failed"), { committed: true, recoveryRequired: true }))).toMatchObject({ committed: true, exitCode: 7, outcome: "committed-cleanup-required" });

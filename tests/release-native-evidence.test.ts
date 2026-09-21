@@ -1,5 +1,6 @@
+import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
-import { rm, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { assertNativeHost, checkProbeResult, assertExactArchive, collectNativeBundleEvidence } from '../scripts/release-native-evidence.mjs';
 import { createBundleArchive } from '../scripts/bundle-archive.mjs';

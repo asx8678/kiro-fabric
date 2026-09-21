@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -34,10 +35,10 @@ beforeEach(() => {
   // The authenticated loader is covered independently by packaging tests.
   if (nativePlatform) vi.spyOn(nativeLoader, 'loadManagedSourcePlatform').mockResolvedValue(nativePlatform);
 });
-afterAll(() => { if (nativeBuild) fs.rmSync(nativeBuild, { recursive: true, force: true }); });
+afterAll(() => { if (nativeBuild) removeFixtureSync(nativeBuild, { recursive: true, force: true }); });
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-provenance-'))); fs.chmodSync(base, 0o700);
-  cleanup.push(() => fs.rmSync(base, { recursive: true, force: true }));
+  cleanup.push(() => removeFixtureSync(base, { recursive: true, force: true }));
   const root = path.join(base, 'root'); fs.mkdirSync(root, { mode: 0o700 });
   const stat = fs.statSync(root, { bigint: true });
   const authority = { canonicalPath: root, deviceId: String(stat.dev), fileId: String(stat.ino), conversationId: 'private_conversation', conversationEpoch: 1, authorizationEpoch: 1 };

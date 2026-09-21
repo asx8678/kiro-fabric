@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ function fixture(budget=20000) {
   put("a.ts","hit a\n");put("b.ts","hit b\n");
   const call=(name:string,args:Record<string,unknown>)=>registry.invoke(`local.${name}`,args,{cwd:root,audits:[],maxResultChars:budget,approve:async()=>{}});
   return {root,registry,put,call,find:(args:Record<string,unknown>)=>call("find",args) as Promise<LocalFindResult>,grep:(args:Record<string,unknown>)=>call("grep",args) as Promise<LocalGrepResult>,
-    async close(){vi.restoreAllMocks();await registry.close();fs.rmSync(base,{recursive:true,force:true});}};
+    async close(){vi.restoreAllMocks();await registry.close();removeFixtureSync(base,{recursive:true,force:true});}};
 }
 const query={pattern:"*.ts",paginate:true,snapshotScope:"query-v1",limit:1};
 

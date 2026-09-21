@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ import {
 import { REAL_CLIENT_AUTO_COMPACTION_MAX_PRESSURE_TURNS } from "../scripts/real-client-evidence.mjs";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const sessionId = "11111111-1111-4111-8111-111111111111";
 const fact = "conversation-only-unpredictable-fact";
 const envelope = (direction: string, message: object) => ({ direction, message: { jsonrpc: "2.0", ...message } });

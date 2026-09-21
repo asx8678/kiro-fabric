@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -11,7 +12,7 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
 function temporary() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-process-'))); fs.chmodSync(base, 0o700);
-  cleanups.push(() => fs.rmSync(base, { recursive: true, force: true })); return base;
+  cleanups.push(() => removeFixtureSync(base, { recursive: true, force: true })); return base;
 }
 const parser = { path: path.resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
 const query = (root: string, operation = 'status', args = {}): FoveaQuery => ({ root, operation, args, rootId: 'root', conversationId: 'conversation', conversationEpoch: 1, authorizationEpoch: 1 });

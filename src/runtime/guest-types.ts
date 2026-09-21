@@ -95,7 +95,7 @@ declare const state: Readonly<{
   delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>;
 }>;
 type WebSearchResult = { title: string; url: string; snippet: string };
-type WebSearchOutput = { source: "google"; query: string; results: WebSearchResult[] };
+type WebSearchOutput = { source: "google" | "bing"; query: string; results: WebSearchResult[] };
 type WebOpenOutput = { url: string; finalUrl: string; title: string; text: string; chars: number; truncated: boolean; selector: string };
 declare const web: Readonly<{
   search(args: { query: string; limit?: number }): Promise<WebSearchOutput>;

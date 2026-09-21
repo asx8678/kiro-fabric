@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -9,7 +10,7 @@ import { assertCandidateSource, assertCleanReleaseCheckout } from '../scripts/pr
 import { completeQualificationRequest, prepareCompleteSigningInputs } from '../scripts/complete-release-signing-inputs.mjs';
 import { packCompleteInputs, unpackCompleteInputs } from '../scripts/complete-release-inputs.mjs';
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 async function fixture() { const f = await completeFixture(); roots.push(f.root); return f; }
 const target = 'darwin-arm64';
 const name = `kiro-fabric-1.0.0-${target}.tar.gz`;
@@ -38,9 +39,9 @@ describe('complete release promotion', () => {
   });
   it.each(['unsigned', 'qualification-signature', 'missing-target', 'wrong-commit', 'archive-drift', 'witness-drift', 'pending', 'duplicate-gate'])("rejects %s before publication", async kind => {
     const f = await fixture();
-    if (kind === 'unsigned') fs.rmSync(path.join(f.input, name + '.release.sig'));
+    if (kind === 'unsigned') removeFixtureSync(path.join(f.input, name + '.release.sig'));
     if (kind === 'qualification-signature') fs.writeFileSync(path.join(f.input, name + '.qualification.sig'), 'A'.repeat(86) + '==\n');
-    if (kind === 'missing-target') fs.rmSync(path.join(f.input, 'kiro-fabric-1.0.0-linux-x64.tar.gz.release.json'));
+    if (kind === 'missing-target') removeFixtureSync(path.join(f.input, 'kiro-fabric-1.0.0-linux-x64.tar.gz.release.json'));
     if (kind === 'wrong-commit') f.expected.commit = 'b'.repeat(40);
     if (kind === 'archive-drift') fs.appendFileSync(path.join(f.input, name), 'tampered');
     if (kind === 'witness-drift') { const p = path.join(f.input, 'witnesses'); fs.appendFileSync(path.join(p, fs.readdirSync(p)[0]!), 'tampered'); }

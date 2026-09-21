@@ -1,6 +1,7 @@
+import { removeFixture as rm } from "../fixture-cleanup.mjs";
 import { afterEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { chmod, link, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, realpath, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SourceAccess, captureSourceSnapshot, readScopeSafeFile, relativeStorageExclusion } from '../../src/fovea/source-access.js';
@@ -51,6 +52,25 @@ describe.skipIf(process.platform !== 'linux').each(['linux', 'darwin-contract-on
     await writeFile(join(root, 'nested', 'bytes.ts'), Buffer.from([0, 0, 0, 0]));
     expect(await readFile(join(destination, 'nested', 'bytes.ts'))).toEqual(data);
     await expect(access.captureSourceSnapshot(root, destination)).rejects.toMatchObject({ code: 'EEXIST' });
+  });
+
+  it('reuses a matching previous snapshot without writing a second copy', async () => {
+    const { root, destination, base } = await fixture();
+    await writeFile(join(root, 'a.ts'), 'export const a = 1;');
+    const access = new SourceAccess(platform(kind));
+    const first = await access.captureSourceSnapshot(root, destination);
+    const secondDest = join(base, 'snapshot-2'); await mkdir(secondDest, { mode: 0o700 });
+    const second = await access.captureSourceSnapshot(root, secondDest, undefined, { previous: { id: first.id, root: first.root, hashes: first.hashes } });
+    expect(second.id).toBe(first.id);
+    expect(second.root).toBe(first.root);
+    expect(second.coverage.reusedPreviousSnapshot).toBe(true);
+    await expect(readFile(join(secondDest, 'a.ts'))).rejects.toMatchObject({ code: 'ENOENT' });
+    await writeFile(join(root, 'a.ts'), 'export const a = 2;');
+    const thirdDest = join(base, 'snapshot-3'); await mkdir(thirdDest, { mode: 0o700 });
+    const third = await access.captureSourceSnapshot(root, thirdDest, undefined, { previous: { id: first.id, root: first.root, hashes: first.hashes } });
+    expect(third.root).toBe(thirdDest);
+    expect(third.coverage.reusedPreviousSnapshot).toBeUndefined();
+    expect(await readFile(join(thirdDest, 'a.ts'), 'utf8')).toBe('export const a = 2;');
   });
 
   it('excludes credentials, dependencies, storage, untrusted rules, hardlinks, symlinks and nested repositories', async () => {

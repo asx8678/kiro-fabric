@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -344,7 +345,7 @@ await server.connect(new StdioServerTransport());
       expect(fs.readdirSync(temporary).sort()).toEqual(["mcp.json", "server.mjs"]);
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   }, 15_000);
 
@@ -360,7 +361,7 @@ await server.connect(new StdioServerTransport());
       await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("unaliased regular file");
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -373,7 +374,7 @@ await server.connect(new StdioServerTransport());
       await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("imports: []");
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -388,7 +389,7 @@ await server.connect(new StdioServerTransport());
       await expect(provider.invoke("$servers", {}, context())).rejects.toThrow("changed after runtime loading");
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -488,7 +489,7 @@ await server.connect(new StdioServerTransport());
       expect(calls).toBe(0);
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -527,7 +528,7 @@ await server.connect(new StdioServerTransport());
       expect(calls).toBe(0);
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -576,7 +577,7 @@ await server.connect(new StdioServerTransport());
       expect(calls).toBe(0);
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -625,7 +626,7 @@ await server.connect(new StdioServerTransport());
       } finally {
         vi.restoreAllMocks();
         await provider.close();
-        fs.rmSync(temporary, { recursive: true, force: true });
+        removeFixtureSync(temporary, { recursive: true, force: true });
       }
     });
   });
@@ -673,7 +674,7 @@ await server.connect(new StdioServerTransport());
       expect(calls).toBe(2);
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -695,7 +696,7 @@ await server.connect(new StdioServerTransport());
       }, context())).rejects.toThrow("exceeds 16777216 bytes");
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 
@@ -719,7 +720,7 @@ await server.connect(new StdioServerTransport());
       }, context())).rejects.toThrow("exceed 67108864 bytes total");
     } finally {
       await provider.close();
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 

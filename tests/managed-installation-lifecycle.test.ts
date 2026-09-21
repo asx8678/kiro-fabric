@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -15,7 +16,7 @@ async function setup() {
  const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'lifecycle-controls-'))),bundle=await fixture(),userHome=path.join(root,'home'),kiroHome=path.join(userHome,'.kiro');
  fs.mkdirSync(userHome,{mode:0o700});
  const opts={kiroHome,userHome,env:{},provenance:'source',validateCandidate:async(root:string)=>{await validateBundle(root);}};
- return {root,bundle,userHome,kiroHome,opts,cleanup(){fs.rmSync(root,{recursive:true,force:true});fs.rmSync(bundle,{recursive:true,force:true});}};
+ return {root,bundle,userHome,kiroHome,opts,cleanup(){removeFixtureSync(root,{recursive:true,force:true});removeFixtureSync(bundle,{recursive:true,force:true});}};
 }
 async function change(bundle:string,value='next') {const prior=(await validateBundle(bundle)).manifest;fs.writeFileSync(path.join(bundle,'app/main.js'),value);const next=await createBundleManifest(bundle,prior);fs.writeFileSync(path.join(bundle,'bundle-manifest.json'),canonical(next)+'\n');return next.digest;}
 const interruption=(phase:string)=>({onPhase:(p:string)=>{if(p===phase)throw Error('fixture interruption');}});

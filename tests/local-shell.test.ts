@@ -1,6 +1,7 @@
+import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import childProcess, { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";

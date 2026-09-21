@@ -1,7 +1,7 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
-import { discoveryExclusionReason, filterSupported, isGeneratedSource } from './core/build.js';
+import { discoveryExclusionReason, filterSupported, isGeneratedSourceBytes } from './core/build.js';
 import { sha256 } from './parser-executable.js';
 import {
   assertSourceComponent, openSourceDirectory, readSourceBounded, sourceLimit, sourcePlatform,
@@ -9,7 +9,11 @@ import {
 } from './source-platform.js';
 
 export interface SourceSnapshot { id: string; root: string; hashes: Map<string, string>; coverage: Record<string, unknown> }
-export interface SnapshotOptions { maxFiles?: number; maxFileBytes?: number; maxBytes?: number; exclude?: string[]; trustedRulesSha256?: string | undefined }
+export interface SnapshotOptions {
+  maxFiles?: number; maxFileBytes?: number; maxBytes?: number; exclude?: string[]; trustedRulesSha256?: string | undefined;
+  /** Private previous snapshot only. Live bytes are still hashed; matching trees skip a second copy. */
+  previous?: { id: string; root: string; hashes: Map<string, string> };
+}
 
 function unchangedFile(before: SourceStat, after: SourceStat, length: number): boolean {
   return after.isFile() && before.nlink === 1 && after.nlink === 1 && before.dev === after.dev && before.ino === after.ino &&
@@ -23,7 +27,11 @@ export class SourceAccess {
   constructor(private readonly platform: SourcePlatform) {}
 
   /** Exact byte snapshots; destination must be a fresh, host-owned private
-   * staging directory (the engine uses mkdtemp). No live-source path reopens. */
+   * staging directory (the engine uses mkdtemp). No live-source path reopens.
+   * Admitted bytes stream to the staging tree one file at a time, so retained
+   * live memory is bounded by one bounded file read rather than the whole
+   * admitted tree; unchanged files relative to a pinned previous snapshot
+   * are reassembled from that private tree, never from live source paths. */
   async captureSourceSnapshot(root: string, destination: string, signal?: AbortSignal, options: SnapshotOptions = {}): Promise<SourceSnapshot> {
     const maxFiles = sourceLimit(options.maxFiles, 8_000, 'files');
     const maxFileBytes = sourceLimit(options.maxFileBytes, 8 * 1024 * 1024, 'file bytes');
@@ -32,6 +40,17 @@ export class SourceAccess {
     if (trustedRulesSha256 !== undefined && !/^[a-f0-9]{64}$/.test(trustedRulesSha256)) throw new Error('Invalid trusted project rule hash');
     let routePatterns: RegExp[] = [];
     const hashes = new Map<string, string>();
+    // Files whose live bytes were streamed into the staging tree. Unchanged
+    // paths (relative to a pinned previous snapshot) keep metadata only.
+    const staged = new Set<string>();
+    const capFor = (path: string): number =>
+      Math.min(maxFileBytes, /\.(?:proto|graphql|gql)$/i.test(path) ? 8 * 1024 * 1024 : 1024 * 1024);
+    // Pin the previous host-owned private snapshot before relying on it; an
+    // unpinnable previous streams every admitted live file instead.
+    const previousRequested = options.previous ?? null;
+    const previousPinned = await this.pinPreviousSnapshot(previousRequested);
+    const previousHashOf = (path: string): string | undefined =>
+      previousPinned === null ? undefined : previousRequested!.hashes.get(path);
     const counts: Record<string, number> = {};
     const examples: Record<string, string[]> = {};
     let bytes = 0, entries = 0, capped = false;
@@ -53,7 +72,9 @@ export class SourceAccess {
           names.push(name);
         }
       } catch (error) { signal?.throwIfAborted(); report('unreadableDirectories', prefix); return; }
-      names.sort((a, b) => a === '.fovea' ? -1 : b === '.fovea' ? 1 : a.localeCompare(b));
+      // Code-unit order keeps the ordered snapshot digest deterministic across
+      // locales and ICU versions (and sorts faster than localeCompare).
+      names.sort((a, b) => a === '.fovea' ? -1 : b === '.fovea' ? 1 : a < b ? -1 : a > b ? 1 : 0);
       for (const name of names) {
         signal?.throwIfAborted();
         if (hashes.size >= maxFiles || bytes >= maxBytes) { capped = true; return; }
@@ -85,7 +106,7 @@ export class SourceAccess {
           if (before.nlink !== 1) { report('hardlinks', path); continue; }
           // Default convention routers also cover template extensions without a grammar.
           if (!filterSupported([path], routePatterns).length && !/\.(?:svelte|mdx|astro|vue)$/i.test(path)) { report('unsupported', path); continue; }
-          const cap = Math.min(maxFileBytes, /\.(?:proto|graphql|gql)$/i.test(path) ? 8 * 1024 * 1024 : 1024 * 1024);
+          const cap = capFor(path);
           if (before.size > cap) { report('oversized', path); continue; }
           const data = await readSourceBounded(handle, cap, signal);
           if (!data) { report('oversized', path); continue; }
@@ -102,12 +123,18 @@ export class SourceAccess {
               return new RegExp(rule.re);
             });
           }
-          if (isGeneratedSource(path, data.toString('utf8'))) report('generated', path);
-          const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
-          signal?.throwIfAborted();
-          await mkdir(join(destination, parent), { recursive: true, mode: 0o700 });
-          await writeFile(join(destination, path), data, { flag: 'wx', mode: 0o400 });
-          hashes.set(path, sha256(data)); bytes += data.length;
+          if (isGeneratedSourceBytes(path, data)) report('generated', path);
+          const hash = sha256(data);
+          if (previousHashOf(path) !== hash) {
+            // Stream new or changed bytes into the staging tree at once, so
+            // retained live memory stays bounded by a single file read.
+            await this.stageFile(destination, path, data, signal);
+            staged.add(path);
+          }
+          // Unchanged paths keep only their metadata; they are reassembled from
+          // the pinned private snapshot when the final membership differs.
+          hashes.set(path, hash);
+          bytes += data.length;
         } finally { await handle.close(); }
       }
     };
@@ -117,8 +144,85 @@ export class SourceAccess {
     if (trustedRulesSha256 && hashes.get('.fovea/rules.json') !== trustedRulesSha256) throw new Error('Trusted project rules missing or unavailable');
     const digest = createHash('sha256');
     for (const [path, hash] of hashes) digest.update(JSON.stringify([path, hash])).update('\n');
-    return { id: digest.digest('hex'), root: destination, hashes,
-      coverage: { sourceFiles: hashes.size, sourceBytes: bytes, entriesVisited: entries, capped, maxFiles, maxFileBytes, maxBytes, counts, examples, projectRules: trustedRulesSha256 ? 'host-approved-hash' : 'untrusted-skipped', trustedRulesSha256 } };
+    const id = digest.digest('hex');
+    const coverage = { sourceFiles: hashes.size, sourceBytes: bytes, entriesVisited: entries, capped, maxFiles, maxFileBytes, maxBytes, counts, examples, projectRules: trustedRulesSha256 ? 'host-approved-hash' : 'untrusted-skipped', trustedRulesSha256 };
+    if (previousPinned !== null && previousRequested!.id === id && previousRequested!.hashes.size === hashes.size &&
+        [...hashes].every(([path, hash]) => previousRequested!.hashes.get(path) === hash) &&
+        await this.previousSnapshotStillPinned(previousPinned)) {
+      // Warm reuse: identical membership and ordered digest over a still-pinned
+      // private tree. No second copy is written.
+      return { id, root: previousPinned.root, hashes, coverage: { ...coverage, reusedPreviousSnapshot: true } };
+    }
+    if (previousPinned !== null) {
+      // The membership changed: reassemble the unchanged files from the pinned
+      // private snapshot with bounded, no-follow reads and expected-hash
+      // verification. Live source paths are never reopened after their bytes
+      // were released; an unavailable or inconsistent previous fails closed.
+      if (!await this.previousSnapshotStillPinned(previousPinned)) {
+        throw new Error('Previous snapshot became unavailable during capture; retry without it');
+      }
+      for (const [path, hash] of hashes) {
+        if (staged.has(path)) continue;
+        signal?.throwIfAborted();
+        const data = await this.readPreviousFile(previousPinned.root, path, capFor(path), hash, signal);
+        await this.stageFile(destination, path, data, signal);
+      }
+    }
+    return { id, root: destination, hashes, coverage };
+  }
+
+  /** Stream one admitted file into the fresh private staging tree. */
+  private async stageFile(destination: string, filePath: string, data: Buffer, signal?: AbortSignal): Promise<void> {
+    signal?.throwIfAborted();
+    const parent = filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : '';
+    await mkdir(join(destination, parent), { recursive: true, mode: 0o700 });
+    await writeFile(join(destination, filePath), data, { flag: 'wx', mode: 0o400 });
+  }
+
+  /** Pin the previous snapshot: its root must exist as a private directory. */
+  private async pinPreviousSnapshot(previous: SnapshotOptions['previous'] | null): Promise<{ root: string; dev: number; ino: number } | null> {
+    if (!previous) return null;
+    try {
+      const held = await lstat(previous.root);
+      if (!held.isDirectory() || held.isSymbolicLink()) return null;
+      return { root: previous.root, dev: held.dev, ino: held.ino };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Re-verify the pinned previous snapshot: same directory identity. */
+  private async previousSnapshotStillPinned(pinned: { root: string; dev: number; ino: number }): Promise<boolean> {
+    try {
+      const held = await lstat(pinned.root);
+      return held.isDirectory() && !held.isSymbolicLink() && held.dev === pinned.dev && held.ino === pinned.ino;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Bounded, no-follow read of one file from the pinned private previous
+   * snapshot; the bytes must hash to the live-observed value or the copy
+   * fails closed. Never reads from a live source pathname. */
+  private async readPreviousFile(root: string, filePath: string, cap: number, expectedHash: string, signal?: AbortSignal): Promise<Buffer> {
+    const segments = filePath.split('/');
+    for (const segment of segments) assertSourceComponent(segment);
+    let directory = await openSourceDirectory(this.platform, root, signal);
+    try {
+      for (const segment of segments.slice(0, -1)) {
+        const next = await this.platform.openChild(directory, segment, 'directory');
+        try { await directory.close(); } catch (error) { await next.close(); throw error; }
+        directory = next;
+      }
+      const file = await this.platform.openChild(directory, segments.at(-1)!, 'entry');
+      try {
+        const observed = await file.stat();
+        if (!observed.isFile() || observed.nlink !== 1 || observed.size > cap) throw new Error('Previous snapshot file is missing or unsafe');
+        const data = await readSourceBounded(file, cap, signal);
+        if (!data || sha256(data) !== expectedHash) throw new Error('Previous snapshot bytes do not match the observed hash');
+        return data;
+      } finally { await file.close(); }
+    } finally { await directory.close(); }
   }
 
   /** Bounded Git shallow-ledger reader; same ancestor/no-follow boundary as capture. */

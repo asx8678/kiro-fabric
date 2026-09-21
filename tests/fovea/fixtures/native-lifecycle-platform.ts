@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -15,7 +16,7 @@ export async function createNativeLifecyclePlatform() {
   fs.mkdirSync('.tmp', { recursive: true });
   const directory = fs.realpathSync(fs.mkdtempSync(path.resolve('.tmp/fovea-lifecycle-native-')));
   fs.chmodSync(directory, 0o700);
-  const close = () => fs.rmSync(directory, { recursive: true, force: true });
+  const close = () => removeFixtureSync(directory, { recursive: true, force: true });
   try {
     const binary = path.join(directory, 'source-platform.node'), entrypoint = path.join(directory, 'engine-entry.mjs');
     compileSourceBinding(process.cwd(), binary);

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,7 +29,7 @@ const fixtures: Array<{ root: string; service: FabricExecutionService }> = [];
 afterEach(async () => {
   for (const { root, service } of fixtures.splice(0)) {
     await service.close();
-    fs.rmSync(root, { recursive: true, force: true });
+    removeFixtureSync(root, { recursive: true, force: true });
   }
 });
 
@@ -54,18 +55,40 @@ describe("explicit profile guidance modes", () => {
   it.each(modes)("keeps strict tools, approvals, transport and path validation in %s", guidanceMode => {
     const standard = generateAgentProfile(options);
     const profile = generateAgentProfile({ ...options, guidanceMode });
-    for (const key of ["tools", "allowedTools", "permissions", "mcpServers", "includePowers", "includeMcpJson"] as const) {
+    for (const key of ["tools", "allowedTools", "permissions", "includePowers", "includeMcpJson"] as const) {
       expect(profile[key]).toEqual(standard[key]);
     }
+    expect(profile.mcpServers).toEqual({ fabric: {
+      ...standard.mcpServers.fabric,
+      env: { ...standard.mcpServers.fabric.env, KIRO_FABRIC_FOVEA_CALL_CONTEXT: guidanceMode === "minimal" ? "0" : "1" },
+    } });
     expect(profile.prompt.match(/@fabric\/\w+/g)).toEqual(["@fabric/fabric_exec"]);
     expect(() => generateAgentProfile({ ...options, guidanceMode, nodePath: "relative" })).toThrow(/absolute/);
     expect(() => generateAgentProfile({ ...options, guidanceMode, dataRoot: "/bad\npath" })).toThrow(/control characters/);
+  });
+
+  it("makes code navigation Fovea-first without enabling native hooks or minimal steering", () => {
+    for (const guidanceMode of ["standard", "review"] as const) {
+      const profile = generateAgentProfile({ ...options, guidanceMode });
+      expect(profile.prompt).toContain("use Fovea first inside fabric_exec without being asked");
+      for (const api of ["repo.focus(", "repo.sketch(", "repo.impact(", "repo.focusRead({query})", "fresh:true"]) {
+        expect(profile.prompt).toContain(api);
+      }
+      expect(profile.prompt).toContain("never bypassing denial");
+      expect(profile.prompt).toContain("Skip non-code chat and forbidden tools");
+      expect(profile.hooks).toHaveLength(1);
+      expect(profile.hooks[0]?.action.command).toContain("--first-prompt-hook");
+      expect(JSON.stringify(profile.hooks)).not.toContain("--fovea-hook");
+      expect(profile.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT).toBe("1");
+    }
+    expect(generateAgentProfile({ ...options, guidanceMode: "minimal" }).prompt).not.toMatch(/Fovea|repo\./);
   });
 
   it("never attaches resources, first-prompt hooks, or hidden review advice in minimal", () => {
     const profile = generateAgentProfile({ ...options, guidanceMode: "minimal" });
     expect(profile.resources).toEqual([]);
     expect(profile.hooks).toEqual([]);
+    expect(profile.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT).toBe("0");
     expect(profile.prompt).toBe(MINIMAL_AGENT_PROMPT);
     expect(profile.prompt).not.toMatch(/review|finding|coverage ledger|fabric\.help|bootstrap.*help/i);
     expect(profile.prompt).not.toMatch(/task contract|acceptance ledger|plan privately|simplest credible method|next unresolved check|stop and deliver/i);

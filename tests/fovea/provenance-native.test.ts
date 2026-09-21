@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -37,8 +38,8 @@ describe.skipIf(!['darwin', 'linux'].includes(process.platform))('native descrip
     compiled = path.join(artifact, 'source-platform.node'); compileSourceBinding(process.cwd(), compiled);
     native = createRequire(import.meta.url)(compiled) as PosixProvenanceBinding;
   });
-  afterEach(() => { vi.restoreAllMocks(); for (const root of dirs.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
-  afterAll(() => { if (artifact) fs.rmSync(artifact, { recursive: true, force: true }); });
+  afterEach(() => { vi.restoreAllMocks(); for (const root of dirs.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
+  afterAll(() => { if (artifact) removeFixtureSync(artifact, { recursive: true, force: true }); });
 
   it('gates the additive ABI without widening source-only platform capabilities', () => {
     expect(native.provenanceAbiVersion).toBe(1); expect(native.abiVersion).toBe(1);

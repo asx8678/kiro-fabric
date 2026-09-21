@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,6 +53,6 @@ describe('pinned reference harness', () => {
   it('inventory rejects symlinks rather than reading outside the reference', () => {
     const root = fs.mkdtempSync(path.join(process.env.TMPDIR ?? '/tmp', 'reference-inventory-'));
     try { fs.symlinkSync('/etc', path.join(root,'escape')); expect(() => inventory(root)).toThrow('symlink'); }
-    finally { fs.rmSync(root,{recursive:true,force:true}); }
+    finally { removeFixtureSync(root,{recursive:true,force:true}); }
   });
 });

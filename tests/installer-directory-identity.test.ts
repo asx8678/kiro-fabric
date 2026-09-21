@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +14,7 @@ import { readTransaction } from '../scripts/install-transaction.mjs';
 import { managerErrorResult } from '../scripts/install-manager.mjs';
 
 const roots:string[]=[];
-afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))removeFixtureSync(root,{recursive:true,force:true});});
 function temp(){const root=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'installer-volume-')));roots.push(root);return root;}
 const uuid='01234567-89ab-cdef-0123-456789abcdef',other='11111111-2222-3333-4444-555555555555';
 const device='/dev/disk999s1';

@@ -9,9 +9,24 @@ compatibility: Kiro CLI v3 with the Kiro Fabric Agent enabled
 
 The standing prompt owns task boundaries, planning, acceptance and output; this resource owns execution mechanics. Read only needed help and reuse known paths, context and descriptors. Examples never grant permission.
 
-Use `@fabric/fabric_exec` for tools, with a checked TypeScript function body. No native fallback. QuickJS has no OS, filesystem, environment, imports, timers or direct networking. Mounted namespaces include `local`, `fabric`, `artifacts`, `memory`, `state`, `continuity`, `web`, `mcp`, and the explicitly invoked `review`/`probe` APIs. `continuity` is opt-in durable task checkpointing; see the storage roles below and the deterministic continuity recipes. Their availability is not permission to load guidance or run a review; see optional typed operations in guide help.
+Use `@fabric/fabric_exec` for tools, with a checked TypeScript function body. No native fallback. QuickJS has no OS, filesystem, environment, imports, timers or direct networking. Mounted namespaces include `repo` (Fovea), `local`, `fabric`, `artifacts`, `memory`, `state`, `continuity`, `web`, `mcp`, and the explicitly invoked `review`/`probe` APIs. `continuity` is opt-in durable task checkpointing; see the storage roles below and the deterministic continuity recipes. Their availability is not permission to load guidance or run a review; see optional typed operations in guide help.
 
-Known task paths bypass discovery. For unfamiliar broad reviews, discovery -> bounded observed starter reads in the same exec: use `local.find({pattern:"**/*",hidden:true,limit:200})`, then derive `local.readMany` windows from returned paths. Narrow on truncation; ignore rules apply. Use `local.list` only when direct children are needed: path/limit only, no depth. Never assume README.md exists. Follow the standing execution/yield policy. Batch causal chains with sequential awaits: discovery -> bounded observed reads, known-schema transform -> authorized write -> verification. Fewer nested operations do not imply fewer model round trips.
+## Fovea-first code navigation
+
+In standard/review mode, start repository code investigation with Fovea through `fabric_exec` without waiting for the user to request it. Use `repo.focus({query,maxTokens:700})` for a known symbol/path, or `repo.sketch({maxTokens:700})` for unfamiliar structure. Known paths skip routine listing, not Fovea. Before edits/reviews, use `repo.impact({files,maxTokens:700})` for the relevant paths; use `repo.dwell` only when more neighborhood context is needed. After source changes, refresh affected focus with `fresh:true`; reuse still-current results rather than issuing ceremonial calls for every read. No repository calls for ordinary conversation or when tools are forbidden. User scope and tool restrictions still take precedence.
+
+Read actual source before making code claims or edits: graph text is advisory, not source evidence or a correctness check. `repo.focusRead` composes focus and hash-verified source windows. Supply an in-workspace symbol or path as the named string payload `query`:
+
+```ts
+const result = await repo.focusRead({query:payloads.query,fresh:true,maxTokens:700,maxWindows:4,maxChars:12000,partial:true});
+return result;
+```
+
+Alternatively pass `repo.focus(...).reads` to bounded `local.readMany`. Inspect `sources` failures, remaining windows/unread tails, deferred reads and navigation coverage; budgeted output or no-match is not complete-repository evidence. For unavailable analysis, no match or coverage gaps, disclose the limitation and use bounded `local.find`/`local.grep` then reads on observed paths. Never drop expected hashes or bypass a denial, disabled capability or workspace boundary to make Fovea work. Never guess file names, assume README.md exists, or silently claim Fovea ran when it did not.
+
+This is standing agent guidance, not an execution gate or automatic native integration. The existing first-prompt reminder reinforces it where supported; headless sessions rely on the standing prompt. Native Fovea lifecycle/delivery hooks remain disabled until qualified. Minimal mode remains an explicit no-steering opt-out. See [Fovea reference](references/fovea.md) for the navigation contract.
+
+Follow the standing execution/yield policy. Batch causal chains with sequential awaits: navigation -> bounded source reads, known-schema transform -> authorized write -> verification. Fewer nested operations do not imply fewer model round trips.
 
 Load unknown call shapes with `tools.describe`. Immutable `fabric.help` topics: `overview`, `api`, `skill`, `guide`, `recipes`, `workflow`, `review`. Help uses zero-based UTF-16 offset/limit paging; follow `nextOffset` on truncation. Do not reload help already present. Optional `fabric.help({topic:"review"})` supplies review mechanics, never an automatic bootstrap. Return requested help text with continuations, not a loaded flag. Single verified roots need no preliminary workspace status call.
 

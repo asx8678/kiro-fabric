@@ -14,7 +14,8 @@
     "tests/**/*.test.ts",
     "tests/fovea/fixtures/cold-inputs.mjs",
     "scripts/analyze-trace.mjs",
-    "scripts/run-agent-dev.mjs"
+    "scripts/run-agent-dev.mjs",
+    "scripts/install-tui.mjs"
   ],
   "project": ["src/**/*.{ts,mjs}", "tests/**/*.ts", "scripts/**/*.mjs"],
   "exclude": ["duplicates"],

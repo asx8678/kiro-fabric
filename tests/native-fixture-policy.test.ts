@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,7 +23,7 @@ describe('temporary current-v3 workspace-only shell consent', () => {
       removeNativeFixturePolicy(policy);
       expect(fs.existsSync(policy.path)).toBe(false);expect(fs.readFileSync(global,'utf8')).toBe('{"rules":[]}');
       expect(fs.readFileSync(path.join(path.dirname(policy.path),'other-session.txt'),'utf8')).toBe('keep');
-    } finally {fs.rmSync(root,{recursive:true,force:true});}
+    } finally {removeFixtureSync(root,{recursive:true,force:true});}
   });
   it.each(['override', 'relative', 'inherited', 'missing'])('runner uses effective client HOME for %s consent without controller-home fallback', async mode => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'native-policy-home-'));
@@ -48,7 +49,7 @@ describe('temporary current-v3 workspace-only shell consent', () => {
         expect(row.stopReason).toBe('client-failure');
       }
       if (mode !== 'inherited') expect(fs.readdirSync(controllerHome)).toEqual([]);
-    } finally { vi.unstubAllEnvs(); fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { vi.unstubAllEnvs(); removeFixtureSync(root, { recursive: true, force: true }); }
   });
   it('refuses changed consent, symlink parents and an invalid consent option', () => {
     const root=fs.mkdtempSync(path.join(os.tmpdir(),'native-policy-drift-'));
@@ -58,6 +59,6 @@ describe('temporary current-v3 workspace-only shell consent', () => {
       expect(()=>removeNativeFixturePolicy(policy)).toThrow('content drift');expect(fs.existsSync(policy.path)).toBe(true);
       const alias=path.join(root,'alias-home');fs.mkdirSync(alias);fs.symlinkSync(path.join(home,'.kiro'),path.join(alias,'.kiro'));
       expect(()=>createNativeFixturePolicy(workspace,process.execPath,alias)).toThrow('unsafe');
-    } finally {fs.rmSync(root,{recursive:true,force:true});}
+    } finally {removeFixtureSync(root,{recursive:true,force:true});}
   });
 });

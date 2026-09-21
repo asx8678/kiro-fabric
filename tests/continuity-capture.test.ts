@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ import type { FabricProvider } from "../src/protocol.js";
 import type { ContinuityHandle } from "../src/continuity/store.js";
 
 const roots: string[] = [], runtimes: KiroRuntime[] = [];
-afterEach(async () => { vi.restoreAllMocks(); for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const temporary = () => { const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "continuity-p3-"))); roots.push(root); return root; };
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 const limits = { maxTasks: 32, maxTaskBytes: 131072, maxTotalBytes: 4194304 };

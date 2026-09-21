@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -24,7 +25,7 @@ const temporary = (): string => {
 };
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 const stage = (): string => path.resolve(".tmp/kiro-fabric-agent");
@@ -386,7 +387,7 @@ describe("user-global Agent installation", () => {
     fs.mkdirSync(path.join(kiroHome, "agents"), { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(kiroHome, "agents", "kiro-fabric.json"), "{}", { mode: 0o600 });
     expect(() => installUserAgent(stage(), { KIRO_HOME: kiroHome }, home, { workspaceRoot: workspace })).toThrow("unowned profile");
-    fs.rmSync(kiroHome, { recursive: true });
+    removeFixtureSync(kiroHome, { recursive: true });
 
     const installed = installUserAgent(stage(), { KIRO_HOME: kiroHome }, home, { workspaceRoot: workspace });
     const api = path.join(installed.root, "skills/fabric-exec/references/api.md");
@@ -533,7 +534,7 @@ describe("user-global Agent installation", () => {
         if (step !== "manifest") return;
         const transaction = fs.readdirSync(installed.root).find((name) => name.startsWith(".installing-"));
         if (!transaction) throw new Error("missing test transaction");
-        fs.rmSync(path.join(installed.root, transaction, "previous-skill"), { recursive: true });
+        removeFixtureSync(path.join(installed.root, transaction, "previous-skill"), { recursive: true });
         throw new Error("injected missing install backup");
       },
     })).toThrow("rollback both failed");
@@ -552,7 +553,7 @@ describe("user-global Agent installation", () => {
         if (step !== "quarantined") return;
         const transaction = fs.readdirSync(removable.root).find((name) => name.startsWith(".uninstalling-"));
         if (!transaction) throw new Error("missing test transaction");
-        fs.rmSync(path.join(removable.root, transaction, "skill"), { recursive: true });
+        removeFixtureSync(path.join(removable.root, transaction, "skill"), { recursive: true });
         throw new Error("injected missing uninstall backup");
       },
     })).toThrow("rollback both failed");

@@ -1,5 +1,21 @@
 # Native repository intelligence (`repo.*`)
 
+## Default use in the Fabric agent
+
+Standard and review profiles instruct the agent to use Fovea first for repository
+code tasks, without a separate user request: focus known symbols/paths or sketch
+unfamiliar structure, inspect impact before edits/reviews, then read real source.
+Refresh affected focus after source changes and reuse current evidence. Report
+unavailable analysis, no-match and coverage gaps; bounded local search/read remains
+a fallback, never a way around denials or workspace boundaries. General chat and
+explicit tool restrictions take precedence. Minimal mode remains no-steering.
+
+This is an instruction policy, not a guarantee of model compliance or a hard
+execution gate. The existing first-prompt reminder reinforces it where supported;
+the standing prompt also covers headless sessions. It does **not** activate native
+Fovea lifecycle/delivery hooks, repair native chat isolation, or make `/clear` a
+Fabric state boundary. Those contracts remain separately unqualified.
+
 Fovea is advisory navigation, not source evidence, a correctness check, approval,
 or proof of completeness. `repo.status()` is cheap and does not index. It reports
 analysis availability separately from unqualified native lifecycle/delivery.
@@ -64,8 +80,8 @@ return await repo.configure({scope:"project", expectedRevision:settings.revision
 
 Use `settings.revision` for session updates and `settings.revisions.global` for
 global updates. Existing disabled preferences are preserved during installation.
-Scope-safe source capture currently requires Linux; downloaded macOS parser pins
-do not imply working macOS analysis. Use `repo.status` for capability diagnostics.
+Analysis requires the generation's supported scope-safe source capture and parser;
+a downloaded parser alone is not enough. Use `repo.status` for capability diagnostics.
 
 Text-only: `return (await repo.focus({query:"symbol"})).text;`. This intentionally
 discards structured source windows; it does not acknowledge model disclosure.
@@ -76,12 +92,7 @@ Analysis is scoped to the verified workspace. Absolute paths/session IDs never
 authorize extra roots. Independent launches have private navigation/results,
 but their source files and existing Fabric durable storage remain shared.
 
-A bounded host-owned post-execution collector is implemented, but managed
-profiles do not activate it before native-client qualification. When a trusted
-embedder explicitly qualifies visible delivery, it can append a separate
-untrusted advisory without replacing your returned value, errors, or recovery
-metadata. Emission is not model acknowledgment. Repeated sync retains stable
-notice identities; failed or cancelled delivery remains replayable.
+Managed standard/review profiles set `KIRO_FABRIC_FOVEA_CALL_CONTEXT=1`; minimal sets `0`. After a successful observed `local.read`/`readMany`/`write`/`edit` in that same `fabric_exec`, a transient untrusted Fovea suffix can be appended to the tool result. Successful current navigation in that same call skips a redundant suffix; diagnostics such as `repo.status` do not. Mutations after navigation re-enable it. Failures, a busy engine, disabled `sync.mode`, `approvals.read` other than `allow`, and no-tool turns skip it. Same-call notices are invocation-local and discarded after transport; they do not fill or replay through the native-sync outbox. At most 16 files are seeded (sampled if more were observed). Collection uses remaining outer time (6s cold / 750ms warm inside a 9s cap) and never extends the original deadline. This is not native prompt/stop delivery, `--fovea-hook` registration, or a `/clear` isolation fix. A separate host-owned post-execution collector still stays off on managed profiles until native-client qualification; a trusted embedder can qualify that path independently. Emission is not model acknowledgment. Repeated native-sync notices retain stable identities; failed or cancelled sync delivery remains replayable.
 
 Native prompt/turn routing, hidden delivery, restoration and automatic
 continuations require separately qualified client capabilities. Current status

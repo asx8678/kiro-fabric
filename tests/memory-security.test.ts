@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { KiroMemoryProvider } from "../src/kiro/memory-provider.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-")); roots.push(root); return root; };
-afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 describe("Fabric memory confinement", () => {
   it("uses private files and preserves bounded values", async () => {

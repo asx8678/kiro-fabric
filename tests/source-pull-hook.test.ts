@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { configurePullHook } from "../scripts/source-pull-hook.mjs";
 import { resolveKiroHome } from "../scripts/install-agent-user.mjs";
 import { trustedMacApplications } from "../scripts/install-manager.mjs";
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-pull-"))); roots.push(home);
   const root = path.join(home, ".kiro"); fs.mkdirSync(root, { mode: 0o700 });

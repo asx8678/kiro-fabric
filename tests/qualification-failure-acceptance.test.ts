@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,7 @@ import { runRealKiroAgentDriver } from "../scripts/run-kiro-agent-real-driver.mj
 
 const roots: string[] = [];
 const fixture = () => { const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "qualification-fault-"))); roots.push(root); return { root, output: path.join(root, "safe.json"), raw: path.join(root, "auth-home") }; };
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("offline nonqualifying failure evidence", () => {
   it.each(["preflight", "archive-installation", "publication"])("retains only bounded phase metadata BEFORE cleanup at %s", async phase => {
@@ -17,7 +18,7 @@ describe("offline nonqualifying failure evidence", () => {
     await expect(withQualificationFailureReport({ output: f.output, component: "wrapper", cleanupKind: "authHome", cleanup: () => {
       const before = JSON.parse(fs.readFileSync(f.output, "utf8"));
       expect(before).toMatchObject({ phase, reason: "error", qualifying: false, cleanup: { authHome: "pending" } });
-      expect(fs.existsSync(f.raw)).toBe(true); fs.rmSync(f.raw, { recursive: true });
+      expect(fs.existsSync(f.raw)).toBe(true); removeFixtureSync(f.raw, { recursive: true });
     } }, record => { record.phase(phase); throw new Error(secret); })).rejects.toThrow(secret);
     const bytes = fs.readFileSync(f.output, "utf8"); expect(Buffer.byteLength(bytes)).toBeLessThanOrEqual(4096); expect(bytes).not.toContain(secret); expect(bytes).not.toContain(f.raw);
     expect(JSON.parse(bytes)).toMatchObject({ ok: false, qualifying: false, cleanup: { authHome: "removed" } }); expect(fs.existsSync(f.raw)).toBe(false);
@@ -36,7 +37,7 @@ describe("offline nonqualifying failure evidence", () => {
   it("bounds a TERM-ignoring offline driver timeout and records it before raw cleanup", async () => {
     const f = fixture(); fs.mkdirSync(f.raw, { mode: 0o700 });
     await expect(withQualificationFailureReport({ output: f.output, component: "wrapper", cleanupKind: "authHome", cleanup: () => {
-      expect(JSON.parse(fs.readFileSync(f.output, "utf8"))).toMatchObject({ phase: "driver-start", reason: "timeout" }); fs.rmSync(f.raw, { recursive: true });
+      expect(JSON.parse(fs.readFileSync(f.output, "utf8"))).toMatchObject({ phase: "driver-start", reason: "timeout" }); removeFixtureSync(f.raw, { recursive: true });
     } }, async record => {
       record.phase("driver-start");
       await runBoundedQualificationProcess(process.execPath, ["-e", 'process.on("SIGTERM",()=>{});process.stdout.write("secret transcript");setInterval(()=>{},1000)'], { env: { PATH: "/usr/bin:/bin" }, timeoutMs: 150, graceMs: 50, onFailure: error => { record.failure(error); expect(fs.existsSync(f.raw)).toBe(true); } });

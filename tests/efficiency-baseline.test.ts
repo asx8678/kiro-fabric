@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -10,7 +11,7 @@ import type { FabricInvocationContext } from "../src/protocol.js";
 
 const script = path.resolve("scripts/efficiency-baseline.mjs");
 const root = fs.mkdtempSync("/tmp/efficiency-baseline-test-");
-afterAll(() => fs.rmSync(root, { recursive: true, force: true }));
+afterAll(() => removeFixtureSync(root, { recursive: true, force: true }));
 const run = (...args: string[]) => spawnSync(process.execPath, [script, ...args], {
   encoding: "utf8", timeout: 30000, maxBuffer: 4 * 1024 * 1024,
   env: { ...process.env, HOME: path.join(root, "never-home"), KIRO_HOME: path.join(root, "never-kiro"), TMPDIR: path.join(root, "never-tmp"), PATH: root, KIRO_FABRIC_DEBUG: "1" },

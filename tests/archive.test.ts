@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -8,7 +9,7 @@ import { assertCapturedArchiveInventory, createAgentArchive } from "../scripts/c
 import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
 
 const roots: string[] = [];
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 interface TarEntry {
   name: string;

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,7 +21,7 @@ beforeEach(() => {
   vi.mocked(findReusableSourceBundle).mockResolvedValue(null);
   vi.mocked(withInstallerArtifactLease).mockImplementation(async (_root, run) => await run());
 });
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("source frontend activation boundary", () => {
   it.each([{ reused: false, releaseFails: false, json: true }, { reused: true, releaseFails: false, json: true }, { reused: true, releaseFails: true, json: true }, { reused: false, releaseFails: false, json: false }, { reused: true, releaseFails: false, json: false }])("leases through activation, skips unused build work and emits one truthful result: %j", async ({ reused, releaseFails, json }) => {

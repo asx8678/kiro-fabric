@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { prepareLaunchProfile } from "../scripts/launch-profile.mjs";
 import { parseManagerArguments } from "../scripts/install-manager.mjs";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-launch-profile-"))); roots.push(home);
   fs.mkdirSync(path.join(home, "agents"), { mode: 0o700 });

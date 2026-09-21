@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,7 +31,7 @@ function fixture() {
   } });
   const registry = new ActionRegistry(); registry.register(repo); registry.register(local);
   const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 10000 } }), root);
-  cleanup.push(async () => { await service.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanup.push(async () => { await service.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   const approvals: string[] = [];
   const approver = { prepareApproval(action: { ref: string; risk: string }) { approvals.push(action.ref); expect(action.risk).toBe('read'); return { decision: 'allow' as const }; }, async approve() { throw new Error('Unexpected interactive approval'); } };
   return { root, navigation, repo, local, service, approvals, focusCalls, readCalls,

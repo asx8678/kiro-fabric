@@ -107,7 +107,7 @@ export const buildJoinIndex = (
           key,
         };
         const previous = pairBest.get(pk);
-        if (!previous || w > previous.w || (w === previous.w && key.localeCompare(previous.evidence.key ?? "") < 0)) {
+        if (!previous || w > previous.w || (w === previous.w && key < (previous.evidence.key ?? ""))) {
           pairBest.set(pk, { w, evidence });
         }
       }

@@ -86,7 +86,10 @@ try {
 }
 const uncertainty = [
   creating ? "private resource creation still pending" : "",
-  targetId && !tabClosed ? "tab closure unconfirmed" : "",
+  // Target.disposeBrowserContext closes every belonging page (CDP contract).
+  // A concurrent closeTab may therefore reject because its target is already
+  // gone. Confirmed context disposal is stronger evidence than that tab ACK.
+  targetId && !tabClosed && !contextDisposed ? "tab closure unconfirmed" : "",
   browserContextId && !contextDisposed ? "private context disposal unconfirmed" : "",
 ].filter(Boolean).join("; ");
 if (uncertainty) throw new Error((failed ? String(failure?.message || failure) + "; " : "") + "Web cleanup uncertain: " + uncertainty);
@@ -94,32 +97,42 @@ if (failed) throw failure;
 return result;
 `;
 
-export const webSearchSnippet = (query: string, limit: number, timeoutMs: number): string => pageSnippet(
-  "https://www.google.com/search?hl=en&q=" + encodeURIComponent(query) + "&num=" + limit,
+export const webSearchSnippet = (query: string, limit: number, timeoutMs: number, engine: "google" | "bing" = "google"): string => pageSnippet(
+  (engine === "bing" ? "https://www.bing.com/search?q=" : "https://www.google.com/search?hl=en&q=") + encodeURIComponent(query) + (engine === "bing" ? "&count=" : "&num=") + limit,
   `(() => {
-    if (location.hostname === "consent.google.com" || location.pathname.startsWith("/sorry/") || document.querySelector('form[action*="consent.google"], #captcha-form, iframe[src*="recaptcha"]')) {
-      throw new Error("Google consent or CAPTCHA blocked web.search; resolve it in the browser, then retry explicitly");
-    }
+    const engine = ${JSON.stringify(engine)};
+    // Return fixed categories, not page text or daemon stderr. Context cleanup
+    // still has to complete before the host receives this failure envelope.
+    const blocked = (code) => JSON.stringify({ fabricWebError: code });
+    if (engine === "google" && (location.hostname === "consent.google.com" || document.querySelector('form[action*="consent.google"]'))) return blocked("consent");
+    const origin = engine === "bing" ? "https://www.bing.com" : "https://www.google.com";
+    if (location.origin !== origin) return blocked("unexpected-redirect");
+    if (location.pathname.startsWith("/sorry/") || document.querySelector('#b_captcha, #captcha-form, iframe[src*="captcha"]')) return blocked("captcha");
     const clean = (value, max) => String(value || "").replace(/\\s+/g, " ").trim().slice(0, max);
     const results = [], seen = new Set();
-    // h3-linked cards also cover layouts that no longer use .tF2Cxc.
-    for (const heading of document.querySelectorAll("h3")) {
-      const anchor = heading.closest("a[href]");
+    for (const heading of document.querySelectorAll(engine === "bing" ? ".b_algo h2 a" : "h3")) {
+      const anchor = engine === "bing" ? heading : heading.closest("a[href]");
       if (!anchor) continue;
       let link;
       try {
         link = new URL(anchor.href, location.href);
-        if (link.origin === location.origin && link.pathname === "/url") link = new URL(link.searchParams.get("q") || link.searchParams.get("url"));
+        if (engine === "google" && link.origin === location.origin && link.pathname === "/url") link = new URL(link.searchParams.get("q") || link.searchParams.get("url"));
+        if (engine === "bing" && link.origin === location.origin && link.pathname === "/ck/a") {
+          const encoded = link.searchParams.get("u") || "";
+          if (!encoded.startsWith("a1") || encoded.length > 12000) continue;
+          const decoded = atob(encoded.slice(2).replace(/-/g, "+").replace(/_/g, "/"));
+          link = new URL(decodeURIComponent(Array.from(decoded, c => "%" + c.charCodeAt(0).toString(16).padStart(2, "0")).join("")));
+        }
       } catch { continue; }
       if (!["http:", "https:"].includes(link.protocol) || link.username || link.password || link.origin === location.origin || seen.has(link.href)) continue;
       const title = clean(heading.textContent, 300);
       if (!title) continue;
-      const container = heading.closest(".tF2Cxc, .MjjYud, .g");
-      results.push({ title, url: link.href.slice(0, 8192), snippet: clean(container?.querySelector(".VwiC3b, .IsZvec")?.textContent, 600) });
+      const container = heading.closest(engine === "bing" ? ".b_algo" : ".tF2Cxc, .MjjYud, .g");
+      results.push({ title, url: link.href.slice(0, 8192), snippet: clean(container?.querySelector(engine === "bing" ? ".b_caption p, .b_snippet, p" : ".VwiC3b, .IsZvec")?.textContent, 600) });
       seen.add(link.href);
       if (results.length >= ${limit}) break;
     }
-    return JSON.stringify({ source: "google", query: ${JSON.stringify(query)}, results });
+    return JSON.stringify({ source: engine, query: ${JSON.stringify(query)}, results });
   })()`, "networkIdle", 0, timeoutMs,
 );
 

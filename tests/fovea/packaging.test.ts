@@ -1,3 +1,4 @@
+import { removeFixture } from "../fixture-cleanup.mjs";
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
 import syncFs from 'node:fs';
@@ -51,7 +52,7 @@ async function modern(target = 'linux-x64') {
   return { root, manifest };
 }
 function resign(m: any) { const { digest: _, ...payload } = m; m.digest = manifestDigest(payload); return m; }
-afterEach(async () => { vi.unstubAllGlobals(); for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.unstubAllGlobals(); for (const root of roots.splice(0)) await removeFixture(root, { recursive: true, force: true }); });
 function nativeArtifact(arch: string) {
   const bytes = Buffer.alloc(32); bytes.writeUInt32LE(0xfeedfacf); bytes.writeUInt32LE(arch === 'arm64' ? 0x0100000c : 0x01000007, 4); bytes.writeUInt32LE(8, 12);
   const sourceSha256 = sha256('fixture native source');
@@ -101,7 +102,7 @@ const nativeChanges = ['missing-binary', 'missing-metadata', 'missing-both', 'bi
 async function changeNative(root: string, prefix: string, kind: typeof nativeChanges[number], closure: any) {
   const binary = prefix + '/fovea/source-platform.node', metadata = prefix + '/fovea/source-platform.json';
   if (kind.startsWith('missing-') && kind !== 'missing-source') {
-    for (const file of kind === 'missing-both' ? [binary, metadata] : [kind === 'missing-binary' ? binary : metadata]) await fs.rm(path.join(root, file));
+    for (const file of kind === 'missing-both' ? [binary, metadata] : [kind === 'missing-binary' ? binary : metadata]) await removeFixture(path.join(root, file));
     return;
   }
   const m = JSON.parse(await fs.readFile(path.join(root, metadata), 'utf8'));

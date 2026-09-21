@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { rematerializeInstallerToolCache } from "../scripts/installer-ci-cache.m
 import { verifyPrivateToolCache } from "../scripts/build-private-tools.mjs";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const fixture = () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "installer-ci-cache-"))); roots.push(root); fs.chmodSync(root, 0o700);
   const source = path.join(root, "transport"), destination = path.join(root, "private-tools"), target = "linux-x64", pins = fixtureTools(target);

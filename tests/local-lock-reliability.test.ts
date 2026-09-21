@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { ActionRegistry } from "../src/core/action-registry.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-lock-fault-"))); roots.push(base);
   const root = path.join(base, "workspace"); const lockRoot = path.join(base, "locks"); fs.mkdirSync(root);

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,7 @@ import { schemaValidationMessage } from "../src/schema-validation.js";
 const fixtures: { base: string; provider: LocalCodingProvider }[] = [];
 afterEach(async () => {
   for (const { base, provider } of fixtures.splice(0)) {
-    await provider.close(); fs.rmSync(base, { recursive: true, force: true });
+    await provider.close(); removeFixtureSync(base, { recursive: true, force: true });
   }
 });
 function fixture(budget = 20000, maxReadManyChars?: number) {

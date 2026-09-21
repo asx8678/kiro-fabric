@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { fixture } from "./bundle-fixture.js";
 import { stageSourceBundle } from "../scripts/source-bundle-stage.mjs";
 import { canonical, createBundleManifest, validateBundle } from "../scripts/bundle-contract.mjs";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 async function setup() {
   const source = await fixture(), root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "source-stage-")));
   fs.chmodSync(root, 0o700); roots.push(source, root); return { source, root, output: path.join(root, "bundle") };

@@ -1,5 +1,6 @@
+import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
-import { writeFile, chmod, rm, link, readFile, symlink, mkdtemp, rename } from 'node:fs/promises';
+import { writeFile, chmod, link, readFile, symlink, mkdtemp, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createBundleManifest, validateBundle, safePath, checkManifest, manifestDigest, compatibilityFor, readRegular, checkToolPins } from '../scripts/bundle-contract.mjs';

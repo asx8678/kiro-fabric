@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +17,7 @@ afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await c
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-host-')));
   fs.chmodSync(base, 0o700);
-  cleanup.push(() => fs.rmSync(base, { recursive: true, force: true }));
+  cleanup.push(() => removeFixtureSync(base, { recursive: true, force: true }));
   const root = path.join(base, 'source'); fs.mkdirSync(root, { mode: 0o700 });
   const s = fs.statSync(root, { bigint: true });
   return { base, root, authority: { canonicalPath: root, deviceId: String(s.dev), fileId: String(s.ino), conversationId: 'conversation', conversationEpoch: 1, authorizationEpoch: 1 } };
@@ -178,7 +179,9 @@ it('strict config rejects versions/overrides and writes with revision/private-fi
 
 it('cancels queued admission immediately, bounds backlog and closes without dispatching it', async () => {
   const scheduler = new FoveaScheduler(); let release!: () => void, ran = 0;
+  expect(scheduler.busy).toBe(false);
   const active = scheduler.run(new AbortController().signal, () => new Promise<void>(r => { release = r; }));
+  expect(scheduler.busy).toBe(true);
   const abort = new AbortController(); const cancelled = scheduler.run(abort.signal, async () => { ran++; });
   const rejection = expect(cancelled).rejects.toThrow('queued stop'); abort.abort(new Error('queued stop')); await rejection;
   const queued = Array.from({ length: 16 }, () => scheduler.run(new AbortController().signal, async () => { ran++; }).catch(e => e as Error));

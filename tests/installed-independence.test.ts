@@ -1,3 +1,4 @@
+import { removeFixture } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -121,7 +122,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(profile.resources).toEqual([`skill://${generation}/resources/skills/fabric-exec/SKILL.md`, `file://${generation}/resources/steering/fabric.md`]);
     expect(profile.mcpServers.fabric.command).toBe(path.join(generation, 'tools/node'));
     expect(profile.mcpServers.fabric.args).toEqual([path.join(generation, 'app/kiro/mcp-entry.js')]);
-    expect(profile.mcpServers.fabric.env).toEqual({ KIRO_FABRIC_LAUNCH_WORKSPACE: '${KIRO_FABRIC_LAUNCH_WORKSPACE}', KIRO_FABRIC_RUN_DECLARATION: '${KIRO_FABRIC_RUN_DECLARATION}', KIRO_FABRIC_WORKSPACE_SOURCE: 'launch-cwd', KIRO_FABRIC_RUNTIME_ROOT: path.join(generation, 'app'), KIRO_FABRIC_DATA_ROOT: installed.paths.data, KIRO_FABRIC_EXPECTED_NODE: path.join(generation, 'tools/node'), KIRO_FABRIC_BUNDLE_ROOT: generation, KIRO_FABRIC_RG: path.join(generation, 'tools/rg') });
+    expect(profile.mcpServers.fabric.env).toEqual({ KIRO_FABRIC_LAUNCH_WORKSPACE: '${KIRO_FABRIC_LAUNCH_WORKSPACE}', KIRO_FABRIC_RUN_DECLARATION: '${KIRO_FABRIC_RUN_DECLARATION}', KIRO_FABRIC_WORKSPACE_SOURCE: 'launch-cwd', KIRO_FABRIC_FOVEA_CALL_CONTEXT: '1', KIRO_FABRIC_RUNTIME_ROOT: path.join(generation, 'app'), KIRO_FABRIC_DATA_ROOT: installed.paths.data, KIRO_FABRIC_EXPECTED_NODE: path.join(generation, 'tools/node'), KIRO_FABRIC_BUNDLE_ROOT: generation, KIRO_FABRIC_RG: path.join(generation, 'tools/rg') });
     expect(await fs.readFile(installed.paths.launcher)).toEqual(completeGenerationLauncher(installed.digest));
     // A fresh install must work without either a shell handoff or roots capability.
     await fs.writeFile(path.join(cwd, 'probe.txt'), 'independence-sentinel\n', { mode: 0o600 });
@@ -142,7 +143,7 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     const next = await createBundleManifest(bundleRoot, bundle.manifest);
     await fs.writeFile(path.join(bundleRoot, 'bundle-manifest.json'), canonical(next) + '\n');
     await installCompleteGeneration(bundleRoot, opts);
-    await fs.rm(bundleRoot, { recursive: true }); await fs.unlink(archive);
+    await removeFixture(bundleRoot, { recursive: true }); await fs.unlink(archive);
     await expect(fs.stat(bundleRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(fs.stat(archive)).rejects.toMatchObject({ code: 'ENOENT' });
     const run = (args: string[], expected: number | 'failure' = 0) => {
@@ -208,5 +209,5 @@ test('real installed bundle survives disposable acquisition removal (fake Kiro c
     expect(JSON.parse(run(['uninstall', '--yes', '--non-interactive', '--json'])).noop).toBe(true);
     expect(await fs.readFile(data, 'utf8')).toBe('preserve across rollback and retirement');
     console.info(`Installed independence PASS: ${bundle.manifest.target} ${bundle.digest}; fake Kiro contract only; authenticated/native release qualification BLOCKED`);
-  } finally { await fs.rm(root, { recursive: true, force: true }); }
+  } finally { await removeFixture(root, { recursive: true, force: true }); }
 }, 240_000);

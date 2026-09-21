@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -50,6 +51,6 @@ process.stdin.once('end', () => { void server.close().then(() => process.exit(0)
       expect(status.notices).toMatchObject({ emitted: enabled ? 1 : 0, acknowledged: 0 });
       // Same pending semantic delta must not be emitted on every tool call.
       expect(await call('return "next";')).toBe('"next"');
-    } finally { await client.close(); fs.rmSync(base, { recursive: true, force: true }); }
+    } finally { await client.close(); removeFixtureSync(base, { recursive: true, force: true }); }
   }, 60_000);
 });

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -114,7 +115,7 @@ afterEach(async () => {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
     await exited(child);
   }
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 describe("state root identity", () => {

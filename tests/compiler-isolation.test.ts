@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { shutdownFabricCompilerWorker, typeCheckFabricCode, typeCheckFabricCodeInWorker } from "../src/runtime/type-checker.js";
 
 const roots: string[] = [];
-afterEach(async () => { await shutdownFabricCompilerWorker(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(async () => { await shutdownFabricCompilerWorker(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 const forbidden = [
   "import value from '/etc/passwd'; return value as any",

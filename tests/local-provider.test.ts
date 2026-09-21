@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -44,7 +45,7 @@ afterEach(async () => {
   vi.unstubAllEnvs();
   for (const item of fixtures.splice(0)) {
     await Promise.all(item.providers.map((provider) => provider.close()));
-    fs.rmSync(item.base, { recursive: true, force: true });
+    removeFixtureSync(item.base, { recursive: true, force: true });
   }
 });
 const deferred = () => {

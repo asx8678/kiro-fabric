@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import { expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -62,7 +63,7 @@ it.skipIf(!fs.existsSync(path.resolve('.tmp/fovea-parser/ast-grep')))('real mult
       const actual = JSON.stringify(matches);
       if (expected !== undefined) expect(actual).toBe(expected); else expected = actual;
     }
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally { removeFixtureSync(root, { recursive: true, force: true }); }
 }, 60000);
 it.skipIf(!fs.existsSync(path.resolve('.tmp/fovea-parser/ast-grep')))('v17 refuses old cache ordering and re-extracts instead of reusing old facts', async () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-cache-order-'));
@@ -86,6 +87,6 @@ it.skipIf(!fs.existsSync(path.resolve('.tmp/fovea-parser/ast-grep')))('v17 refus
         expect(JSON.parse(fs.readFileSync(cache, 'utf8').split('\n')[0]!).fovea).toBe(17);
       });
     });
-  } finally { fs.rmSync(base, { recursive: true, force: true }); }
+  } finally { removeFixtureSync(base, { recursive: true, force: true }); }
 }, 60000);
 

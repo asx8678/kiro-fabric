@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -43,7 +44,7 @@ describe("closure dependency identity", () => {
       git("add", "tracked");
       expect(() => assertTrackedGitWorktreeClean(repository)).toThrow("staged changes");
     } finally {
-      fs.rmSync(repository, { recursive: true, force: true });
+      removeFixtureSync(repository, { recursive: true, force: true });
     }
   });
 });

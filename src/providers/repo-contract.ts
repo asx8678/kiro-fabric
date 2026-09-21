@@ -11,6 +11,7 @@ export type RepoSourceCoverage = {
   counts?: { [K in RepoSourceCoverageReason]?: number };
   examples?: { [K in RepoSourceCoverageReason]?: string[] };
   projectRules?: "host-approved-hash" | "untrusted-skipped"; trustedRulesSha256?: string;
+  reusedPreviousSnapshot?: boolean;
 }
 export type RepoImportCoverageExample = {
   file?: string; line?: number; spec?: string;
@@ -67,6 +68,7 @@ export const REPO_COVERAGE_SCHEMA = object({
     examples: object(Object.fromEntries(sourceReasons.map(reason => [reason, coverageTexts(20)]))),
     projectRules: choices(["host-approved-hash", "untrusted-skipped"]),
     trustedRulesSha256: { type: "string", minLength: 64, maxLength: 64 },
+    reusedPreviousSnapshot: boolean(),
   }),
   recording: choices(["complete", "partial", "truncated"]),
   maxFiles: coverageCount(), candidateFilesSeen: coverageCount(), supportedFilesSeen: coverageCount(), indexedFiles: coverageCount(),
@@ -121,6 +123,7 @@ type RepoSourceCoverage = {
   counts?: { [K in RepoSourceCoverageReason]?: number };
   examples?: { [K in RepoSourceCoverageReason]?: string[] };
   projectRules?: "host-approved-hash" | "untrusted-skipped"; trustedRulesSha256?: string;
+  reusedPreviousSnapshot?: boolean;
 }
 type RepoImportCoverageExample = {
   file?: string; line?: number; spec?: string;

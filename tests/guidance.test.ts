@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,17 +13,19 @@ import { FabricDeadline } from "../src/runtime/deadline.js";
 
 const root = path.resolve(import.meta.dirname, "..");
 const temporary: string[] = [];
-afterEach(() => { for (const file of temporary.splice(0)) fs.rmSync(file, { recursive: true, force: true }); });
+afterEach(() => { for (const file of temporary.splice(0)) removeFixtureSync(file, { recursive: true, force: true }); });
 
 describe("compiled task guidance", () => {
-  it("type-checks executable grounding, continuity and review examples", () => {
+  it("type-checks executable Fovea, grounding, continuity and review examples", () => {
+    const fovea = BUNDLED_GUIDANCE.skill.split("## Fovea-first code navigation")[1]!.match(/```ts\n([\s\S]*?)```/)?.[1];
     const grounding = BUNDLED_GUIDANCE.guide.split("## Browser-backed web grounding")[1]!.match(/```ts\n([\s\S]*?)```/)?.[1];
     const continuity = BUNDLED_GUIDANCE.recipes.match(/```ts\n(\/\/ Recipe: resume the explicitly selected durable task after restart or compaction\n[\s\S]*?)\n```/)?.[1];
     const review = [...BUNDLED_GUIDANCE.review.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(match => match[1]!);
+    expect(fovea).toBeDefined();
     expect(grounding).toBeDefined();
     expect(continuity).toBeDefined();
     expect(review.length).toBeGreaterThan(0);
-    for (const code of [grounding!, continuity!, ...review, 'return await local.find({pattern:"**/*",hidden:true,limit:200});']) {
+    for (const code of [fovea!, grounding!, continuity!, ...review, 'return await local.find({pattern:"**/*",hidden:true,limit:200});']) {
       expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
     }
     expect(LOCAL_GUEST_DECLARATIONS.length).toBeGreaterThan(0);

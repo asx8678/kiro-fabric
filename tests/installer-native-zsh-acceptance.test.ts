@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,5 +21,5 @@ it.skipIf(process.platform !== "darwin")("requires a fresh native macOS zsh term
     const result = spawnSync(executable, ["-d", "-ic", "kiro-cli --v3 chat 'hello world'"], { cwd: project, env, encoding: "utf8", timeout: 10000 });
     expect(result.error).toBeUndefined(); expect(result.status, result.stderr).toBe(23);
     expect(result.stdout.trim().split("\n")).toEqual([project, kiro, "--agent", "kiro-fabric", "--v3", "chat", "hello world"]);
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally { removeFixtureSync(root, { recursive: true, force: true }); }
 });

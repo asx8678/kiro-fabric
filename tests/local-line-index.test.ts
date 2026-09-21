@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ function fixture(text: string, budget = 40000) {
   const root = path.join(base, "workspace"); fs.mkdirSync(root); const file = path.join(root,"source"); fs.writeFileSync(file,text);
   const registry = new ActionRegistry(); registry.register(new LocalCodingProvider({root,lockRoot:path.join(base,"locks"),maxResultChars:budget}));
   return { file, registry, call: (name:string,args:Record<string,unknown>)=>registry.invoke(`local.${name}`,args,{cwd:root,audits:[],maxResultChars:budget,approve:async()=>{}}),
-    async close(){vi.restoreAllMocks();await registry.close();fs.rmSync(base,{recursive:true,force:true});} };
+    async close(){vi.restoreAllMocks();await registry.close();removeFixtureSync(base,{recursive:true,force:true});} };
 }
 
 describe("snapshot-local source line indices", () => {

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
@@ -9,7 +10,7 @@ import { validateManagedGeneration } from "../src/kiro/managed-generation.js";
 import { fixture } from "./bundle-fixture.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 async function setup(afterCapture?: (node: string) => void) {
   const root = fs.realpathSync(await fixture()); roots.push(root);
   const node = path.join(root, "tools/node"), rg = path.join(root, "tools/rg");

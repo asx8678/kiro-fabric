@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { installUserAgent } from "../scripts/install-agent-user.mjs";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const snapshot = (root: string): unknown => {
   const stats = fs.lstatSync(root);
   return [stats.mode, stats.mtimeMs, stats.ctimeMs, stats.isSymbolicLink() ? fs.readlinkSync(root) :

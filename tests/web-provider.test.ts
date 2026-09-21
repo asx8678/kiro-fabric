@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +15,7 @@ import type { FabricExecutionApprover } from "../src/execution-service.js";
 const roots: string[] = [], runtimes: KiroRuntime[] = [];
 afterEach(async () => {
   for (const runtime of runtimes.splice(0)) await runtime.close();
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
   vi.unstubAllEnvs();
 });
 const search = { source: "google", query: "facts", results: [{ title: "Primary source", url: "https://example.com/", snippet: "Evidence" }] };
@@ -71,6 +72,31 @@ describe("browser-backed web provider", () => {
     catch (error) { expect(String(error)).toContain("Raw diagnostics withheld"); expect(String(error)).not.toContain(sentinel); }
   });
 
+  it.each([
+    ["captcha", "WEB_SEARCH_CAPTCHA"], ["consent", "WEB_SEARCH_CONSENT"], ["unexpected-redirect", "WEB_SEARCH_REDIRECT"], ["PRIVATE_SENTINEL", "invalid web.search error category"],
+  ])("reports a bounded %s category without leaking diagnostics or retrying", async (category, message) => {
+    const f = fixture(`console.log(JSON.stringify({fabricWebError:${JSON.stringify(category)},privateText:"PRIVATE_SENTINEL"}));`);
+    const failure = await f.provider.invoke("search", { query: "facts" }, { cwd: f.root }).catch(error => error);
+    expect(String(failure)).toContain(message); expect(String(failure)).not.toContain("PRIVATE_SENTINEL");
+    const lines = fs.readFileSync(f.calls, "utf8").trim().split("\n"); expect(lines).toHaveLength(1);
+  });
+  it("binds explicit Bing configuration to discovery, effects, output and the actual browser program", async () => {
+    const f = fixture(`console.log(JSON.stringify({...${JSON.stringify(search)},source:"bing"}));`);
+    const provider = new WebProvider({ executablePath: f.command, searchEngine: "bing" });
+    const descriptor = await provider.describe("search");
+    expect(descriptor?.description).toContain("Configured engine: bing");
+    expect(descriptor?.effect?.resources).toEqual(["web:bing-search"]);
+    expect(provider.effectResources("search", {})).toEqual(["web:bing-search"]);
+    expect(await provider.invoke("search", { query: "facts" }, { cwd: f.root })).toMatchObject({ source: "bing" });
+    const [code] = JSON.parse(fs.readFileSync(f.calls, "utf8").trim()); expect(code).toContain("https://www.bing.com/search?q=facts");
+    expect(provider.prepareArguments.bind(provider, "search", { query: "facts", engine: "google" })).toThrow();
+    expect(() => new WebProvider({ executablePath: f.command, searchEngine: "unknown" as "bing" })).toThrow("searchEngine");
+    expect(DEFAULT_FABRIC_CONFIG.web.searchEngine).toBe("google");
+  });
+  it("rejects results labeled with an engine different from the configured engine", async () => {
+    const f = fixture(); const provider = new WebProvider({ executablePath: f.command, searchEngine: "bing" });
+    await expect(provider.invoke("search", { query: "facts" }, { cwd: f.root })).rejects.toThrow("invalid results");
+  });
   it("discovers without launching code, pins executable identity, and ignores relative PATH entries", async () => {
     const f = fixture();
     expect(fs.existsSync(f.calls)).toBe(false);
@@ -157,7 +183,7 @@ describe("browser-backed web provider", () => {
     fs.writeFileSync(file, bytes, { mode: 0o600 });
     expect(loadFabricConfig(file).web).toEqual({ ...DEFAULT_FABRIC_CONFIG.web, command: f.command, searchTimeoutMs: 1234 });
     expect(loadFabricConfig(file).approvals.network).toBe("deny"); expect(fs.readFileSync(file, "utf8")).toBe(bytes);
-    for (const web of [{ enabled: "yes" }, { searchTimeoutMs: 0 }, { command: "" }, { unknown: true }]) {
+    for (const web of [{ enabled: "yes" }, { searchTimeoutMs: 0 }, { command: "" }, { searchEngine: "unknown" }, { unknown: true }]) {
       fs.writeFileSync(file, JSON.stringify({ web })); expect(() => loadFabricConfig(file)).toThrow();
     }
     expect(normalizeFabricConfig({ web: { enabled: false } }).web.enabled).toBe(false);
@@ -175,6 +201,13 @@ describe("checked web runtime", () => {
     expect(generic.success, generic.error).toBe(true); expect(generic.value).toEqual(search);
     for (const code of ['return await web.search({query:"q"});', 'return await web.open({url:"https://example.com",wait:"load",settleMs:5,maxChars:100});']) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors).toEqual([]);
     expect(typeCheckFabricCode('return await web.search({code:"evil"});', fabricGuestDeclarations).errors.length).toBeGreaterThan(0);
+  });
+  it("wires the configured engine through runtime registration and the checked result type", async () => {
+    const f = runtimeFixture({ searchEngine: "bing" });
+    expect((await f.runtime.registry.describe("web.search"))?.description).toContain("Configured engine: bing");
+    expect(typeCheckFabricCode('const r = await web.search({query:"facts"}); const engine: "google" | "bing" = r.source; return engine;', fabricGuestDeclarations).errors).toEqual([]);
+    const config = path.join(f.root, "engine.json"); fs.writeFileSync(config, JSON.stringify({ web: { searchEngine: "bing" } }), { mode: 0o600 });
+    expect(loadFabricConfig(config).web.searchEngine).toBe("bing");
   });
   it("denies both facades before spawning and rejects generic unknown fields before approval", async () => {
     const f = runtimeFixture();

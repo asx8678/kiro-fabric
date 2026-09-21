@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -56,7 +57,7 @@ describe('calibration admission and comparison integration (synthetic evidence)'
       expect(rejected.failures).toEqual([{ check: 'answer', error: expect.stringContaining('severity/calibration') }]);
       fs.writeFileSync(path.join(trial.workspace, 'unrequested.txt'), 'review must not edit');
       expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it('does not reward inflated severity, unsafe fixes, or an omitted substantial defect', () => {

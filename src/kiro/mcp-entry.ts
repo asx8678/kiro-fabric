@@ -34,7 +34,7 @@ export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
         }
         const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : undefined;
         const { createKiroMcpServer } = await import("./mcp-server.js");
-        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}), ...(managedParser ? { managedParser } : {}) });
+        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}), ...(managedParser ? { managedParser } : {}), ...(launch.foveaCallContext === true && managedParser ? { foveaCallContext: true as const } : {}) });
       } finally { release?.(); }
       return server;
     } catch (error) {

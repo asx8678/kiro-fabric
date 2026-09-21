@@ -1,5 +1,6 @@
 import type { FabricActionDescriptor } from "../protocol.js";
 import { CHECK_STATUSES, FACT_KINDS, MAX_TEXT_BYTES } from "../continuity/records.js";
+import { HANDOFF_PACKET_MAX_BYTES, HANDOFF_PACKET_MIN_BYTES } from "../continuity/handoff.js";
 
 const text = (maximum: number) => ({ type: "string", minLength: 1, maxLength: maximum });
 const integer = (minimum = 1, maximum = Number.MAX_SAFE_INTEGER) => ({ type: "integer", minimum, maximum });
@@ -18,6 +19,7 @@ const schemas: Record<string, Record<string, unknown>> = {
   recall: object({ taskId: text(35), expectedRevision: integer(), hash: text(64), query: text(512), checkId: text(128), path: text(1024), ref: text(128), outcome: { type: "string", enum: ["succeeded", "failed"] }, offset: integer(0, 512), limit: integer(1, 20), snippetChars: integer(40, 512) }, ["taskId"]),
   list: object({ offset: integer(0, 32), limit: integer(1, 32), expectedIndexRevision: integer(0) }, []),
   expand: object({ taskId: text(35), expectedRevision: integer(), hash: text(64), fromSequence: integer(1, 513), limit: integer(1, 64) }, ["taskId", "expectedRevision", "hash"]),
+  handoff: object({ taskId: text(35), expectedRevision: integer(), hash: text(64), nextPrompt: text(MAX_TEXT_BYTES), maxPacketBytes: integer(HANDOFF_PACKET_MIN_BYTES, HANDOFF_PACKET_MAX_BYTES) }, ["taskId", "expectedRevision", "hash"]),
   delete: object({ taskId: text(35), expectedRevision: integer() }),
 };
 export const CONTINUITY_ACTION_DESCRIPTORS: readonly FabricActionDescriptor[] = [
@@ -27,6 +29,7 @@ export const CONTINUITY_ACTION_DESCRIPTORS: readonly FabricActionDescriptor[] = 
   ["recall", "Search retained records of an explicit task; literal AND terms, structural filters, bounded snippets and revision/hash-bound expansion", "read"],
   ["list", "Page task metadata in this workspace; continuations require expectedIndexRevision. Explicitly select a task, never infer the latest chat", "read"],
   ["expand", "Expand exact admitted records using a revision/hash-bound source pointer", "read"],
+  ["handoff", "Bounded explicit fresh-session handoff packet for one selected task; historical data, not automatic recovery or native compaction", "read"],
   ["delete", "Delete a selected durable task with mandatory revision checking", "write"],
 ].map(([name, description, risk]) => ({ name: name!, description: description!, risk: risk as "read" | "write", effect: { kind: risk as "read" | "write" }, inputSchema: schemas[name!]! }));
 
@@ -47,6 +50,9 @@ type ContinuityTaskView = {view:"task";projectorVersion:3;taskId:string;revision
 type ContinuityRecallArguments = {taskId:string;expectedRevision?:number;hash?:string;query?:string;checkId?:string;path?:string;ref?:string;outcome?:"succeeded"|"failed";offset?:number;limit?:number;snippetChars?:number};
 type ContinuityRecallResult = {taskId:string;revision:number;hash:string;total:number;hits:{sequence:number;kind:string;provenance:string;snippet:string;truncated:boolean;follow:{ref:"continuity.expand";args:{taskId:string;expectedRevision:number;hash:string;fromSequence:number;limit:1}}}[];next:{ref:"continuity.recall";args:ContinuityRecallArguments}|null;coverage:{scope:"retained-task-records";scannedRecords:number;conversation:"not-captured";operations:"not-captured"|"selected-prefixes";freshness:"historical-not-reconciled"}};
 type ContinuityExpandResult = {taskId:string;revision:number;hash:string;records:ContinuityRecord[];total:number;nextSequence:number|null};
+type ContinuityHandoffUnresolvedOperation = {sequence:number;ref:string;outcome:"succeeded"|"failed";effectOutcome:"none"|"uncertain"|"committed";command?:{ok:boolean;exitCode:number|null;signal:string|null}};
+type ContinuityHandoffPinnedCheck = {id:string;text:string;status:"open"|"passed"|"failed"|"blocked";evidence:number[]};
+type ContinuityHandoffPacket = {handoffVersion:1;taskId:string;revision:number;hash:string;workspace:{canonicalPath:string;dev:number;ino:number};prompt:string;pinned:{objective:string;constraints:string[];checks:ContinuityHandoffPinnedCheck[];openChecks:string[];unresolvedOperations:ContinuityHandoffUnresolvedOperation[]};coverage:{admittedRecords:number;shownRecords:number;conversation:"not-captured";operations:"not-captured"|"selected-prefixes";freshness:"historical-not-reconciled"};packetHash:string};
 type ContinuityListResult = {indexRevision:number;tasks:{taskId:string;revision:number;updatedAt:number}[];total:number;nextOffset:number|null};
 /** Opt-in recovery. No native compaction, inference or implicit task selection. */
 declare const continuity: Readonly<{
@@ -60,6 +66,8 @@ declare const continuity: Readonly<{
   /** Nonzero offsets require the indexRevision from the first page as expectedIndexRevision; restart listing on conflict. */
   list(args?:{offset?:number;limit?:number;expectedIndexRevision?:number}):Promise<ContinuityListResult>;
   expand(args:{taskId:string;expectedRevision:number;hash:string;fromSequence?:number;limit?:number}):Promise<ContinuityExpandResult>;
+  /** Explicit fresh-session handoff for a selected task. Historical data only: the receiver must verify the workspace, read the task and recheck sources before any effect. */
+  handoff(args:{taskId:string;expectedRevision:number;hash:string;nextPrompt?:string;maxPacketBytes?:number}):Promise<ContinuityHandoffPacket>;
   delete(args:{taskId:string;expectedRevision:number}):Promise<{taskId:string;deleted:true}>;
 }>;
 `;

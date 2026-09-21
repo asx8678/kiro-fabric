@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { main, nativeProbeProfile, summarizeNativeProbe } from '../../scripts/fovea-native-probe.mjs';
 import { generateAgentProfile } from '../../scripts/agent-profile.mjs';
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const result = { stdout: '', stderr: '', exitCode: 0, error: null, stopReason: null, cleanup: 'leader-closed', bytes: 0 };
 
 describe('native contract probe (component tests, not native qualification)', () => {

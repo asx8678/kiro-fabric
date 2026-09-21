@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,7 @@ import { installCompleteGeneration, inspectCompleteInstallation, retireCompleteI
 import { shellQuote } from "../scripts/install-manager.mjs";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const manager = fileURLToPath(new URL("../scripts/install-manager.mjs", import.meta.url));
 
 function setup() {

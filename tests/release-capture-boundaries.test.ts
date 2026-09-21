@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -10,7 +11,7 @@ import { releaseSigningBytes, verifyReleaseForTest, verifyRelease, verifyRelease
 import { downloadHttpsForTest, discoverReleaseForTest, discoverRelease, RELEASE_API } from '../scripts/release-download.mjs';
 
 const roots:string[]=[];
-afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))removeFixtureSync(root,{recursive:true,force:true});});
 // Reuses its fragment buffer deliberately, to test capture rather than references.
 function fragments(size:number,fragmentSize:number):typeof https.request{
  return ((_url:URL,_options:unknown,callback:(res:any)=>void)=>{

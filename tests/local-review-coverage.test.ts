@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ const fixtures: { base: string; provider: LocalCodingProvider }[] = [];
 afterEach(async () => {
   for (const { base, provider } of fixtures.splice(0)) {
     await provider.close();
-    fs.rmSync(base, { recursive: true, force: true });
+    removeFixtureSync(base, { recursive: true, force: true });
   }
 });
 function fixture(budget = 20000) {

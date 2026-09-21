@@ -1,3 +1,4 @@
+import { removeFixture } from "../fixture-cleanup.mjs";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
@@ -53,8 +54,8 @@ describe.skipIf(process.platform !== 'darwin')('managed Darwin loader and actual
     binary = await fs.readFile(join(compiled, 'source-platform.node'));
     metadata = await fs.readFile(join(compiled, 'source-platform.json'));
   });
-  afterEach(async () => { for (const root of scratch.splice(0)) await fs.rm(root, { recursive: true, force: true }); });
-  afterAll(async () => { if (compiled) await fs.rm(compiled, { recursive: true, force: true }); });
+  afterEach(async () => { for (const root of scratch.splice(0)) await removeFixture(root, { recursive: true, force: true }); });
+  afterAll(async () => { if (compiled) await removeFixture(compiled, { recursive: true, force: true }); });
   async function fixture() {
     const root = await fs.mkdtemp(resolve('.tmp/native-loader-test-')); scratch.push(root);
     const storage = join(root, 'engine');

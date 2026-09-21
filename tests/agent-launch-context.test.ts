@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -5,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { resolveKiroAgentLaunchContext } from "../src/kiro/power/agent-launch-context.js";
 
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const fixture = () => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-launch-")));
   roots.push(root);
@@ -52,6 +53,14 @@ describe("Kiro launch workspace authority", () => {
   it.each(["relative", "/nonexistent-fabric-launch-directory"])("rejects invalid launch directories %s", cwd => {
     const { env } = fixture();
     expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd" }, () => cwd)).toThrow(/MCP launch directory/);
+  });
+  it("enables same-call Fovea context only for the exact profile token", () => {
+    const { env } = fixture();
+    expect(resolveKiroAgentLaunchContext(env, unexpectedCwd).foveaCallContext).toBeUndefined();
+    expect(resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_FOVEA_CALL_CONTEXT: "${KIRO_FABRIC_FOVEA_CALL_CONTEXT}" }, unexpectedCwd).foveaCallContext).toBeUndefined();
+    expect(resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_FOVEA_CALL_CONTEXT: "0" }, unexpectedCwd).foveaCallContext).toBeUndefined();
+    expect(resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_FOVEA_CALL_CONTEXT: "1" }, unexpectedCwd).foveaCallContext).toBe(true);
+    expect(() => resolveKiroAgentLaunchContext({ ...env, KIRO_FABRIC_FOVEA_CALL_CONTEXT: "true" }, unexpectedCwd)).toThrow(/KIRO_FABRIC_FOVEA_CALL_CONTEXT/);
   });
   it("does not hide a missing launch directory by falling back to PWD", () => {
     const { env, project } = fixture();

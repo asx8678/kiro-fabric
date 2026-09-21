@@ -1,8 +1,9 @@
+import { removeFixture as rm } from "../fixture-cleanup.mjs";
 // Fixtures and expectations derived from pi-fovea b5944838 (MIT).
 // The embedded corpus keeps this test independent of any sibling checkout.
 import { afterEach, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { FoveaEngine, type NavigationResult } from '../../src/fovea/engine.js';

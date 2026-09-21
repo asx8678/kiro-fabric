@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -235,7 +236,7 @@ afterEach(async () => {
     await exitOf(child, 2_000).catch(() => undefined);
   }
   children.clear();
-  for (const root of temporaryRoots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of temporaryRoots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 describe("Agent MCP process lifecycle", () => {

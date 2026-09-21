@@ -130,7 +130,7 @@ export class ContinuityStore {
     const normalized = parseTask(task);
     // Quotas and CAS are checked together under StateProvider's cross-process mutation lock.
     // Do not wrap its committed-but-unacknowledged marker or retry a write here.
-    const result = await this.#state.invoke("set", { key: normalized.taskId, value: normalized, expectedRevision }, context) as { revision: number };
+    const result = await this.#state.setSerialized({ key: normalized.taskId, value: normalized, text: JSON.stringify(normalized), expectedRevision }, context);
     return snapshot(normalized, result.revision);
   }
 }

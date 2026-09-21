@@ -43,8 +43,6 @@ const SIG_RULES: Record<string, Array<{ re: RegExp; kind: NodeKind; parentGroup?
     RX(/\bfunction\s+([A-Za-z_$][\w$]*)/, "function"),
     RX(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/, "function"),
   ],
-  JavaScript: [], // filled below (same as TypeScript)
-  Tsx: [],
   Go: [
     RX(/^func\s*\(\s*\w+\s+\*?([A-Za-z_]\w*)\s*\)\s*([A-Za-z_]\w*)/, "method", 1, 2),
     RX(/^func\s+([A-Za-z_]\w*)/, "function"),
@@ -76,11 +74,9 @@ const SIG_RULES: Record<string, Array<{ re: RegExp; kind: NodeKind; parentGroup?
     RX(/^[A-Za-z_][\w\s*]*?\s+([A-Za-z_]\w*)\s*\([^;]*\)\s*\{?/, "function"),
     RX(/^\s*(?:struct|enum|union)\s+([A-Za-z_]\w*)/, "class"),
   ],
-  "C++": [],
   Java: [
     RX(/\b(?:class|interface|enum|record)\s+([A-Za-z_]\w*)/, "class"),
   ],
-  Kotlin: [],
   Lua: [RX(/\bfunction\s+([\w.:]+)/, "function")],
 };
 SIG_RULES["C++"] = SIG_RULES.C!;
@@ -165,9 +161,11 @@ const topLocation = (
   let sig = cleanSig(item.signature || item.name);
   if (item.name && (!identifierRe(item.name).test(sig) || /^@/.test(sig))) {
     const end = Math.min(sourceLines.length - 1, item.range.end?.line ?? item.range.start.line + 12);
+    // One compile per symbol, not one per walked line (measured 1.3x on the walk).
+    const nameRe = identifierRe(item.name);
     for (let i = item.range.start.line; i <= end; i++) {
       const candidate = sourceLines[i];
-      if (candidate && identifierRe(item.name).test(candidate)) {
+      if (candidate && nameRe.test(candidate)) {
         line = i + 1;
         sig = cleanSig(candidate);
         break;
@@ -257,7 +255,6 @@ const parseOutlineText = (text: string, lang: string): SymbolRec[] => {
     const entry = /^\s*(\d+):\s(.*)$/.exec(raw);
     const child = /^(\s+)(method|field):\s(.+)$/.exec(raw);
     if (entry) {
-      file = file || "";
       const sig = cleanSig(entry[2]!);
       if (!sig) continue;
       const named = deriveName(sig, lang);
@@ -633,5 +630,12 @@ const pushAll = <T>(out: T[], more: T[]): void => { for (const x of more) out.pu
 
 const dedupe = <T>(arr: T[], key: (t: T) => string): T[] => {
   const seen = new Set<string>();
-  return arr.filter((x) => (seen.has(key(x)) ? false : (seen.add(key(x)), true)));
+  const out: T[] = [];
+  for (const item of arr) {
+    const id = key(item);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(item);
+  }
+  return out;
 };

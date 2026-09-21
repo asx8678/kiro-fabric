@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -31,7 +32,7 @@ it("admits retained generations, rejects retirement/data redirection and uncommi
   expect(() => validateManagedAdmission(generation, data, manifestSha256)).toThrow(/ownership/);
 });
 const roots: string[] = [];
-afterEach(() => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture(): ManagedSearchExecutable {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "managed-generation-"))); roots.push(root);
   vi.stubEnv("HOME", root); vi.stubEnv("KIRO_HOME", path.join(root, ".kiro"));

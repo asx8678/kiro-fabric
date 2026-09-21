@@ -30,7 +30,7 @@ function validateGenerationProfile(p,name,raw) {
  const profile=JSON.parse(raw.toString()),expectedProfile=profileFor(p,name),server=profile.mcpServers?.fabric,expected=expectedProfile.mcpServers.fabric;
  // Hash-verified older profiles may OMIT forward-compatible environment keys;
  // declared values and every generation path must still agree exactly.
- for(const key of ['KIRO_FABRIC_LAUNCH_WORKSPACE','KIRO_FABRIC_WORKSPACE_SOURCE','KIRO_FABRIC_RUN_DECLARATION'])if(server?.env&&!Object.hasOwn(server.env,key))delete expected.env[key];
+ for(const key of ['KIRO_FABRIC_LAUNCH_WORKSPACE','KIRO_FABRIC_WORKSPACE_SOURCE','KIRO_FABRIC_RUN_DECLARATION','KIRO_FABRIC_FOVEA_CALL_CONTEXT'])if(server?.env&&!Object.hasOwn(server.env,key))delete expected.env[key];
  if(!server||server.command!==expected.command||JSON.stringify(server.args)!==JSON.stringify(expected.args)||JSON.stringify(server.env)!==JSON.stringify(expected.env)||JSON.stringify(profile.resources)!==JSON.stringify(expectedProfile.resources))throw Error('profile generation binding mismatch');
  for(const key of ['tools','allowedTools','includePowers','includeMcpJson','permissions'])if(JSON.stringify(profile[key])!==JSON.stringify(expectedProfile[key]))throw Error('profile strict Code Mode mismatch');
  if(Object.keys(profile.mcpServers).join()!=='fabric')throw Error('profile strict Code Mode server mismatch');

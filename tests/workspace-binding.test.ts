@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ import { CachedWorkspaceContextProvider } from "../src/kiro/power/workspace-cont
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-workspace-")); roots.push(root); return root; };
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 const fixture = () => {
   const root = temporary();
   const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data");

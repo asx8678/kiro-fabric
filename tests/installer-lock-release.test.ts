@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -62,18 +63,17 @@ const deadRelease = async (base: string, phase = "actual-rmdir-gap") => {
   const child = await launch(base, phase, "release", "committed-rollback");
   expect(await go(child)).toEqual({ phase }); await stop(child); return JSON.parse(fs.readFileSync(marker(base), "utf8"));
 };
-// Only bounded, iterative traversal of our temporary fixtures; never a real home.
-const dispose = (root: string) => {
-  const files = [root];
-  for (let i = 0; i < files.length; i++) {
-    if (files.length > 4096) throw Error("fixture cleanup bound");
-    if (fs.lstatSync(files[i]!).isDirectory()) for (const name of fs.readdirSync(files[i]!)) files.push(path.join(files[i]!, name));
-  }
-  for (const file of files.reverse()) { if (fs.lstatSync(file).isDirectory()) fs.rmdirSync(file); else fs.unlinkSync(file); }
-};
+// Shared bounded inspection preserves the entire fixture if it contains a repo.
+const dispose = (root: string) => removeFixtureSync(root, { recursive: true, force: true });
 afterEach(async () => { vi.restoreAllMocks(); await Promise.all(children.splice(0).map(child => stop(child, false, false))); for (const root of roots.splice(0)) dispose(root); });
 
 describe("crash-safe installation lock release", () => {
+  it("retains an entire fixture if repository metadata is present", () => {
+    const root = fixture(); fs.mkdirSync(path.join(root, ".git"));
+    fs.writeFileSync(path.join(root, "sentinel"), "retained"); dispose(root);
+    expect(fs.readFileSync(path.join(root, "sentinel"), "utf8")).toBe("retained");
+    expect(fs.statSync(path.join(root, ".git")).isDirectory()).toBe(true);
+  });
   it.each(["release-marked", "release-owner-removed", "actual-rmdir-gap", "release-directory-removed", "release-before-marker-remove"])("real SIGKILL at %s preserves exclusion and committed recovery", async phase => {
     const base = fixture(), child = await launch(base, phase, "release", "committed-rollback");
     expect(await go(child)).toEqual({ phase });

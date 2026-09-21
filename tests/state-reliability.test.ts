@@ -1,10 +1,12 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
-import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
+import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
+import { causes, failLockRemoval } from "./state-fault-helpers.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
@@ -14,22 +16,8 @@ const fixture = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "state-reliability-")); roots.push(root);
   return { root, provider: new StateProvider(root), context: { cwd: root } };
 };
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
-const causes = (error: unknown): string => error instanceof AggregateError ? `${error.message} ${error.errors.map(causes).join(" ")}` : error instanceof Error ? `${error.message} ${error.cause ? causes(error.cause) : ""}` : String(error);
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
-/** Fail the active platform's removal seam without weakening any assertions.
- * Linux uses the descriptor alias with rmSync; Darwin uses the pinned child. */
-function failLockRemoval(message: string): void {
-  const rm = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
-  vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
-    if (path.basename(String(file)) === ".state-mutation.lock") throw new Error(message);
-    rm(file, options);
-  });
-  vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
-    if (options.operation === "unlink" && options.name === ".state-mutation.lock") throw new Error(message);
-    return removePinned(options);
-  });
-}
 
 describe("state ownership fault matrix", () => {
   for (const target of ["lock", "temporary"] as const) {
@@ -82,7 +70,7 @@ describe("state ownership fault matrix", () => {
     if (fault === "replacement") {
       expect(fs.readFileSync(lock, "utf8")).toBe("foreign");
       await expect(provider.invoke("delete", { key: "key" }, context)).rejects.toThrow("replacement");
-      fs.rmSync(lock); fs.renameSync(`${lock}.original`, lock);
+      removeFixtureSync(lock); fs.renameSync(`${lock}.original`, lock);
     }
     await expect(provider.invoke("set", { key: "key", value: false, expectedRevision: 0 }, context)).rejects.toThrow("revision conflict");
     expect(await provider.invoke("delete", { key: "key", expectedRevision: 1 }, context)).toMatchObject({ revision: 2 });
@@ -118,6 +106,36 @@ describe("state ownership fault matrix", () => {
     fs.writeFileSync(lock, owner); fs.utimesSync(lock, new Date(0), new Date(0));
     await expect(provider.invoke("set", { key: "key", value: true }, context)).rejects.toThrow("uncertain");
     expect(fs.readFileSync(lock, "utf8")).toBe(owner);
+  });
+  it("aggregates a reclaim failure with a claim-cleanup failure instead of masking it", async () => {
+    const { root, provider, context } = fixture(); const lock = path.join(root, ".state-mutation.lock");
+    const ownerText = JSON.stringify({ schemaVersion: 2, kind: "kiro-fabric-state-lock", process: { pid: 2_147_483_647 }, token: "a".repeat(32), acquiredAt: 0 });
+    fs.writeFileSync(lock, ownerText, { mode: 0o600 });
+    fs.utimesSync(lock, new Date(0), new Date(0));
+    vi.spyOn(process, "kill").mockImplementation(() => { const error = new Error("no such process") as NodeJS.ErrnoException; error.code = "ESRCH"; throw error; });
+    // The stale owner reads back valid once; the reclaim-time recheck reads malformed bytes.
+    let lockReads = 0;
+    vi.spyOn(fs, "readSync").mockImplementation(((_fd: number, buffer: Buffer, offset: number) => {
+      lockReads++;
+      const text = lockReads === 1 ? ownerText : "not-json";
+      buffer.write(text, offset, "utf8");
+      return Buffer.byteLength(text, "utf8");
+    }) as typeof fs.readSync);
+    const removePinned = pinnedDirectory.runPinnedDirectoryOperation;
+    vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation((options: Parameters<typeof removePinned>[0]) => {
+      if (options.operation === "unlink" && options.name.startsWith(".state-recovery-")) throw new Error("claim cleanup injected");
+      return removePinned(options);
+    });
+    const error = await provider.invoke("set", { key: "key", value: true }, context).catch(error => error) as AggregateError;
+    expect(error).toBeInstanceOf(AggregateError);
+    expect(error.message).toBe("state recovery and claim cleanup failed");
+    expect(error.errors).toHaveLength(2);
+    expect((error.errors[0] as Error).message).toContain("uncertain state lock owner; operator recovery required");
+    expect((error.errors[1] as Error).message).toBe("claim cleanup injected");
+    // The failed claim cleanup poisons the provider: further mutations refuse.
+    await expect(provider.invoke("set", { key: "key2", value: 1 }, context)).rejects.toThrow("uncertain state lock ownership");
+    // The claim is preserved for the operator because its cleanup failed.
+    expect(fs.readdirSync(root).some(name => name.startsWith(".state-recovery-"))).toBe(true);
   });
 });
 

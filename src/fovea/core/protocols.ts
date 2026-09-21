@@ -431,7 +431,7 @@ export const extractProtocolAnchors = async (
     if (file.endsWith(".proto")) out.push(...protoAnchors(file, text));
     else out.push(...graphqlAnchors(file, text));
   }
-  out.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.id.localeCompare(b.id) || (a.ruleId ?? "").localeCompare(b.ruleId ?? ""));
+  out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) || ((a.ruleId ?? "") < (b.ruleId ?? "") ? -1 : (a.ruleId ?? "") > (b.ruleId ?? "") ? 1 : 0));
   const seen = new Set<string>();
   return out.filter((item) => {
     const key = `${item.id}|${item.file}|${item.line}`;

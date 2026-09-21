@@ -8,6 +8,8 @@ export interface KiroAgentLaunchContext {
   dataRoot: string;
   managedGeneration?: ManagedGenerationContext;
   launchWorkspaceRoot?: string;
+  /** Profile-declared same-call Fovea suffix. Not native session routing or hook registration. */
+  foveaCallContext?: true;
 }
 
 const canonicalDirectory = (value: string | undefined, name: string): string => {
@@ -57,5 +59,9 @@ export const resolveKiroAgentLaunchContext = (
   const launchWorkspaceRoot = explicit
     ? canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE")
     : source === "launch-cwd" ? canonicalDirectory(launchDirectory(), "MCP launch directory") : undefined;
-  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}) };
+  const callContext = env.KIRO_FABRIC_FOVEA_CALL_CONTEXT;
+  if (callContext !== undefined && callContext !== "0" && callContext !== "1" && callContext !== "${KIRO_FABRIC_FOVEA_CALL_CONTEXT}") {
+    throw new Error("KIRO_FABRIC_FOVEA_CALL_CONTEXT must be 0 or 1 when set");
+  }
+  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}), ...(callContext === "1" ? { foveaCallContext: true as const } : {}) };
 };

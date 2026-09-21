@@ -876,7 +876,11 @@ var resolveKiroAgentLaunchContext = (env = process.env, launchDirectory = () => 
   const handoff = env.KIRO_FABRIC_LAUNCH_WORKSPACE;
   const explicit = handoff !== void 0 && handoff !== "${KIRO_FABRIC_LAUNCH_WORKSPACE}";
   const launchWorkspaceRoot = explicit ? canonicalDirectory(handoff, "KIRO_FABRIC_LAUNCH_WORKSPACE") : source === "launch-cwd" ? canonicalDirectory(launchDirectory(), "MCP launch directory") : void 0;
-  return { runtimeRoot, dataRoot, ...managedGeneration ? { managedGeneration } : {}, ...launchWorkspaceRoot ? { launchWorkspaceRoot } : {} };
+  const callContext = env.KIRO_FABRIC_FOVEA_CALL_CONTEXT;
+  if (callContext !== void 0 && callContext !== "0" && callContext !== "1" && callContext !== "${KIRO_FABRIC_FOVEA_CALL_CONTEXT}") {
+    throw new Error("KIRO_FABRIC_FOVEA_CALL_CONTEXT must be 0 or 1 when set");
+  }
+  return { runtimeRoot, dataRoot, ...managedGeneration ? { managedGeneration } : {}, ...launchWorkspaceRoot ? { launchWorkspaceRoot } : {}, ...callContext === "1" ? { foveaCallContext: true } : {} };
 };
 
 // src/kiro/mcp-entry.ts
@@ -897,8 +901,8 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
       const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : void 0;
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-6OPNCWZF.js");
-      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {} });
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-F5D7OGAB.js");
+      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {}, ...launch.foveaCallContext === true && managedParser ? { foveaCallContext: true } : {} });
     } finally {
       release?.();
     }
@@ -995,7 +999,7 @@ var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var self = realpathSync(fileURLToPath(import.meta.url));
 if (invoked === self) {
   if (process.argv[2] === "--first-prompt-hook") {
-    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-XSB56XZI.js");
+    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-GMLTVC6Q.js");
     process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : void 0));
   }
   process.exit(await runKiroMcpProcess());

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -226,7 +227,7 @@ describe('finite opt-in review calibration v1', () => {
       const added = { ...before, 'answer.json': { kind: 'file' as const, mode: 0o600, hash: 'unapproved' } };
       expect(() => checkScope(before, added, s.allowed)).toThrow('scope');
       expect(inventory(root)).toEqual(before); // Boundary assertions never edit the agent fixture.
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   }, 20000);
 
 });

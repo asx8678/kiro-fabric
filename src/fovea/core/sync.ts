@@ -287,7 +287,9 @@ const semanticFacts = (state: RepoState, file: string): string => {
     calls: stable(facts.calls.map((site) => [site.callee])),
     literals: stable(facts.literals.map((site) => [site.text])),
     anchors: stable(facts.anchors.map((anchor) => [anchor.id, anchor.kind, anchor.nodeId, anchor.implicit === true])),
-    sigs: Object.entries(facts.sigs ?? {}).sort(([a], [b]) => a.localeCompare(b)),
+    // Code-unit order keeps the semantic digest locale-independent (a locale
+    // or ICU change would otherwise mark every cached fact as drifted).
+    sigs: Object.entries(facts.sigs ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0),
   })).digest("hex");
   semanticCache.set(facts, value);
   return value;
@@ -627,7 +629,7 @@ export const sync = async (
     }
   }
   const orderedWarm = [...surprise.entries()]
-    .sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || a[0].localeCompare(b[0]))
+    .sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([file]) => file);
   commitBaseline({
     ...(preparedBaseline ?? (await snapshot(state))),

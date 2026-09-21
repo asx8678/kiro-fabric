@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -25,7 +26,7 @@ beforeAll(() => {
   expect(result.status, result.stderr).toBe(0);
   sbomBytes = fs.readFileSync(sbom);
 });
-afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
+afterAll(() => { removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("release artifact content validation and snapshot promotion", () => {
   it("validates real archives with different compression against the same fresh package tree", () => {

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,6 +48,6 @@ describe('readiness remediation',()=>{
         expect(result.failures.some(f=>f.check==='execution-audit')).toBe(true);
         expect(fs.readFileSync(file,'utf8')).toBe(text); // Controller probes cannot supply agent records.
       }
-    }finally{fs.rmSync(root,{recursive:true,force:true});}
+    }finally{removeFixtureSync(root,{recursive:true,force:true});}
   });
 });

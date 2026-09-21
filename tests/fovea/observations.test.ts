@@ -1,9 +1,11 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FoveaObservationExecution, type FoveaObservation } from "../../src/fovea/observations.js";
+import { FoveaCallObservation } from "../../src/kiro/fovea-call-context.js";
 import { ActionRegistry, type FabricRegistryInvocationContext } from "../../src/core/action-registry.js";
 import { LocalCodingProvider } from "../../src/providers/local-provider.js";
 import { FabricExecutionService } from "../../src/execution-service.js";
@@ -17,7 +19,7 @@ function fixture() {
   const root = path.join(base, "workspace"); fs.mkdirSync(root);
   const registry = new ActionRegistry();
   registry.register(new LocalCodingProvider({ root, lockRoot: path.join(base, "locks") }));
-  cleanup.push(async () => { await registry.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanup.push(async () => { await registry.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   const events: FoveaObservation[] = [], gap = vi.fn();
   const observer = { observe: (event: FoveaObservation) => { events.push(event); }, gap };
   const execution = new FoveaObservationExecution(observer);
@@ -93,6 +95,20 @@ describe("independent trusted Fovea observation", () => {
       expect(f.events.map(event => event.sequence)).toEqual([1, 2, 3, 4]);
       expect(new Set(f.events.map(event => event.operationId)).size).toBe(1);
       expect(JSON.stringify(f.events)).not.toContain("PRIVATE");
+    } finally { await service.close(); }
+  });
+  it("suppresses same-call hints after real shell mutations, even after a later successful read", async () => {
+    const f = fixture();
+    fs.writeFileSync(path.join(f.root, "math.ts"), "export const total = 1;\n");
+    const observed = new FoveaCallObservation(f.root, f.observer);
+    const service = new FabricExecutionService(f.registry, normalizeFabricConfig({}), f.root);
+    try {
+      const result = await service.execute({ operationObserver: observed, approver: { approve: async () => {} },
+        code: 'await local.read({path:"math.ts"}); await local.shell({command:"printf \\"export const total = 2;\\\\n\\" > math.ts"}); await local.read({path:"math.ts"}); return null;' });
+      expect(result.success, result.error).toBe(true);
+      expect(fs.readFileSync(path.join(f.root, "math.ts"), "utf8")).toBe("export const total = 2;\n");
+      expect(f.events).toContainEqual(expect.objectContaining({ ref: "local.shell", phase: "access", uncertain: true }));
+      expect(observed.files()).toEqual([]);
     } finally { await service.close(); }
   });
   it("waits for explicitly registered settlement in a new namespace after cancellation", async () => {

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +12,7 @@ import { StateProvider } from "../src/providers/state-provider.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-private-")); roots.push(root); return root; };
-afterEach(() => { vi.restoreAllMocks(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 describe("private artifacts and state", () => {
   it("creates private bounded artifacts", () => {
@@ -140,7 +141,7 @@ describe("private artifacts and state", () => {
     vi.spyOn(fs, "renameSync").mockImplementation(((from: fs.PathLike, to: fs.PathLike) => {
       if (!swapped && String(from) === lock) {
         swapped = true;
-        fs.rmSync(lock);
+        removeFixtureSync(lock);
         fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }), { mode: 0o600 });
       }
       return realRename(from, to);

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ import { installCompleteGeneration, inspectCompleteInstallation } from "../scrip
 import { fixture as bundleFixture } from "./bundle-fixture.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "installer-diagnostics-"))); roots.push(root); fs.chmodSync(root, 0o700);
   const source = path.join(root, "explicit checkout"), home = path.join(root, "kiro home"), closure = path.join(source, "dist/kiro-agent-closure");

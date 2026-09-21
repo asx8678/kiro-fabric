@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -43,7 +44,7 @@ describe('read-only infrastructure review benchmark', () => {
     try {
       const trial = await solvedTrial(root, 'review-evidence', process.execPath);
       expect((await validate(trial)).review).toMatchObject({ expected: 2, truePositives: 2, falsePositives: 0 });
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it.each(['boundaries-v1', 'boundaries-v2'])('qualifies exact contracts and rejects unsupported consequences: %s', async seed => {
@@ -73,7 +74,7 @@ describe('read-only infrastructure review benchmark', () => {
       expect((await validate(trial)).review).toMatchObject({ expected: 3, truePositives: 3, recall: 1 });
       fs.appendFileSync(path.join(trial.workspace, 'scripts/latest.sh'), '\n# changed\n');
       expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it.each(['contracts-v1', 'contracts-v2'])('qualifies cleanup defects and reachable-input controls: %s', async seed => {
@@ -104,7 +105,7 @@ describe('read-only infrastructure review benchmark', () => {
       const graded = await validate(trial);
       expect(graded.ok, JSON.stringify(graded.failures)).toBe(true);
       expect(graded.review).toMatchObject({ expected: 2, truePositives: 2, recall: 1 });
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it.each(['review-v1', 'review-v2'])('qualifies real defect semantics and seeded evidence: %s', async seed => {
@@ -169,7 +170,7 @@ describe('read-only infrastructure review benchmark', () => {
       expect((await validate({ ...trial, evidence: { ...trial.evidence, calls: [] } })).failures.some(f => f.check === 'calls')).toBe(true);
       fs.appendFileSync(path.join(trial.workspace, 'README.md'), '\nunauthorized change');
       expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it('charges failed attempts and keeps unsafe/missing review scores unknown', () => {
@@ -212,6 +213,6 @@ describe('read-only infrastructure review benchmark', () => {
       expect((await validate({ ...trial, evidence, expectedEffort: 'low' })).ok).toBe(true);
       expect((await validate({ ...trial, evidence, expectedEffort: 'high' })).failures.some(f => f.check === 'identity')).toBe(true);
       expect((await validate({ ...trial, expectedEffort: 'low' })).failures.some(f => f.check === 'identity')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 });

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { resolveSearchExecutable, verifySearchExecutable, searchEnvironment } fr
 
 const roots: string[] = [];
 const fixture = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-rg-")); roots.push(root); return root; };
-afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 it("resolves real rg once and supplies no ambient credentials/configuration", () => {
   vi.stubEnv("KIRO_API_KEY", "secret"); vi.stubEnv("NODE_OPTIONS", "secret"); vi.stubEnv("RIPGREP_CONFIG_PATH", "secret");
   const executable = resolveSearchExecutable();

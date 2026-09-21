@@ -116,7 +116,7 @@ const cmpNodes = (g: Graph, field: Float64Array) => (x: number, y: number): numb
   if (f !== 0) return f;
   const a = g.nodes[x]!;
   const b = g.nodes[y]!;
-  return a.file === b.file ? (a.line - b.line || a.name.localeCompare(b.name)) : a.file < b.file ? -1 : 1;
+  return a.file === b.file ? (a.line - b.line || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) : a.file < b.file ? -1 : 1;
 };
 
 export interface RevealOptions {

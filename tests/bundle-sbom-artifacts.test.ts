@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { canonical, createBundleManifest, validateBundle, sha256 } from "../scri
 import { writeBundleArchive } from "../scripts/bundle-archive.mjs";
 import { generateBundleSbomOutputs } from "../scripts/generate-bundle-sbom.mjs";
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 async function setup() {
   const bundle = await fixture(), root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "bundle-sbom-assets-"))); roots.push(bundle, root); fs.chmodSync(root, 0o700);
   const directory = path.join(root, ".tmp"); fs.mkdirSync(directory, { mode: 0o700 });

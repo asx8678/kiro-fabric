@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -41,7 +42,7 @@ spec:
       expect(render()).toContain('restartPolicy: Never');
       fs.writeFileSync(template, source.replace('.Values.job.RestartPolicy', '.Values.job.restartPolicy'));
       expect(render()).toContain('restartPolicy: OnFailure');
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it.skipIf(!pwsh)('PowerShell guards, negative index and XML property iteration disprove unconditional defects', () => {

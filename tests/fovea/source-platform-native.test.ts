@@ -1,7 +1,8 @@
+import { removeFixture as rm } from "../fixture-cleanup.mjs";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
-import { chmod, link, mkdir, mkdtemp, readFile, realpath, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, link, mkdir, mkdtemp, readFile, realpath, rename, stat, symlink, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';

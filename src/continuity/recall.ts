@@ -41,10 +41,18 @@ export function recallContinuity(source: ContinuitySnapshot, args: ContinuityRec
     ...args, taskId: task.taskId, expectedRevision: source.revision, hash: source.hash, offset: at, limit, snippetChars,
   } } : null;
   for (const row of rows.slice(offset, offset + limit)) {
-    const match = terms.length ? row.normalized.indexOf(terms[0]!) : 0;
-    const start = Math.max(0, match - 40), snippet = Array.from(row.text.slice(start)).slice(0, snippetChars).join("");
+    const units = Array.from(row.text);
+    let match = 0;
+    if (terms[0]) {
+      const needle = terms[0];
+      match = units.findIndex((_, index) => units.slice(index).join("").toLowerCase().startsWith(needle));
+      if (match < 0) match = 0;
+    }
+    const start = Math.max(0, match - 40);
+    const snippetUnits = units.slice(start, start + snippetChars);
+    const snippet = snippetUnits.join("");
     const hit: ContinuityRecallResult["hits"][number] = { sequence: row.record.sequence, kind: row.record.kind, provenance: row.record.provenance,
-      snippet, truncated: start > 0 || snippet.length < row.text.length,
+      snippet, truncated: start > 0 || start + snippetUnits.length < units.length,
       follow: { ref: "continuity.expand", args: { taskId: task.taskId, expectedRevision: source.revision, hash: source.hash, fromSequence: row.record.sequence, limit: 1 } } };
     const candidate = { ...result, hits: [...result.hits, hit], next: next(offset + result.hits.length + 1) };
     if (!fitsEnvelope(candidate, budget)) break;

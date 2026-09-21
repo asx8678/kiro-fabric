@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -32,7 +33,7 @@ import type { KiroWorkspaceSnapshot } from "../src/kiro/power/workspace-context.
 const temporary: string[] = [];
 const servers: Array<{ close(): Promise<void> }> = [];
 beforeEach(() => { vi.unstubAllEnvs(); wire.handlers.clear(); wire.approve = false; wire.elicitation = true; wire.forms.length = 0; wire.onForm = undefined; });
-afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of temporary.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(async () => { await Promise.all(servers.splice(0).map((server) => server.close())); vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of temporary.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 const fixture = async (rootCount = 1, unavailable = false, launch: "project" | "data" | undefined = undefined, execute?: "allow" | "ask" | "deny", extra: { write?: "allow" | "ask" | "deny"; maxApprovalRequests?: number } = {}) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), "strict-bootstrap-")); temporary.push(base);
@@ -106,8 +107,8 @@ describe("strict checked workspace bootstrap", () => {
     if (location === "nested") fs.mkdirSync(path.join(root, "app"));
     if (expectedPath) fs.writeFileSync(path.join(root, expectedPath), "# Discovered project\n");
     expect(AGENT_PROMPT).toContain("compose mechanical dependencies in one execution");
-    expect(AGENT_PROMPT).toContain("Otherwise discover paths before reads");
-    expect(BUNDLED_GUIDANCE.skill).toContain("discovery -> bounded observed starter reads in the same exec");
+    expect(AGENT_PROMPT).toContain("use Fovea first inside fabric_exec without being asked");
+    expect(BUNDLED_GUIDANCE.skill).toContain("## Fovea-first code navigation");
     const code = BUNDLED_GUIDANCE.review.match(/```ts\n(\/\/ Recipe: initial review evidence\n[\s\S]*?)\n```/)?.[1];
     expect(code).toBeDefined();
     const first = await f.call(code!);

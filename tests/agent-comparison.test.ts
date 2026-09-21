@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -95,7 +96,7 @@ describe('TinyShop independent bug contracts', () => {
       expect((await validate(trial)).failures.some(f => f.check === 'independent-tests')).toBe(true);
       fs.writeFileSync(path.join(trial.workspace, 'tests/public.mjs'), 'process.exit(0);');
       expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
   it('preserves legacy defaults; pairs selected cases and validates selection', () => {
     expect(CASES).toHaveLength(13); expect(ALL_CASES).toHaveLength(35);
@@ -253,6 +254,6 @@ describe('offline example export', () => {
       expect(result).toMatchObject({ fixtureVersion: 'tinyshop-and-review-v6' });
       await expect(main(['fixtures', '--out', output])).rejects.toThrow();
       for (const argv of [['run'], ['selftest', '--count', '1'], ['fixtures', '--out'], ['--help', 'extra']]) await expect(main(argv)).rejects.toThrow();
-    } finally { fs.rmSync(parent, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(parent, { recursive: true, force: true }); }
   });
 });

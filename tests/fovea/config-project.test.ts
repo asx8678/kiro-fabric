@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_FOVEA_CONFIG, FoveaConfiguration, MAX_FOVEA_PROJECT_PROFILES } from '../../src/fovea/config.js';
 
 const cleanup: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const dir of cleanup.splice(0)) fs.rmSync(dir, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const dir of cleanup.splice(0)) removeFixtureSync(dir, { recursive: true, force: true }); });
 function fixture() {
   const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-config-project-')));
   fs.chmodSync(dir, 0o700); cleanup.push(dir);

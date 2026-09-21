@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,6 +29,6 @@ export const hasInstallationRecovery = (() => {
     throw error;
   } finally {
     if (fd !== undefined) fs.closeSync(fd);
-    fs.rmSync(root, { recursive: true, force: true });
+    removeFixtureSync(root, { recursive: true, force: true });
   }
 })();

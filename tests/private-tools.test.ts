@@ -1,3 +1,4 @@
+import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { test, expect, vi } from 'vitest';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -5,7 +6,7 @@ import path from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync, linkSync, symlinkSync, chmodSync } from 'node:fs';
 import { fixtureTools } from './bundle-fixture.js';
 import { checkToolPins, sha256 } from '../scripts/bundle-contract.mjs';
-import { readFile, mkdtemp, rm, readdir, lstat, chmod, realpath, mkdir, writeFile } from 'node:fs/promises';
+import { readFile, mkdtemp, readdir, lstat, chmod, realpath, mkdir, writeFile } from 'node:fs/promises';
 import { acquirePrivateTools, acquirePrivateToolsForTest, downloadVerified, extractPinnedMember, verifyPrivateToolCache } from '../scripts/build-private-tools.mjs';
 async function cachedTools(){
  const root=await realpath(await mkdtemp(tmpdir()+'/private-tools-cache-')),pins=fixtureTools();

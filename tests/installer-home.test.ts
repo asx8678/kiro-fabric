@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ const fixture = () => {
   const home = path.join(root, "home"); fs.mkdirSync(home, { mode: 0o700 });
   return { root, home };
 };
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 describe("installer invocation roles and global home", () => {
   it("selects explicit CLI home over environment and preserves unusual printable names", () => {
     const { home } = fixture(); const selected = path.join(home, "Kiro 空間 % #");

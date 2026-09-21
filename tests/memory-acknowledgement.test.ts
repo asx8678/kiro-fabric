@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import { KiroMemoryProvider } from "../src/kiro/memory-provider.js";
 import { projectFabricExecutionText } from "../src/kiro/projection.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 const fixture = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-memory-ack-"));

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -19,7 +20,7 @@ const copyPackageFixture = (source: string, destination: string): void => {
     if (entry.isDirectory()) fs.chmodSync(path.join(entry.parentPath, entry.name), 0o700);
   }
 };
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const digestTree = (root: string): string => {
   const digest = createHash("sha256"), pending = [root];
   while (pending.length) for (const entry of fs.readdirSync(pending.pop()!, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -43,7 +44,7 @@ describe("hermetic staging", () => {
     const standalone = path.join(isolated, "package");
     copyPackageFixture(staged.generation, standalone);
     expect(fs.readFileSync(path.join(standalone, "scripts/filesystem-boundary.mjs"))).toEqual(fs.readFileSync(path.join(root, "src/installation/filesystem-boundary.mjs")));
-    fs.rmSync(root, { recursive: true });
+    removeFixtureSync(root, { recursive: true });
     expect(validateAgentPackage(standalone).ok).toBe(true);
     const probe = spawnSync(process.execPath, ["--input-type=module", "-e", `const installer=await import(${JSON.stringify(pathToFileURL(path.join(standalone, "scripts/install-agent-user.mjs")).href)}); if(typeof installer.installUserAgent!=='function'||typeof installer.installerSafety!=='object')throw Error('incomplete standalone installer');`], { cwd: isolated, encoding: "utf8", env: { ...process.env, HOME: path.join(isolated, "home"), KIRO_HOME: path.join(isolated, "kiro") }, timeout: 10000 });
     expect(probe.status, probe.stderr).toBe(0); expect(fs.existsSync(path.join(standalone, "src"))).toBe(false);
@@ -93,7 +94,7 @@ describe("hermetic staging", () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(legacy, "runtime/closure-manifest.json"), "utf8"));
     manifest.files = manifest.files.filter((entry: { path: string }) => !entry.path.startsWith("fovea/") && entry.path !== "kiro/fovea-hook.js");
     delete manifest.foveaEngine; delete manifest.foveaHook; delete manifest.vendoredComponents;
-    fs.rmSync(path.join(legacy, "runtime/fovea"), { recursive: true });
+    removeFixtureSync(path.join(legacy, "runtime/fovea"), { recursive: true });
     fs.unlinkSync(path.join(legacy, "runtime/kiro/fovea-hook.js"));
     const digest = createHash("sha256");
     for (const entry of manifest.files) digest.update(entry.path).update("\0").update(fs.readFileSync(path.join(legacy, "runtime", entry.path)));

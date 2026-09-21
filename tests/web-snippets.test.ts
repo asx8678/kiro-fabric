@@ -15,6 +15,7 @@ function browser(options: {
   context?: () => Promise<void>; target?: () => Promise<void>;
   close?: () => Promise<void>; dispose?: () => Promise<void>;
   ready?: () => Promise<void>; navigate?: () => Promise<void>;
+  pageUrl?: string; links?: string[]; consent?: boolean;
 } = {}) {
   const events: string[] = [], closed: string[] = [], timers: ReturnType<typeof setTimeout>[] = [];
   let next = 0, nextContext = 0;
@@ -24,11 +25,13 @@ function browser(options: {
     title: "Primary source", body: { innerText: " fallback content " },
     querySelector(selector: string): unknown {
       if (selector.includes("captcha")) return options.blocked ? {} : null;
+      if (selector.includes("consent.google")) return options.consent ? {} : null;
       if (selector === "[") throw new Error("invalid selector");
       return selector === "main" ? { innerText: " article evidence " } : null;
     },
     querySelectorAll: () => [
-      ...["https://example.com/primary", "javascript:evil()", "https://example.com/primary", "https://example.org/other"].map(href => ({
+      ...(options.links ?? ["https://example.com/primary", "javascript:evil()", "https://example.com/primary", "https://example.org/other"]).map(href => ({
+        href,
         textContent: " Primary source ", closest: (selector: string) => selector === "a[href]" ? { href } : { querySelector: () => ({ textContent: " Source snippet " }) },
       })),
     ],
@@ -69,12 +72,12 @@ function browser(options: {
     expect(sessions.has(sid)).toBe(true); events.push(sid + ":" + method);
     if (method === "Page.navigate") {
       if (options.navigate) await options.navigate();
-      locations.set(sid, args.url!); return options.fail === "navigate" ? { errorText: "net::ERR_FAILED" } : {};
+      locations.set(sid, options.pageUrl ?? args.url!); return options.fail === "navigate" ? { errorText: "net::ERR_FAILED" } : {};
     }
     if (method !== "Runtime.evaluate") return {};
     if (options.fail === "evaluate") return { exceptionDetails: { text: "evaluation failure" } };
     try {
-      const result = vm.runInNewContext(args.expression!, { document, location: new URL(locations.get(sid)!), URL }, { timeout: 100 });
+      const result = vm.runInNewContext(args.expression!, { document, location: new URL(locations.get(sid)!), URL, atob }, { timeout: 100 });
       return { result: { value: result } };
     } catch (error) { return { exceptionDetails: { text: String(error) } }; }
   };
@@ -83,11 +86,15 @@ function browser(options: {
 }
 
 describe("actual browser snippets against a deterministic CDP/DOM fixture", () => {
-  it.each(["close", "dispose"] as const)("rejects successful extraction when %s rejects, without raw cleanup diagnostics", async operation => {
-    const b = browser({ [operation]: () => { throw new Error("PRIVATE_DAEMON_SENTINEL"); } });
+  it("accepts confirmed private-context disposal when concurrent tab closure rejects", async () => {
+    const b = browser({ close: () => { throw new Error("PRIVATE_DAEMON_SENTINEL"); } });
+    await expect(b.run(webSearchSnippet("facts", 5, 300))).resolves.toMatchObject({ source: "google" });
+    expect(b.closed).toEqual(["t1"]); expect(b.disposed).toEqual(["c1"]);
+  });
+  it("still rejects unconfirmed context disposal even when tab closure succeeds", async () => {
+    const b = browser({ dispose: () => { throw new Error("PRIVATE_DAEMON_SENTINEL"); } });
     const error = await b.run(webSearchSnippet("facts", 5, 300)).catch(error => error);
-    expect(String(error)).toContain(operation === "close" ? "tab closure unconfirmed" : "private context disposal unconfirmed");
-    expect(String(error)).not.toContain("PRIVATE_DAEMON_SENTINEL");
+    expect(String(error)).toContain("private context disposal unconfirmed"); expect(String(error)).not.toContain("PRIVATE_DAEMON_SENTINEL");
     expect(b.closed).toEqual(["t1"]); expect(b.disposed).toEqual(["c1"]);
   });
   it.each(["close", "dispose"] as const)("bounds hung %s independently and preserves the original page failure", async operation => {
@@ -99,7 +106,8 @@ describe("actual browser snippets against a deterministic CDP/DOM fixture", () =
     expect(settled).toBe(false);
     expect(b.disposed).toEqual(["c1"]);
     await vi.advanceTimersByTimeAsync(1);
-    expect(await outcome).toContain("evaluation failure; Web cleanup uncertain:");
+    expect(await outcome).toContain(operation === "dispose" ? "evaluation failure; Web cleanup uncertain:" : "evaluation failure");
+    if (operation === "close") expect(await outcome).not.toContain("cleanup uncertain");
     expect(vi.getTimerCount()).toBe(0);
   });
   it.each([750, 29_000])("awaits slow cleanup with proportional, capped grace for page budget %i", async budget => {
@@ -199,6 +207,32 @@ describe("actual browser snippets against a deterministic CDP/DOM fixture", () =
     expect(b.closed).toEqual(["t1"]);
     expect(b.events.indexOf("st1:wait")).toBeLessThan(b.events.indexOf("st1:Page.navigate"));
   });
+  it.each(["google", "bing"] as const)("returns safe CAPTCHA categories for %s without fallback or additional navigation", async engine => {
+    const b = browser({ blocked: true });
+    expect(await b.run(webSearchSnippet("facts", 3, 1000, engine))).toEqual({ fabricWebError: "captcha" });
+    expect(b.events.filter(e => e.endsWith(":Page.navigate"))).toHaveLength(1);
+    expect(b.closed).toEqual(["t1"]); expect(b.disposed).toEqual(["c1"]);
+  });
+  it.each([
+    ["https://consent.google.com/m", "consent"],
+    ["https://www.google.com/sorry/index", "captcha"],
+    ["https://example.com/not-google", "unexpected-redirect"],
+  ])("classifies %s without returning page content", async (pageUrl, code) => {
+    const b = browser({ pageUrl });
+    expect(await b.run(webSearchSnippet("facts", 3, 1000))).toEqual({ fabricWebError: code });
+    expect(b.disposed).toEqual(["c1"]);
+  });
+  it("extracts Bing results and unwraps bounded destination URLs without returning tracking redirects", async () => {
+    const destination = "https://example.com/caf%C3%A9";
+    const tracked = "https://www.bing.com/ck/a?u=a1" + Buffer.from(destination).toString("base64url");
+    const b = browser({ links: [tracked, destination, "https://www.bing.com/ck/a?u=a1invalid!", "https://example.org/source", "javascript:evil()"] });
+    const result = await b.run(webSearchSnippet("facts", 2, 1000, "bing"));
+    expect(result).toEqual({ source: "bing", query: "facts", results: [
+      { title: "Primary source", url: destination, snippet: "Source snippet" },
+      { title: "Primary source", url: "https://example.org/source", snippet: "Source snippet" },
+    ] });
+    expect(b.events.filter(e => e.endsWith(":Page.navigate"))).toHaveLength(1);
+  });
   it("routes parallel reads to separate tabs, extracts bounded text and falls back to body", async () => {
     const b = browser();
     const results = await Promise.all([
@@ -227,7 +261,9 @@ describe("actual browser snippets against a deterministic CDP/DOM fixture", () =
     expect(b.closed).toEqual(["t1"]);
   });
   it("does not return success for CAPTCHA or invalid CSS", async () => {
-    await expect(browser({ blocked: true }).run(webSearchSnippet("facts", 5, 1000))).rejects.toThrow("consent or CAPTCHA");
+    const b = browser({ blocked: true });
+    await expect(b.run(webSearchSnippet("facts", 5, 1000))).resolves.toEqual({ fabricWebError: "captcha" });
+    expect(b.closed).toEqual(["t1"]); expect(b.disposed).toEqual(["c1"]);
     await expect(browser().run(webOpenSnippet("https://example.com", "[", "load", 0, 100, 1000))).rejects.toThrow("invalid selector");
   });
   it("cleans up a tab whose creation completes after the per-page deadline without navigating", async () => {

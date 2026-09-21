@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { openKiroMemory } from "../src/kiro/memory.js";
 const roots: string[] = [];
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 const fixture = () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-lock-safety-"));

@@ -88,6 +88,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
     try {
       registry.register(new WebProvider({
         ...(options.browserHarnessExecutable ? { executable: options.browserHarnessExecutable } : { executablePath: config.web.command }),
+        searchEngine: config.web.searchEngine,
         searchTimeoutMs: config.web.searchTimeoutMs,
         openTimeoutMs: config.web.openTimeoutMs,
       }));

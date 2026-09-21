@@ -13,6 +13,7 @@ import { FoveaRootLeases, type FoveaBindingAuthority, type FoveaLease } from "./
 import { FoveaResultStore, type ResultOwner } from "./result-store.js";
 import { FoveaScheduler } from "./scheduler.js";
 import { FoveaOutbox, type FoveaDeliveryClaim } from "./delivery.js";
+import { FoveaCallContexts } from "./call-context.js";
 import { record, type FoveaParserDescriptor } from "./protocol.js";
 import type { FoveaObservation, FoveaObserver } from "./observations.js";
 import { loadManagedSourcePlatform } from './native-source-loader.js';
@@ -25,6 +26,8 @@ export interface FoveaBoundClient {
   observer: FoveaObserver;
   /** Host-owned, after source effects settle. Caller must qualify the delivery surface. */
   collectContext(context: FabricInvocationContext, maxChars: number, nextPrompt?: boolean): Promise<FoveaDeliveryClaim | undefined>;
+  /** Same-call visible context from this invocation's observed files. Transient; does not persist conversation focus. */
+  collectCallContext?(files: string[], context: FabricInvocationContext, maxChars: number, sampled?: boolean): Promise<FoveaDeliveryClaim | undefined>;
   /** Trusted delivery adapter only; never exposed through invoke/guest args. */
   acknowledgeDelivery(noticeId: string, context: FabricInvocationContext): Promise<void>;
   close(): Promise<void>;
@@ -39,6 +42,7 @@ export class FoveaHost {
   readonly #results = new FoveaResultStore();
   readonly #scheduler = new FoveaScheduler();
   readonly #outbox = new FoveaOutbox();
+  readonly #calls = new FoveaCallContexts();
   readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string> }>();
   readonly #process: FoveaEngineProcess | undefined;
   readonly #observed = new Map<string, { paths: Set<string>; dirty: boolean; gap: boolean; operations: number }>();
@@ -67,7 +71,7 @@ export class FoveaHost {
     try { this.#conversation(lease); }
     catch (error) { this.#leases.revoke(lease); throw error; }
     const observer: FoveaObserver = { observe: event => this.#observe(lease, event), gap: () => { if (lease.signal.aborted || this.#lifetime.signal.aborted) return; const state = this.#observation(lease); state.gap = true; state.dirty = true; } };
-    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#leases.revoke(lease); this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#observed.delete(lease.rootId); this.#preparations.delete(lease.rootId); } };
+    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#leases.revoke(lease); this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId); this.#observed.delete(lease.rootId); this.#preparations.delete(lease.rootId); } };
   }
   #conversation(lease: FoveaLease): { configuration: FoveaConfiguration; trustedRules: Map<string, string> } {
     const key = JSON.stringify([lease.conversationId, lease.conversationEpoch]);
@@ -82,7 +86,7 @@ export class FoveaHost {
     return state;
   }
   async close(): Promise<void> {
-    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); })();
+    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); this.#calls.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); })();
     return this.#closeTask;
   }
   #observation(lease: FoveaLease): { paths: Set<string>; dirty: boolean; gap: boolean; operations: number } {
@@ -147,6 +151,48 @@ export class FoveaHost {
     };
     return { notices: claim.notices, isCurrent: () => { try { this.#check(lease, {}, context); return claim.isCurrent(); } catch { return false; } }, emitted: () => settle("emitted"), uncertain: () => settle("uncertain"), cancel: () => settle("cancel") };
   }
+  async #collectCallContext(lease: FoveaLease, files: string[], context: FabricInvocationContext, maxChars: number, sampled = false): Promise<FoveaDeliveryClaim | undefined> {
+    this.#check(lease, {}, context);
+    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Fovea delivery budget");
+    const config = this.#conversation(lease).configuration.read(lease.worktreeId).config;
+    if (config.sync.mode !== "enabled" || !this.#process || this.#scheduler.busy || maxChars < 160) return undefined;
+    if (!Array.isArray(files) || files.length < 1 || files.length > 16) return undefined;
+    for (const file of files) {
+      if (typeof file !== "string" || !file || file.length > 4096 || path.isAbsolute(file) || file.includes("\0") || file === ".." || file.startsWith(`..${path.sep}`) || path.normalize(file) !== file) return undefined;
+    }
+    const remaining = context.deadline?.remainingMs() ?? 0;
+    const budget = this.#calls.budget(lease.rootId, this.#process.generation, remaining);
+    if (budget < 100) return undefined;
+    await this.#journalTail;
+    this.#check(lease, {}, context);
+    const signals = [lease.signal, this.#lifetime.signal, ...(context.signal ? [context.signal] : [])];
+    const signal = AbortSignal.any(signals);
+    let value: Record<string, unknown>;
+    try {
+      value = await this.#scheduler.run(signal, async () => {
+        this.#check(lease, {}, context);
+        const parameters: Record<string, unknown> = { files, includeUncommitted: false, maxTokens: Math.min(512, config.tools.defaultBudget), transient: true };
+        const trustedRulesSha256 = this.#conversation(lease).trustedRules.get(lease.worktreeId);
+        if (trustedRulesSha256) parameters.trustedRulesSha256 = trustedRulesSha256;
+        return this.#process!.query({
+          conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath,
+          authorizationEpoch: lease.authorizationEpoch, operation: "impact", args: parameters,
+        }, signal, budget);
+      });
+      this.#calls.analyzed(lease.rootId, this.#process.generation);
+    } catch {
+      this.#calls.failed(lease.rootId);
+      throw new Error("Fovea call context unavailable");
+    }
+    this.#check(lease, {}, context);
+    const body = typeof value.text === "string" ? value.text.slice(0, 8_192) : "";
+    if (!body) return undefined;
+    const text = sampled ? `Sampled 16 observed files.\n${body}` : body;
+    const snapshot = typeof value.sourceSnapshotId === "string" ? value.sourceSnapshotId : "none";
+    const key = `call:${snapshot}:${createHash("sha256").update(files.join("\0")).digest("hex").slice(0, 16)}`;
+    const claimSignal = AbortSignal.any([lease.signal, this.#lifetime.signal, ...(context.signal ? [context.signal] : [])]);
+    return this.#calls.claim(lease.rootId, lease.authorizationEpoch, key, text, maxChars, claimSignal, () => this.#check(lease, {}, context));
+  }
   #origin(lease: FoveaLease): string { return createHash('sha256').update(JSON.stringify([this.hostInstanceId, lease.conversationId, lease.conversationEpoch])).digest('hex'); }
   async #acknowledgeDelivery(lease: FoveaLease, noticeId: string, context: FabricInvocationContext): Promise<void> {
     this.#check(lease, {}, context);
@@ -200,7 +246,7 @@ export class FoveaHost {
     return this.#scheduler.run(signal, async () => {
       this.#check(lease, args, context);
       if (operation === "reload") {
-        await this.#process!.restart(); configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay();
+        await this.#process!.restart(); configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay(); this.#calls.clear();
         return { schemaVersion: 1, restarted: true, codeTransition: "same generation only; update and restart session for new code" };
       }
       const { rootId: _rootId, ...parameters } = args;
@@ -228,7 +274,7 @@ export class FoveaHost {
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation) && parameters.maxTokens === undefined) parameters.maxTokens = config.tools.defaultBudget;
       const value = await this.#process!.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, authorizationEpoch: lease.authorizationEpoch, operation: operation === "augment" ? "focus" : operation, args: operation === "augment" ? { ...parameters, transient: true } : parameters }, signal, context.deadline?.remainingMs() ?? 120_000);
       this.#check(lease, args, context);
-      if (operation === "reset") { this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#preparations.delete(lease.rootId); this.#observed.delete(lease.rootId); }
+      if (operation === "reset") { this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId); this.#preparations.delete(lease.rootId); this.#observed.delete(lease.rootId); }
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation)) {
         this.#observation(lease); // Explicit graph work authorizes attention, not delivery.
         const resultId = this.#results.put(this.#owner(lease), value);

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +17,9 @@ it.each(["success", "empty-search"] as const)("fresh source frontend reaches bac
     const bundle = await acceptanceBundle(path.join(source, ".tmp", "candidate"), behavior);
     expect(fs.statSync(path.join(bundle.root, "tools/node")).size).toBeGreaterThan(64 * 1024 * 1024);
     fs.writeFileSync(path.join(source, "settings.json"), "private fixture configuration", { mode: 0o600 });
+    // The source frontend resolves its checkout root script-relatively and reads
+    // the packageManager pin from <checkout>/package.json before any build command.
+    fs.writeFileSync(path.join(source, "package.json"), JSON.stringify({ packageManager: "pnpm@11.20.0" }), { mode: 0o600 });
     fs.writeFileSync(path.join(bin, "kiro-cli"), '#!/bin/sh\nif [ "$1" = --version ]; then printf "kiro-cli 2.21.1\\n"; else printf "%s\\n" --path; fi\n', { mode: 0o700 });
     fs.writeFileSync(path.join(bin, "pnpm"), `#!/bin/sh\ncase "$*" in\n --version) printf '11.20.0\\n' ;;\n 'install --frozen-lockfile'|'run build') printf '%s\\n' "$*" >> '${log}' ;;\n *) exit 91 ;;\nesac\n`, { mode: 0o700 });
     const entry = path.join(source, "scripts/source-install.mjs");
@@ -50,5 +54,5 @@ export const buildCompleteBundle = async options => { if(options.archive !== fal
       expect(output.error).toContain("checked search"); expect(inspection.status).toBe("recovery-required");
       expect(fs.existsSync(path.join(source, "kiro-fabric/.transactions/candidate.json"))).toBe(true);
     }
-  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  } finally { removeFixtureSync(root, { recursive: true, force: true }); }
 }, 90000);

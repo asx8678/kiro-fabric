@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ function fixture(budget = 20000) {
   const root = path.join(base, "src"); fs.mkdirSync(root);
   const provider = new LocalCodingProvider({ root, lockRoot: path.join(base, "locks"), maxResultChars: budget });
   const registry = new ActionRegistry(); registry.register(provider);
-  cleanup.push(async () => { await provider.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanup.push(async () => { await provider.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   const put = (file: string, text: string) => fs.writeFileSync(path.join(root, file), text);
   const approve = vi.fn(async () => {});
   const call = (name: string, args: Record<string, unknown>, approval: FabricRegistryInvocationContext["approve"] = approve) => registry.invoke(`local.${name}`, args, { cwd: root, audits: [], maxResultChars: budget, approve: approval });

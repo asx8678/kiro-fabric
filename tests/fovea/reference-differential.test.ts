@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import { expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -65,8 +66,8 @@ it.skipIf(!fs.existsSync(parser) || !fs.existsSync(path.join(reference, '.git'))
       passed = true;
     } finally {
       if (passed) {
-        if (oracleRoot) fs.rmSync(oracleRoot, { recursive: true, force: true });
-        fs.rmSync(scope.root, { recursive: true, force: true });
+        if (oracleRoot) removeFixtureSync(oracleRoot, { recursive: true, force: true });
+        removeFixtureSync(scope.root, { recursive: true, force: true });
       }
     }
   }, 150000,
@@ -138,7 +139,7 @@ async function compareColdFamily(budget: number, controlled: boolean, scheduled 
         const core = native ? path.resolve('src/fovea/core') : path.join(archived, 'src/core');
         // Same storage path, emptied between runs: path relocation only, no
         // sharing of parsed facts, graph state or disclosure history.
-        fs.rmSync(storage, { recursive: true, force: true }); fs.mkdirSync(storage, { mode: 0o700 });
+        removeFixtureSync(storage, { recursive: true, force: true }); fs.mkdirSync(storage, { mode: 0o700 });
         const driver = path.join(scope.root, `${label}-family.ts`);
         fs.writeFileSync(driver, [
           `Date.now = () => ${REFERENCE_CLOCK_MS};`,
@@ -218,6 +219,6 @@ async function compareColdFamily(budget: number, controlled: boolean, scheduled 
       }
       fs.writeFileSync(reportPath, JSON.stringify({ ...report, qualified: !controlled, controlledInputsMatched: controlled, acceptanceVerified: true }), { mode: 0o600 });
       passed = true;
-    } finally { if (passed && process.env.FOVEA_RETAIN_CONTROLLED_REPORT !== '1') fs.rmSync(scope.root, { recursive: true, force: true }); }
+    } finally { if (passed && process.env.FOVEA_RETAIN_CONTROLLED_REPORT !== '1') removeFixtureSync(scope.root, { recursive: true, force: true }); }
 }
 

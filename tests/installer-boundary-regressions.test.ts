@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -14,7 +15,7 @@ import { installerSafety, resolveKiroHome } from '../scripts/install-agent-user.
 
 const roots:string[]=[];
 const temp=()=>{const p=fs.mkdtempSync(path.join(tmpdir(),'installer-boundary-'));fs.chmodSync(p,0o700);roots.push(p);return p;};
-afterEach(()=>{vi.restoreAllMocks();syncBuiltinESMExports();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+afterEach(()=>{vi.restoreAllMocks();syncBuiltinESMExports();for(const root of roots.splice(0))removeFixtureSync(root,{recursive:true,force:true});});
 const mkdir=(p:string,mode=0o700)=>{fs.mkdirSync(p,{mode});fs.chmodSync(p,mode);return p;};
 async function bundle(){const root=await fixture();roots.push(root);return root;}
 

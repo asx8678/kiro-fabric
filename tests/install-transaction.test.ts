@@ -1,3 +1,4 @@
+import { removeFixture } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -13,7 +14,7 @@ import { doctorInstallation, managerErrorResult } from '../scripts/install-manag
 // Successful crash recovery requires the same inode-pinned capability as production.
 const recoveryTest = test.skipIf(!hasInstallationRecovery);
 const moduleURL=new URL('../scripts/managed-installation.mjs',import.meta.url).href;
-async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'transaction-test-')),bundle=await fixture(),userHome=path.join(root,'home'),kiroHome=path.join(root,'home/.kiro');await fs.mkdir(userHome,{mode:0o700});const opts={kiroHome,userHome,env:{},provenance:'source',validateCandidate:async()=>{}};return {root,bundle,userHome,kiroHome,opts,async cleanup(){await fs.rm(root,{recursive:true,force:true});await fs.rm(bundle,{recursive:true,force:true});}};}
+async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'transaction-test-')),bundle=await fixture(),userHome=path.join(root,'home'),kiroHome=path.join(root,'home/.kiro');await fs.mkdir(userHome,{mode:0o700});const opts={kiroHome,userHome,env:{},provenance:'source',validateCandidate:async()=>{}};return {root,bundle,userHome,kiroHome,opts,async cleanup(){await removeFixture(root,{recursive:true,force:true});await removeFixture(bundle,{recursive:true,force:true});}};}
 async function upgrade(bundle:string){const old=(await validateBundle(bundle)).manifest;await fs.writeFile(bundle+'/app/main.js','next-generation');const m=await createBundleManifest(bundle,old);await fs.writeFile(bundle+'/bundle-manifest.json',canonical(m)+'\n');return m.digest;}
 async function killAt(f:any,phase:string,operation='install'){
  const code=`import {installCompleteGeneration,retireCompleteInstallation,rollbackCompleteGeneration} from ${JSON.stringify(moduleURL)}; const opts=${JSON.stringify({...f.opts,validateCandidate:undefined})};opts.validateCandidate=async()=>{};opts.onPhase=p=>{if(p===${JSON.stringify(phase)})process.kill(process.pid,'SIGKILL')}; await ${operation==='install'?'installCompleteGeneration('+JSON.stringify(f.bundle)+',opts)':operation==='rollback'?'rollbackCompleteGeneration(opts.kiroHome,opts)':'retireCompleteInstallation(opts.kiroHome,opts)'};`;

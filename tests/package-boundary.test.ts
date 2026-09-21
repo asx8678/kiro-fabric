@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -77,7 +78,7 @@ describe("Agent product boundary", () => {
         fs.unlinkSync(shadow);
       }
     } finally {
-      fs.rmSync(shadowRoot, { recursive: true, force: true });
+      removeFixtureSync(shadowRoot, { recursive: true, force: true });
     }
   });
 
@@ -255,7 +256,7 @@ describe("Agent product boundary", () => {
       });
       expect(imported.status, imported.stderr).toBe(0);
     } finally {
-      fs.rmSync(temporary, { recursive: true, force: true });
+      removeFixtureSync(temporary, { recursive: true, force: true });
     }
   });
 

@@ -1,3 +1,4 @@
+import { removeFixture } from "../fixture-cleanup.mjs";
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -95,7 +96,7 @@ beforeAll(async () => {
   oldDigest = historical.digest;
 }, 120_000);
 
-afterAll(async () => { if (root) await fs.rm(root, { recursive: true, force: true }); });
+afterAll(async () => { if (root) await removeFixture(root, { recursive: true, force: true }); });
 
 async function installedFixture() {
   const dir = await fs.mkdtemp(path.join(root, 'case-'));
@@ -239,7 +240,7 @@ test('real pinned installed manager rejects schema 2 without changing controls; 
     expect(await fs.readdir(f.paths.runtime)).toEqual([oldDigest]);
     expect(await fs.readdir(path.join(f.paths.base, '.transactions'))).toEqual([]);
     await f.immutableOld();
-  } finally { await fs.rm(f.dir, { recursive: true, force: true }); }
+  } finally { await removeFixture(f.dir, { recursive: true, force: true }); }
 }, 120_000);
 
 test('trusted-new-source handoff, concurrent schema 1/2 backends and rollback preserve original profiles and new settings', async () => {
@@ -289,7 +290,7 @@ test('trusted-new-source handoff, concurrent schema 1/2 backends and rollback pr
     await f.immutableOld();
   } finally {
     await Promise.all(clients.map(client => client.close()));
-    await fs.rm(f.dir, { recursive: true, force: true });
+    await removeFixture(f.dir, { recursive: true, force: true });
   }
 }, 180_000);
 
@@ -328,5 +329,5 @@ test.each(['profile-published', 'owner-committed'])('SIGKILL during cross-schema
     await assertSnapshot(f, oldDigest, f.oldProfile, f.oldOwner);
     await f.immutableOld();
     expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
-  } finally { await fs.rm(f.dir, { recursive: true, force: true }); }
+  } finally { await removeFixture(f.dir, { recursive: true, force: true }); }
 }, 120_000);

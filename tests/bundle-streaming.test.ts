@@ -1,3 +1,4 @@
+import { removeFixture } from "./fixture-cleanup.mjs";
 import fs from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { createBundleManifest, validateBundle } from "../scripts/bundle-contract
 import { fixture } from "./bundle-fixture.js";
 
 const roots: string[] = [];
-afterEach(async () => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) await fs.rm(root, { recursive: true, force: true }); });
+afterEach(async () => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) await removeFixture(root, { recursive: true, force: true }); });
 it.each([0, 65536, 65537, 2 * 1024 * 1024])("hashes %i-byte inventory members in <=64KiB buffers with identical SHA-256", async size => {
   const root = await fixture(); roots.push(root); const previous = await validateBundle(root);
   const bytes = Buffer.alloc(size, 37); await fs.writeFile(path.join(root, "app/main.js"), bytes);

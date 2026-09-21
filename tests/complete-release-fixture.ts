@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -65,7 +66,7 @@ export async function completeFixture() {
       });
       reports[target] = { schema: 1, kind: 'kiro-fabric.complete-qualification', target, version: '1.0.0', sourceCommit: COMMIT, bundleDigest: m.bundleDigest, archiveSha256: m.archive.sha256, metadataSha256: sha256(canonical(m) + '\n'), gates };
       resign(target);
-    } finally { fs.rmSync(bundle, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(bundle, { recursive: true, force: true }); }
   }
   return { root, input, publicKey, reports, metadata, put, resign, output: path.join(root, 'published'), expected: { commit: COMMIT, version: '1.0.0' } };
 }

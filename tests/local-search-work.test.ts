@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ import { FabricDeadline } from "../src/runtime/deadline.js";
 
 const roots: string[] = [];
 const searchScope = (glob?: string) => ({ path: ".", ...(glob ? { glob } : {}), hidden: false, ignoreFiles: true });
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 // The production rg probe keeps its exact 2000ms bound; full-suite CPU load can
 // cold-start a freshly copied binary past it. One ETIMEDOUT retry is harness
 // resilience only; every assertion and the production deadline stay unchanged.

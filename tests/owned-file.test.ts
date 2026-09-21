@@ -1,10 +1,11 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { initializeOwnedFile, type OwnedFile } from "../src/providers/owned-file.js";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 it("reports close-before-close uncertainty without blindly retrying a numeric descriptor", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-owned-close-")); roots.push(root);
   const close = fs.closeSync; let fd: number | undefined;

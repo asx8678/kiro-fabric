@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -5,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const fixture = (name = `ka_${"a".repeat(48)}`) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "artifact-startup-recovery-")); roots.push(root);
   const file = path.join(root, name);

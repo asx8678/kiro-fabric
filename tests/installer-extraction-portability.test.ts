@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
@@ -28,7 +29,7 @@ const hold = (cwd: string) => {
 afterEach(() => {
   vi.restoreAllMocks(); vi.unstubAllEnvs(); vi.unstubAllGlobals();
   for (const fd of held.splice(0)) { try { fs.closeSync(fd); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'EBADF') throw error; } }
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 test('installer and runtime share the pinned-directory implementation', () => {
   expect(runPinnedDirectoryOperation).toBe(runStatePinnedDirectoryOperation);

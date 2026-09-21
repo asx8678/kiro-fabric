@@ -1,3 +1,4 @@
+import { removeFixture } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -29,7 +30,7 @@ test('historical verification preserves exact inventory while new bundle admissi
   await expect(createBundleManifest(root, manifest)).rejects.toThrow('Missing required entry: ' + worker);
   await fs.appendFile(path.join(root, 'app/main.js'), 'tampered');
   await expect(validateInstalledBundle(root)).rejects.toThrow('Bundle inventory mismatch');
- } finally { await fs.rm(root, { recursive: true, force: true }); }
+ } finally { await removeFixture(root, { recursive: true, force: true }); }
 });
 
 test('historical verification cannot forgive a missing declared worker', async () => {
@@ -37,7 +38,7 @@ test('historical verification cannot forgive a missing declared worker', async (
  try {
   await fs.unlink(path.join(root, worker));
   await expect(validateInstalledBundle(root)).rejects.toThrow('Bundle inventory mismatch');
- } finally { await fs.rm(root, { recursive: true, force: true }); }
+ } finally { await removeFixture(root, { recursive: true, force: true }); }
 });
 
 async function setup() {
@@ -60,7 +61,7 @@ async function setup() {
  const data = path.join(installed.paths.data, 'fabric/sentinel');
  await fs.writeFile(data, 'preserve user data', {mode: 0o600});
  return {root, bundle, kiroHome, opts, installed, old, retained, data,
-  async cleanup() { await fs.rm(root, {recursive: true, force: true}); await fs.rm(bundle, {recursive: true, force: true}); }};
+  async cleanup() { await removeFixture(root, {recursive: true, force: true}); await removeFixture(bundle, {recursive: true, force: true}); }};
 }
 
 test.each([null, 'profile-published', 'owner-committed'])('upgrades owned pre-worker bundles with exact retention and recovery at %s', async phase => {

@@ -1,3 +1,4 @@
+import { removeFixture } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import { canonical, createBundleManifest, validateBundle } from '../scripts/bund
 import { installCompleteGeneration, inspectCompleteInstallation, rollbackCompleteGeneration, retireCompleteInstallation } from '../scripts/managed-installation.mjs';
 import { doctorInstallation, managerErrorResult } from '../scripts/install-manager.mjs';
 
-async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'managed-test-')),bundle=await fixture();const kiroHome=path.join(root,'home/.kiro');await fs.mkdir(path.join(root,'home'),{mode:0o700});return {root,bundle,kiroHome,opts:{kiroHome,userHome:path.join(root,'home'),env:{},provenance:'source',validateCandidate:async(candidateRoot:string,context:any)=>{expect(candidateRoot).toContain('/runtime/.candidate-');const candidate=await validateBundle(candidateRoot);expect(context.profile.mcpServers.fabric.env.KIRO_FABRIC_BUNDLE_ROOT).toBe(path.join(path.dirname(candidateRoot),candidate.digest));}},async cleanup(){await fs.rm(root,{recursive:true,force:true});await fs.rm(bundle,{recursive:true,force:true});}};}
+async function setup(){const root=await fs.mkdtemp(path.join(tmpdir(),'managed-test-')),bundle=await fixture();const kiroHome=path.join(root,'home/.kiro');await fs.mkdir(path.join(root,'home'),{mode:0o700});return {root,bundle,kiroHome,opts:{kiroHome,userHome:path.join(root,'home'),env:{},provenance:'source',validateCandidate:async(candidateRoot:string,context:any)=>{expect(candidateRoot).toContain('/runtime/.candidate-');const candidate=await validateBundle(candidateRoot);expect(context.profile.mcpServers.fabric.env.KIRO_FABRIC_BUNDLE_ROOT).toBe(path.join(path.dirname(candidateRoot),candidate.digest));}},async cleanup(){await removeFixture(root,{recursive:true,force:true});await removeFixture(bundle,{recursive:true,force:true});}};}
 async function change(bundle:string,value:string){const old=(await validateBundle(bundle)).manifest;await fs.writeFile(path.join(bundle,'app/main.js'),value);const m=await createBundleManifest(bundle,old);await fs.writeFile(path.join(bundle,'bundle-manifest.json'),canonical(m)+'\n');return m.digest;}
 
 test('upgrades a hash-verified pre-readiness profile without accepting profile tampering', async () => {
@@ -72,6 +73,7 @@ test.each([false, true])('upgrades hash-verified profiles predating run provenan
   const installed = await installCompleteGeneration(f.bundle, f.opts);
   const profile = JSON.parse(await fs.readFile(installed.paths.profile, 'utf8'));
   delete profile.mcpServers.fabric.env.KIRO_FABRIC_RUN_DECLARATION;
+  delete profile.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT;
   if (legacyWorkspace) {
    delete profile.mcpServers.fabric.env.KIRO_FABRIC_LAUNCH_WORKSPACE;
    delete profile.mcpServers.fabric.env.KIRO_FABRIC_WORKSPACE_SOURCE;
@@ -89,6 +91,7 @@ test.each([false, true])('upgrades hash-verified profiles predating run provenan
   await installCompleteGeneration(f.bundle, f.opts);
   const updated = JSON.parse(await fs.readFile(installed.paths.profile, 'utf8'));
   expect(updated.mcpServers.fabric.env.KIRO_FABRIC_RUN_DECLARATION).toBe('${KIRO_FABRIC_RUN_DECLARATION}');
+  expect(updated.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT).toBe('1');
   expect(updated.tools).toEqual(['@fabric/fabric_exec']);
   expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
   const currentOwner = JSON.parse(await fs.readFile(installed.paths.manifest, 'utf8'));

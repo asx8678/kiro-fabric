@@ -6,6 +6,11 @@ import { context, owned } from "./context.js";
 // time and (b) yield inside irreversibly synchronous CPU sweeps so input and
 // rendering keep flowing.
 
+/** Deliberately inert in the managed runtime: the guest environment is
+ * untrusted, so scheduling and budget knobs are compile-time constants, and
+ * the env/min/max parameters exist only to document each call site's
+ * intended envelope. Upstream pi-fovea reads these from the environment;
+ * this build must not. */
 export const envInt = (_name: string, dflt: number, _min: number, _max: number): number => dflt;
 
 /**

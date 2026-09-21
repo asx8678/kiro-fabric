@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -60,7 +61,7 @@ async function fixture() {
   const artifacts = createKiroArtifactStore();
   const runtime: KiroRuntime = { service, registry, artifacts, providers: () => [], close: async () => { closed = true; await service.close(); artifacts.close(); } };
   const hosts: Array<{ close(): Promise<void> }> = [];
-  cleanups.push(async () => { release.resolve(); await bounded(Promise.all(hosts.map(h => h.close()))); await service.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanups.push(async () => { release.resolve(); await bounded(Promise.all(hosts.map(h => h.close()))); await service.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   async function host(injected = false) {
     let snapshot: KiroWorkspaceSnapshot = { status: injected ? "explicitly-empty" : "verified", roots: injected ? [] : [{ uri: pathToFileURL(projects[0]!).href }], revision: 1, observedAt: Date.now() };
     const server = await createKiroMcpServer({ runtimeRoot, dataRoot, version: "fixture", ...(injected ? { runtime } : {}), prepareRuntime: async () => runtime,

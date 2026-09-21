@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ const fixtures: { root: string; service: FabricExecutionService }[] = [];
 afterEach(async () => {
   for (const { root, service } of fixtures.splice(0)) {
     await service.close();
-    fs.rmSync(root, { recursive: true, force: true });
+    removeFixtureSync(root, { recursive: true, force: true });
   }
 });
 function fixture(helpBudget = 20000, continuity = false) {

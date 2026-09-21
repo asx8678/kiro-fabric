@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -19,7 +20,7 @@ async function addLargeFile(root: string) {
   const next = await createBundleManifest(root, previous);
   fs.writeFileSync(path.join(root, "bundle-manifest.json"), canonical(next) + "\n");
 }
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("bounded streaming bundle archive writer", () => {
   it("is byte-identical to the compatibility USTAR/gzip encoder and deterministic across writes", async () => {

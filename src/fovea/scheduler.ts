@@ -5,6 +5,7 @@ export class FoveaScheduler {
   readonly #queue: Job<unknown>[] = [];
   #active = false;
   #closed = false;
+  get busy(): boolean { return this.#active || this.#queue.length > 0 || this.#closed; }
   run<T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> {
     signal.throwIfAborted();
     if (this.#closed || this.#queue.length >= 16) return Promise.reject(new Error("Fovea analysis queue unavailable/full"));

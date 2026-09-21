@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,7 +9,7 @@ import { FabricExecutionService } from "../src/execution-service.js";
 import { KiroMemoryProvider } from "../src/kiro/memory-provider.js";
 import { projectFabricExecutionText } from "../src/kiro/projection.js";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("memory.delete end-to-end publication acknowledgement", () => {
   it.each(["cleanup", "aborted", "timed_out"] as const)("preserves delete proof after %s without payload or cause", async (fault) => {

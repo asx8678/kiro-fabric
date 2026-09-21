@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -9,7 +10,7 @@ import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
 
 const roots: string[] = [], runtimes: KiroRuntime[] = [];
-afterEach(async () => { for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(async () => { for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture(maxNestedResultChars = 2_000_000) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-review-runtime-"))); roots.push(base);
   const root = path.join(base, "workspace"), probesRoot = path.join(base, "probes"); fs.mkdirSync(root);

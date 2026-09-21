@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -13,7 +14,7 @@ beforeAll(()=>{
  bytes=captureLegacyArtifact(archive,LEGACY_ARCHIVE_LIMITS.archive);raw=gunzipSync(bytes);records=[];
  for(let offset=0;offset<raw.length-1024;){const size=parseInt(raw.subarray(offset+124,offset+135).toString(),8),next=offset+512+Math.ceil(size/512)*512;records.push(Buffer.from(raw.subarray(offset,next)));offset=next;}
 });
-afterAll(()=>fs.rmSync(root,{recursive:true,force:true}));
+afterAll(()=>removeFixtureSync(root,{recursive:true,force:true}));
 function firstRecord():Buffer { const first=records[0]; if(!first)throw Error('Legacy producer fixture has no header'); return first; }
 function checksum(b:Buffer){b.fill(32,148,156);b.write(b.subarray(0,512).reduce((a,v)=>a+v,0).toString(8).padStart(6,'0')+'\0 ',148);return b;}
 function named(record:Buffer,name:string){const b=Buffer.from(record);b.fill(0,0,100);b.fill(0,345,500);b.write(name,0);return checksum(b);}

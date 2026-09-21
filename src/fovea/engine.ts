@@ -51,7 +51,7 @@ interface Conversation {
   focuses: Map<string, number>;
   active: string;
 }
-interface RootState { path: string; store: Map<string, unknown>; snapshotId?: string; head?: string | undefined; hot: boolean; gap: boolean }
+interface RootState { path: string; store: Map<string, unknown>; snapshotId?: string; snapshotHashes?: Map<string, string>; head?: string | undefined; hot: boolean; gap: boolean }
 interface NativeBaseline { hashes: Map<string, string>; sequence: number }
 
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
@@ -198,9 +198,10 @@ export class FoveaEngine {
     return coreContext.run(ctx, async () => {
       try {
         const snapshot = await this.source!.captureSourceSnapshot(request.root, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
-          trustedRulesSha256: typeof args.trustedRulesSha256 === 'string' ? args.trustedRulesSha256 : undefined });
+          trustedRulesSha256: typeof args.trustedRulesSha256 === 'string' ? args.trustedRulesSha256 : undefined,
+          ...(root.snapshotId && root.snapshotHashes ? { previous: { id: root.snapshotId, root: root.path, hashes: root.snapshotHashes } } : {}) });
         signal.throwIfAborted();
-        const snapshotReused = root.snapshotId === snapshot.id;
+        const snapshotReused = snapshot.root === root.path && root.snapshotId === snapshot.id;
         if (!snapshotReused) {
           await rm(root.path, { recursive: true, force: true });
           await rename(stage, root.path);
@@ -209,7 +210,7 @@ export class FoveaEngine {
         const warm = snapshotReused && head === root.head ? getState(root.path) : undefined;
         const state = warm ?? await ensureState(root.path, { force: true, hints: [...snapshot.hashes.keys()] });
         signal.throwIfAborted();
-        root.snapshotId = snapshot.id; root.head = head;
+        root.snapshotId = snapshot.id; root.snapshotHashes = snapshot.hashes; root.head = head;
         signal.throwIfAborted();
         const budget = number(args.maxTokens ?? args.budget, 512, operation === 'sync' ? 128 : 256, operation === 'sync' ? 8192 : 16000);
         let result: OpResult;
@@ -220,8 +221,15 @@ export class FoveaEngine {
           let value: Record<string, unknown>;
           if (operation === 'anchors') {
             const filter = typeof args.filter === 'string' ? args.filter : '';
-            const rows = state.graph.anchors.filter(a => (!args.discovered || a.implicit) && (!filter || `${a.kind}\t${a.id}\t${a.file}:${a.line}`.includes(filter)))
-              .sort((a, b) => `${a.kind}\t${a.id}\t${a.file}:${a.line}`.localeCompare(`${b.kind}\t${b.id}\t${b.file}:${b.line}`));
+            // Build each anchor's sort key once instead of twice per comparison:
+            // sorting n anchors with per-compare template strings is O(n log n)
+            // allocations. Code-unit key order is locale-independent.
+            const anchorKey = (anchor: (typeof state.graph.anchors)[number]): string => `${anchor.kind}\t${anchor.id}\t${anchor.file}:${anchor.line}`;
+            const rows = state.graph.anchors
+              .map(anchor => [anchorKey(anchor), anchor] as const)
+              .filter(([key, anchor]) => (!args.discovered || anchor.implicit) && (!filter || key.includes(filter)))
+              .sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0)
+              .map(([, anchor]) => anchor);
             value = { anchors: rows.slice(offset, offset + limit), total: rows.length, offset, limit, truncated: offset + limit < rows.length };
           } else {
             const sigs = aggregateFiles(Object.fromEntries(Object.entries(state.facts).map(([file, facts]) => [file, facts.sigs])));
@@ -321,12 +329,12 @@ export class FoveaEngine {
       } catch (error) {
         // Never reuse partially refreshed state or publish navigation after cancellation.
         root.store.clear();
-        delete root.snapshotId;
+        delete root.snapshotId; delete root.snapshotHashes;
         throw error;
       } finally {
         await rm(stage, { recursive: true, force: true });
         if (signal.aborted) {
-          root.store.clear(); delete root.snapshotId;
+          root.store.clear(); delete root.snapshotId; delete root.snapshotHashes;
           this.preparedSync.delete(conversationKey);
           if (original.active || original.store.size) this.conversations.set(conversationKey, original);
           else this.conversations.delete(conversationKey);
@@ -343,7 +351,7 @@ export class FoveaEngine {
     const timers = root.store.get('build.ts:persistDebounce');
     if (timers instanceof Map) for (const timer of timers.values()) clearTimeout(timer as NodeJS.Timeout);
     root.store.clear(); root.hot = false; root.gap = true;
-    delete root.snapshotId; delete root.head;
+    delete root.snapshotId; delete root.snapshotHashes; delete root.head;
     for (const conversationKey of this.conversations.keys()) if (JSON.parse(conversationKey)[2] === key) this.conversations.delete(conversationKey);
     for (const conversationKey of this.preparedSync.keys()) if (JSON.parse(conversationKey)[2] === key) this.preparedSync.delete(conversationKey);
     await rm(root.path, { recursive: true, force: true });

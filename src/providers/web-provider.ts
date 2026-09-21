@@ -24,7 +24,7 @@ const MISSING_BROWSER_HARNESS = "browser-harness-js is required for web.search/w
 
 export interface BrowserHarnessExecutable { path: string; dev: number; ino: number }
 export interface WebSearchResult { title: string; url: string; snippet: string }
-export interface WebSearchOutput { source: "google"; query: string; results: WebSearchResult[] }
+export interface WebSearchOutput { source: "google" | "bing"; query: string; results: WebSearchResult[] }
 export interface WebOpenOutput { url: string; finalUrl: string; title: string; text: string; chars: number; truncated: boolean; selector: string }
 
 const rawSchemas: Record<string, Record<string, unknown>> = {
@@ -43,7 +43,7 @@ const rawSchemas: Record<string, Record<string, unknown>> = {
 
 const outputSchemas: Record<string, Record<string, unknown>> = {
   search: object({
-    source: { const: "google" },
+    source: { enum: ["google", "bing"] },
     query: string,
     results: { type: "array", maxItems: WEB_SEARCH_LIMIT_MAX, items: object({ title: string, url: string, snippet: string }, ["title", "url", "snippet"]) },
   }, ["source", "query", "results"]),
@@ -59,7 +59,7 @@ const outputSchemas: Record<string, Record<string, unknown>> = {
 };
 
 const descriptions: Record<string, string> = {
-  search: "Browser-backed Google web search through browser-harness-js/CDP. Opens an isolated background tab in a fresh private Chromium context (no default-profile cookies), returns bounded {title,url,snippet} results, and closes the tab. Use to ground current/open-world facts before relying on memory or stale training data. Requires browser-harness-js on PATH and a Chromium browser with remote debugging and private-context support available. Network risk; read-only open-world emission.",
+  search: "Browser-backed web search through browser-harness-js/CDP using the operator-configured engine (Google by default, or Bing). No automatic engine fallback or CAPTCHA solving. Opens an isolated background tab in a fresh private Chromium context (no default-profile cookies), returns bounded {title,url,snippet} results, and closes the tab. Use to ground current/open-world facts before relying on memory or stale training data. Requires browser-harness-js on PATH and a Chromium browser with remote debugging and private-context support available. Network risk; read-only open-world emission.",
   open: "Open one http(s) URL through browser-harness-js/CDP and extract bounded readable text from article/main/[role=main] or a caller-supplied selector. Use after web.search to inspect a source page that may block curl/simple HTTP clients. Closes the isolated tab. Network risk; read-only open-world emission.",
 };
 
@@ -218,21 +218,28 @@ export class WebProvider implements FabricProvider {
   readonly name = "web";
   readonly description = "Browser-backed web search and page reading through browser-harness-js";
   readonly #executable: BrowserHarnessExecutable;
+  readonly #searchEngine: WebSearchOutput["source"];
   readonly #searchTimeoutMs: number;
   readonly #openTimeoutMs: number;
-  constructor(options: { executable?: BrowserHarnessExecutable; executablePath?: string; searchTimeoutMs?: number; openTimeoutMs?: number } = {}) {
+  constructor(options: { executable?: BrowserHarnessExecutable; executablePath?: string; searchEngine?: WebSearchOutput["source"]; searchTimeoutMs?: number; openTimeoutMs?: number } = {}) {
     this.#executable = Object.freeze({ ...(options.executable ?? resolveBrowserHarnessExecutable(options.executablePath ?? "browser-harness-js")) });
     verifyBrowserHarnessExecutable(this.#executable);
+    this.#searchEngine = options.searchEngine ?? "google";
+    if (this.#searchEngine !== "google" && this.#searchEngine !== "bing") throw new Error("web searchEngine must be google or bing");
     this.#searchTimeoutMs = options.searchTimeoutMs ?? DEFAULT_SEARCH_TIMEOUT_MS;
     this.#openTimeoutMs = options.openTimeoutMs ?? DEFAULT_OPEN_TIMEOUT_MS;
     if (!Number.isSafeInteger(this.#searchTimeoutMs) || this.#searchTimeoutMs < 1 || this.#searchTimeoutMs > 900_000) throw new Error("web searchTimeoutMs must be 1..900000");
     if (!Number.isSafeInteger(this.#openTimeoutMs) || this.#openTimeoutMs < 1 || this.#openTimeoutMs > 900_000) throw new Error("web openTimeoutMs must be 1..900000");
   }
-  discoveryRevision(): string { return "1"; }
-  async list(): Promise<FabricActionDescriptor[]> { return jsonTree([...descriptors]); }
+  discoveryRevision(): string { return `2:${this.#searchEngine}`; }
+  async list(): Promise<FabricActionDescriptor[]> {
+    return jsonTree(descriptors.map(entry => entry.name !== "search" ? entry : {
+      ...entry, description: `${entry.description} Configured engine: ${this.#searchEngine}.`,
+      effect: { kind: "emission" as const, resources: [`web:${this.#searchEngine}-search`] },
+    }));
+  }
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> {
-    const descriptor = descriptors.find((entry) => entry.name === actionName);
-    return descriptor ? jsonTree(descriptor) : undefined;
+    return (await this.list()).find(entry => entry.name === actionName);
   }
   prepareArguments(actionName: string, args: Record<string, unknown>): Record<string, unknown> {
     const rawSchema = rawSchemas[actionName];
@@ -262,7 +269,7 @@ export class WebProvider implements FabricProvider {
     throw new Error(`Unknown web action: ${actionName}`);
   }
   effectResources(actionName: string, args: Record<string, unknown>): readonly string[] {
-    if (actionName === "search") return ["web:google-search"];
+    if (actionName === "search") return [`web:${this.#searchEngine}-search`];
     if (actionName === "open" && typeof args.url === "string") {
       try { return [`web:origin:${new URL(args.url).origin}`]; }
       catch { return ["web:open-url"]; }
@@ -281,20 +288,29 @@ export class WebProvider implements FabricProvider {
     const limit = args.limit as number;
     const raw = await jsonFromHarness({
       executable: this.#executable,
-      code: webSearchSnippet(query, limit, pageBudget(this.#searchTimeoutMs, context)),
+      code: webSearchSnippet(query, limit, pageBudget(this.#searchTimeoutMs, context), this.#searchEngine),
       timeoutMs: this.#searchTimeoutMs,
       maxStdoutChars: 120_000,
       ...(context.signal ? { signal: context.signal } : {}),
       ...(context.deadline ? { deadline: context.deadline } : {}),
     }, "search");
-    if (!Array.isArray(raw.results)) throw new Error("browser-harness-js returned invalid results for web.search");
+    if (Object.hasOwn(raw, "fabricWebError")) {
+      const errors: Record<string, string> = {
+        captcha: "WEB_SEARCH_CAPTCHA: the search engine requires human verification. No CAPTCHA solving, automatic retry, or engine fallback was attempted.",
+        consent: "WEB_SEARCH_CONSENT: the search engine requires consent in this fresh private context. No cookies were accepted; signing into the default profile does not supply this context's cookies.",
+        "unexpected-redirect": "WEB_SEARCH_REDIRECT: the search engine redirected outside its expected origin; no results were accepted.",
+      };
+      const code = raw.fabricWebError;
+      throw new Error(typeof code === "string" && Object.hasOwn(errors, code) ? `web.search (${this.#searchEngine}): ${errors[code]}` : "browser-harness-js returned an invalid web.search error category");
+    }
+    if (!Array.isArray(raw.results) || raw.source !== this.#searchEngine) throw new Error("browser-harness-js returned invalid results for web.search");
     const results = raw.results.slice(0, limit).map((item): WebSearchResult => {
       const record = isRecord(item) ? item : {};
       return { title: squish(record.title, 300), url: typeof record.url === "string" && record.url.length <= WEB_URL_MAX ? record.url : "", snippet: squish(record.snippet, 600) };
     }).filter((item) => {
       try { item.url = normalizeHttpUrl(item.url); return Boolean(item.title); } catch { return false; }
     });
-    return { source: "google", query, results };
+    return { source: this.#searchEngine, query, results };
   }
   async #open(args: Record<string, unknown>, context: FabricInvocationContext): Promise<WebOpenOutput> {
     const url = args.url as string;

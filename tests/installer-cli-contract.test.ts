@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ import { fixture as bundleFixture } from "./bundle-fixture.js";
 
 const manager = fileURLToPath(new URL("../scripts/install-manager.mjs", import.meta.url));
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cli-contract-"))); roots.push(root); fs.chmodSync(root, 0o700);
   const home = path.join(root, "home"), kiroHome = path.join(home, ".kiro"); fs.mkdirSync(home, { mode: 0o700 });

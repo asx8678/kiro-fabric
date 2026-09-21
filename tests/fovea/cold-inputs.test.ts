@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import { createScope } from '../../scripts/fovea-capability-probe.mjs';
 import { createParserSchedule, createParserTape, installSourceReadQueue, parserRequest } from './fixtures/cold-inputs.mjs';
 
 const scopes: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of scopes.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of scopes.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture() {
   const scope = createScope(); scopes.push(scope.root);
   const storage = path.join(scope.root, 'tmp'), directory = path.join(scope.root, 'tape');

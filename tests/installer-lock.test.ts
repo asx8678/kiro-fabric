@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -89,7 +90,7 @@ const deadOwner = async (base: string) => {
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(children.splice(0).map(kill));
-  for (const base of fixtures.splice(0)) fs.rmSync(base, { recursive: true, force: true });
+  for (const base of fixtures.splice(0)) removeFixtureSync(base, { recursive: true, force: true });
 });
 
 describe("installation lock gate 0b", () => {

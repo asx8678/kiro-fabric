@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +16,7 @@ import type { ContinuityReadResult } from "../src/continuity/render.js";
 import type { ContinuityRecord } from "../src/continuity/records.js";
 
 const roots: string[] = [], runtimes: KiroRuntime[] = [];
-afterEach(async () => { for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(async () => { for (const runtime of runtimes.splice(0)) await runtime.close(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const allow: FabricExecutionApprover = { approve: async () => {}, prepareApproval: () => ({ decision: "allow" }) };
 const deny: FabricExecutionApprover = { approve: async () => { throw new Error("denied"); }, prepareApproval: action => action.risk === "read" ? { decision: "allow" } : { decision: "deny", reason: "test denial" } };
 function fixture(enabled = true, bound = true, maxOutputChars = 50000) {
@@ -30,9 +31,9 @@ function fixture(enabled = true, bound = true, maxOutputChars = 50000) {
 }
 const defaults = { maxTasks: 32, maxTaskBytes: 131072, maxTotalBytes: 4194304, maxSummaryBytes: 8192 };
 describe("continuity provider and checked integration", () => {
-  it("registers exactly seven schema-validated actions with correct risks and checked guest types", async () => {
+  it("registers exactly eight schema-validated actions with correct risks and checked guest types", async () => {
     const f = fixture(), descriptors = (await f.runtime.registry.list()).filter(action => action.provider === "continuity");
-    expect(descriptors.map(action => action.name).sort()).toEqual(["checkpoint", "create", "delete", "expand", "list", "read", "recall"]);
+    expect(descriptors.map(action => action.name).sort()).toEqual(["checkpoint", "create", "delete", "expand", "handoff", "list", "read", "recall"]);
     for (const action of descriptors) expect(action.risk).toBe(["create", "checkpoint", "delete"].includes(action.name) ? "write" : "read");
     for (const action of CONTINUITY_ACTION_DESCRIPTORS) expect(validateSchemaValue(action.inputSchema, {}).status).not.toBe("unavailable");
     for (const code of [
@@ -44,6 +45,7 @@ describe("continuity provider and checked integration", () => {
       'return await continuity.recall({taskId:"id",query:"failed"});',
       'return await continuity.checkpoint({taskId:"id",expectedRevision:1,requestId:"r",checks:[{id:"test",text:"regression",status:"open"}]});',
       'return await continuity.expand({taskId:"id",expectedRevision:1,hash:"hash"});',
+      'return await continuity.handoff({taskId:"id",expectedRevision:1,hash:"hash"});',
       'return await continuity.delete({taskId:"id",expectedRevision:1});',
     ]) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
     expect(typeCheckFabricCode('return await continuity.checkpoint({taskId:"id",facts:[]});', fabricGuestDeclarations).errors.length).toBeGreaterThan(0);
@@ -61,6 +63,15 @@ describe("continuity provider and checked integration", () => {
     const expanded = await f.run(`return await continuity.expand({taskId:${JSON.stringify(task.taskId)},expectedRevision:${saved.revision},hash:${JSON.stringify(saved.hash)}});`);
     expect(expanded.success, expanded.error).toBe(true);
     expect((expanded.value as { records: ContinuityRecord[] }).records.map(record => record.text)).toEqual(["Goal", "No native compaction override", "Tests still needed"]);
+    const handoff = await f.run(`return await continuity.handoff({taskId:${JSON.stringify(task.taskId)},expectedRevision:${saved.revision},hash:${JSON.stringify(saved.hash)}});`);
+    expect(handoff.success, handoff.error).toBe(true);
+    const packet = handoff.value as { taskId: string; revision: number; hash: string; packetHash: string; prompt: string };
+    expect(packet.taskId).toBe(task.taskId);
+    expect(packet.prompt).toContain("Goal");
+    expect(packet.prompt).toContain("No native compaction override");
+    const dynamicHandoff = await f.run(`return await tools.call({ref:"continuity.handoff",args:{taskId:${JSON.stringify(task.taskId)},expectedRevision:${saved.revision},hash:${JSON.stringify(saved.hash)}}});`);
+    expect(dynamicHandoff.success, dynamicHandoff.error).toBe(true);
+    expect((dynamicHandoff.value as { packetHash: string }).packetHash).toBe(packet.packetHash);
     const listed = await f.run('return await continuity.list();'); expect(listed.success, listed.error).toBe(true);
     expect(listed.value).toMatchObject({ total: 1, nextOffset: null });
     // Public arbitrary state is a separate store and cannot overwrite the provider-owned task.

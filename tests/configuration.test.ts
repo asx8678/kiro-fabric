@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -47,7 +48,7 @@ describe("Agent-only configuration", () => {
       expect(fs.readFileSync(file, "utf8")).toBe(bytes);
       const after = fs.statSync(file, { bigint: true });
       expect([after.ino, after.mtimeNs, after.ctimeNs]).toEqual([before.ino, before.mtimeNs, before.ctimeNs]);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
   it("normalizes a finite per-service execution admission limit", () => {
     expect(normalizeFabricConfig({}).executor.maxConcurrentExecutions).toBe(4);
@@ -106,7 +107,7 @@ describe("Agent-only configuration", () => {
       fs.writeFileSync(data.mcpConfig, " ".repeat(1024 * 1024 + 1));
       expect(() => prepareKiroPowerDataPaths(root)).toThrow("exceeds 1048576 bytes");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 
@@ -120,7 +121,7 @@ describe("Agent-only configuration", () => {
       fs.symlinkSync(target, alias);
       expect(() => loadFabricConfig(alias)).toThrow("private regular file");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 
@@ -138,7 +139,7 @@ describe("Agent-only configuration", () => {
       fs.writeFileSync(file, " ".repeat(256 * 1024 + 1));
       expect(() => loadFabricConfig(file)).toThrow("exceeds 262144 bytes");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 
@@ -171,7 +172,7 @@ describe("Agent-only configuration", () => {
       expect(() => loadFabricConfig(file)).toThrow("newer than supported");
       expect(fs.readFileSync(file, "utf8")).toBe(future);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 
@@ -197,7 +198,7 @@ describe("Agent-only configuration", () => {
       expect(() => loadFabricConfig(file, callerDefaults)).toThrow("invalid configuration value: mcp.callTimeoutMs");
       expect(fs.readFileSync(file, "utf8")).toBe(invalidForCaller);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 
@@ -238,7 +239,7 @@ describe("Agent-only configuration", () => {
       expect(fs.readFileSync(file, "utf8")).toBe(replacement);
     } finally {
       read.mockRestore();
-      fs.rmSync(root, { recursive: true, force: true });
+      removeFixtureSync(root, { recursive: true, force: true });
     }
   });
 

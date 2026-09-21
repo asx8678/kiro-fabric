@@ -360,6 +360,10 @@ export async function runManager(argv, internal = {}) {
     if (installationChange) error.installationChange = installationChange;
     if (operationResult) { error.committed = error.committed === true || operationResult.committed === true; error.operationCompleted = true; error.recoveryRequired = true; error.operationResult = operationResult; }
     error.command ??= options.command;
+    // Failure paths deliberately never write into the installation home: the
+    // admission and recovery suites verify that a failed operation leaves the
+    // evidence tree untouched (no logs/ creation, no parent-mtime drift). The
+    // structured error result carries the full failure state instead.
     if (internal.present) { const result = managerErrorResult(error, home); emit(result, options); return result.exitCode; }
     return presentManagerError(error, options.json, home);
   }

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -37,7 +38,7 @@ function fixture(budget = 40000, visible = 40000, invocationBudget = budget) {
   const root = path.join(base, "workspace"); fs.mkdirSync(root);
   const provider = new LocalCodingProvider({ root, lockRoot: path.join(base, "locks"), maxResultChars: budget, maxReadManyChars: visible });
   const registry = new ActionRegistry(); registry.register(provider);
-  cleanup.push(async () => { await provider.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanup.push(async () => { await provider.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   const approve = vi.fn(async () => {});
   const context = (): FabricRegistryInvocationContext => ({ cwd: "/untrusted", audits: [], maxResultChars: invocationBudget, approve });
   const put = (file: string, text: string | Buffer) => fs.writeFileSync(path.join(root, file), text);

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,7 +13,7 @@ function fixture(options: Partial<ContinuityStoreOptions> = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-continuity-store-")); roots.push(root);
   return { root, file: path.join(root, "state.json"), context: { cwd: root }, store: new ContinuityStore(root, { ...defaults, ...options }) };
 }
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const facts = [{ kind: "decision", text: "A caller-declared decision" }];
 describe("durable continuity storage", () => {
   it("retains exact original records across 100 publications and independent store instances", async () => {

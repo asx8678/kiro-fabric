@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -16,7 +17,7 @@ const sentinel = "fabric-smoke-fixture-acceptance";
 const success = () => ({ read: { path: "probe.txt", text: `${sentinel}\n`, totalLines: 1, truncated: false }, search: { matches: [{ path: "probe.txt", line: 1, text: sentinel }], truncated: false } });
 const frame = (value: unknown) => ({ result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); syncBuiltinESMExports(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("independent installer read and search acceptance", () => {
   it("accepts the exact fixture JSON, with an explicitly checked TypeScript program", () => {

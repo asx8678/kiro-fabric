@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -48,7 +49,7 @@ async function nativeMutationFixture(label: string, parser: { version: string; s
   const close = async () => {
     for (const service of services) await service.close();
     for (const host of hosts) await host.close();
-    fs.rmSync(scope.root, { recursive: true, force: true });
+    removeFixtureSync(scope.root, { recursive: true, force: true });
   };
   const make = async (conversationId: string) => {
     const host = new FoveaHost({ dataRoot: scope.root, configFile: path.join(scope.root, 'config.json'), parser: { ...parser, path: options.parser }, entrypoint: nativeEntrypoint() });
@@ -95,7 +96,7 @@ describe('lifecycle harness admission', () => {
       await expect(archivePinnedReference(scope, options.reference, 'HEAD', 'pi-fovea')).rejects.toThrow('invalid reference identity');
       await expect(archivePinnedReference(scope, options.reference, PINNED.upstreamCommit, '../escape')).rejects.toThrow('invalid reference identity');
       expect(fs.existsSync(path.join(scope.root, 'pi-fovea'))).toBe(false);
-    } finally { fs.rmSync(scope.root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(scope.root, { recursive: true, force: true }); }
   });
   it('missing pinned objects or parser stay environment-blocked, never an executed trace', async () => {
     const scope = createScope();
@@ -108,8 +109,8 @@ describe('lifecycle harness admission', () => {
       expect(report.qualifiedNative).toBe(false); expect(report.blockers).toHaveLength(3);
       expect(fs.statSync(result.report).mode & 0o777).toBe(0o600);
     } finally {
-      if (reportFile) fs.rmSync(path.dirname(reportFile), { recursive: true, force: true });
-      fs.rmSync(scope.root, { recursive: true, force: true });
+      if (reportFile) removeFixtureSync(path.dirname(reportFile), { recursive: true, force: true });
+      removeFixtureSync(scope.root, { recursive: true, force: true });
     }
   }, 30000);
 });
@@ -127,7 +128,7 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
   }, 150000);
   afterAll(() => {
     vi.restoreAllMocks(); nativeFixture?.close(); nativeFixture = undefined;
-    if (scope && report?.status === 'executed') fs.rmSync(scope, { recursive: true, force: true });
+    if (scope && report?.status === 'executed') removeFixtureSync(scope, { recursive: true, force: true });
   });
   beforeEach(() => {
     // Darwin exercises actual native journal/source I/O and a real child engine.
@@ -343,6 +344,6 @@ describe.skipIf(!available)('exact pinned lifecycle replay (fixture runner, not 
       asserted('reset-clears-roots-focus-baseline-not-graph');
       // These explicit authority operations do NOT qualify Kiro new/resume/
       // compaction. Those events have no verified native mapping yet.
-    } finally { await service.close(); await host.close(); fs.rmSync(native.root, { recursive: true, force: true }); }
+    } finally { await service.close(); await host.close(); removeFixtureSync(native.root, { recursive: true, force: true }); }
   }, 60000);
 });

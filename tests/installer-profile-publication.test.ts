@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,7 +9,7 @@ import { publishImmutableProfile } from '../scripts/installer-profile-publicatio
 import { installerSafety as s } from '../scripts/install-agent-user.mjs';
 
 const roots:string[]=[];
-afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))fs.rmSync(root,{recursive:true,force:true});});
+afterEach(()=>{vi.restoreAllMocks();for(const root of roots.splice(0))removeFixtureSync(root,{recursive:true,force:true});});
 function setup(){const home=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'profile-publication-')));roots.push(home);const directory=path.join(home,'agents');fs.mkdirSync(directory,{mode:0o700});return {home,directory,file:path.join(directory,'kiro-fabric-review-'+'a'.repeat(12)+'.json'),installation:{status:'active',owner:{currentRuntime:'a'.repeat(64)}}};}
 const module=new URL('../scripts/installer-profile-publication.mjs',import.meta.url).href;
 const launchModule=new URL('../scripts/launch-profile.mjs',import.meta.url).href;

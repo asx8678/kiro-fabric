@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ const temporary = () => {
 const namespaceDirectory = (root: string) => path.join(root, "memory", fs.readdirSync(path.join(root, "memory")).find((name) => !name.startsWith("."))!);
 afterEach(() => {
   vi.restoreAllMocks();
-  while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true });
+  while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true });
 });
 
 describe("bounded memory namespace scans", () => {

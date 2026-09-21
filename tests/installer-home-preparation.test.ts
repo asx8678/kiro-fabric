@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +12,7 @@ import { installCompleteGeneration, inspectCompleteInstallation } from "../scrip
 import { fixture } from "./bundle-fixture.js";
 
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function setup(legacy = false) {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "home-preparation-"))); roots.push(root); fs.chmodSync(root, 0o700);
   const home = path.join(root, "custom Kiro home ü"), agents = path.join(home, "agents"), old = path.join(home, ".kiro-fabric");

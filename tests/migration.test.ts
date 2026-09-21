@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,7 +18,7 @@ const temporary = (): string => {
   roots.push(root);
   return root;
 };
-afterEach(() => { while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 const workspaceId = (identity: KiroPowerWorkspaceIdentity, generation: 2 | 3): string => createHash("sha256")
   .update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0")
   .update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
@@ -36,7 +37,7 @@ function build(root: string, content?: string) {
   put(root, "dist/kiro-agent-closure/closure-manifest.json", JSON.stringify(manifest));
   return manifest;
 }
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("build input provenance", () => {
   it.each(["src/kiro/first-prompt-hook.ts", "skills/fabric-exec/SKILL.md", "resources/steering/fabric.md", "scripts/agent-profile.mjs", "scripts/esbuild-common.mjs", "scripts/normalize-artifact-modes.mjs", "pnpm-lock.yaml"])("rejects build A after %s changes to B, accepts rebuild", name => {

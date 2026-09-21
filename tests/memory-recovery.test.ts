@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -28,7 +29,7 @@ const lockDirectory = (root: string): string => {
   visit(root);
   return found;
 };
-afterEach(() => { vi.restoreAllMocks(); while (roots.length) fs.rmSync(roots.pop()!, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
 
 describe("Fabric memory commit recovery", () => {
   it("does not acknowledge a pre-publication interruption as committed", async () => {
@@ -174,7 +175,7 @@ describe("Fabric memory commit recovery", () => {
     await expect(memory.set("first", 1)).rejects.toMatchObject({ committed: true });
     vi.restoreAllMocks();
     const lock = lockDirectory(root);
-    fs.rmSync(lock, { recursive: true });
+    removeFixtureSync(lock, { recursive: true });
     fs.mkdirSync(lock, { mode: 0o700 });
     fs.writeFileSync(path.join(lock, "owner.json"), "foreign", { mode: 0o600 });
     await expect(memory.set("second", 2)).rejects.toThrow(/foreign|replacement/);

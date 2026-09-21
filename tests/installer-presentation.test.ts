@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -13,7 +14,7 @@ vi.mock("../scripts/installer-smoke.mjs", () => ({ smokeCandidate: vi.fn(async (
 vi.mock("node:readline/promises", () => ({ createInterface: () => ({ question: async (prompt: string) => { process.stderr.write(prompt); return "n"; }, close: () => {} }) }));
 import { smokeCandidate } from "../scripts/installer-smoke.mjs";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllEnvs(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 async function setup() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "installer-presentation-"))); roots.push(root); fs.chmodSync(root, 0o700);

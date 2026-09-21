@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -6,7 +7,7 @@ import { ActionRegistry } from "../src/core/action-registry.js";
 import { LocalCodingProvider } from "../src/providers/local-provider.js";
 import { LocalPaths } from "../src/providers/local-path.js";
 const roots: string[] = [];
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 function fixture(budget = 20000) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "cursor-"))); roots.push(base);
   const root = path.join(base, "src"); fs.mkdirSync(root);

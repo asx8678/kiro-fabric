@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -19,6 +20,6 @@ for (const command of ["install", "update", "rollback", "uninstall", "recover"])
         expect(JSON.parse(result.stdout).error).toContain("--yes");
       } else { expect(result.stdout).toBe(""); expect(result.stderr).toContain("--yes"); }
       expect(fs.readdirSync(home)).toEqual([]);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 }

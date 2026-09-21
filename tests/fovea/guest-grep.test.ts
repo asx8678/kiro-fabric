@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,7 +31,7 @@ function fixture(mode: 'off' | 'augment' | 'replace', hint: 'ok' | 'no-match' | 
   const local = new LocalCodingProvider({ root, lockRoot: path.join(base, 'locks'), maxResultChars: 40000 });
   const registry = new ActionRegistry(); registry.register(repo); registry.register(local);
   const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 10000 } }), root);
-  cleanups.push(async () => { await service.close(); fs.rmSync(base, { recursive: true, force: true }); });
+  cleanups.push(async () => { await service.close(); removeFixtureSync(base, { recursive: true, force: true }); });
   return { calls, packet, local, run: (code: string) => service.execute({ code, approver: { prepareApproval: () => ({ decision: 'allow' as const }), async approve() { throw new Error('unexpected prompt'); } } }) };
 }
 

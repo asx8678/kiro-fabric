@@ -124,7 +124,7 @@ const sweep = async (directory: string, now: number, dryRun = false): Promise<st
     } catch { /* missing, malformed, inaccessible, concurrent replacement */ }
   }
   for (const kind of ["cache", "spill"] as const) {
-    const entries = groups[kind].sort((a, b) => a.stat.mtimeMs - b.stat.mtimeMs || a.path.localeCompare(b.path));
+    const entries = groups[kind].sort((a, b) => a.stat.mtimeMs - b.stat.mtimeMs || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const policy = policies[kind];
     let bytes = entries.reduce((n, e) => n + e.stat.size, 0);
     let count = entries.length;

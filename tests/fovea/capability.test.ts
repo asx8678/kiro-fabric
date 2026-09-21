@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import { afterEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -6,7 +7,7 @@ import { buildSync } from 'esbuild';
 import { assessGates, CHAT_PROMPT, createScope, executeNativeProbes, GATES, LIMITS, main, marker, prepareNativeScope, runBounded, sanitizeProbe } from '../../scripts/fovea-capability-probe.mjs';
 import { foveaHookCapability } from '../../src/kiro/fovea-hook.js';
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 describe('capability qualification safety', () => {
   it('keeps all twelve gates untested without actual evidence on each distinct client surface', () => {
     expect(GATES.map(([id]) => id)).toEqual(Array.from({ length: 12 }, (_, i) => `H${String(i + 1).padStart(2, '0')}`));

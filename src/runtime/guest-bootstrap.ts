@@ -385,7 +385,7 @@ export const GUEST_SETUP = `
   globalThis.continuity = objectFreeze({
     create: (args) => call("continuity.create", args), checkpoint: (args) => call("continuity.checkpoint", args),
     read: (args) => call("continuity.read", args), recall: (args) => call("continuity.recall", args), list: (args = {}) => call("continuity.list", args),
-    expand: (args) => call("continuity.expand", args), delete: (args) => call("continuity.delete", args),
+    expand: (args) => call("continuity.expand", args), handoff: (args) => call("continuity.handoff", args), delete: (args) => call("continuity.delete", args),
   });
   globalThis.state = objectFreeze({
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),

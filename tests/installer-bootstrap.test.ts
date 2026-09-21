@@ -1,5 +1,6 @@
+import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
-import { readFile, writeFile, mkdtemp, mkdir, rm, symlink, lstat } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, symlink, lstat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fixture, fixtureTools } from './bundle-fixture.js';

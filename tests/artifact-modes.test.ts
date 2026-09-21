@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +15,7 @@ function fixture() {
 const run = (root: string) => spawnSync(process.execPath, [script], { cwd: root, encoding: "utf8", timeout: 10000 });
 const mode = (file: string) => fs.statSync(file).mode & 0o7777;
 afterEach(() => {
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 describe("generated artifact permissions", () => {

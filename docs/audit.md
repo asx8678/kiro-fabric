@@ -57,9 +57,9 @@ The execution approval controller and qualification/validation phase helpers rem
 
 ## Browser-backed fact grounding
 
-- `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, private-context requests and withheld raw diagnostics.
+- `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, explicit Google/Bing selection with matching discovery/effects/output, fixed CAPTCHA/consent/redirect categories and withheld raw diagnostics.
 - `src/providers/web-privacy.ts` — bounded heuristic secret/PII and token-URL rejection before dispatch; not semantic DLP.
-- `src/providers/web-snippets.ts` — fixed JSON-escaped CDP recipes, per-call tabs, deadline cleanup, search extraction and bounded page text.
+- `src/providers/web-snippets.ts` — fixed JSON-escaped CDP recipes, per-call private contexts, bounded deadline cleanup, Google/Bing extraction, decoded destination links and bounded page text. Confirmed CDP context disposal closes its pages even if concurrent tab closure rejects; unconfirmed context disposal still fails.
 - `tests/web-provider.test.ts` — executable trust, process bounds, configuration, checked guest/runtime registration and denied-before-launch controls.
 - `tests/web-snippets.test.ts` — actual generated JS with deterministic CDP/DOM fixtures, isolated parallel tabs, error paths and late-creation cleanup.
 
@@ -281,6 +281,8 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `scripts/source-install.mjs`
 - `scripts/source-pull-hook.mjs` — explicit source-home post-merge activation with foreign-hook preservation.
 - `tests/source-pull-hook.test.ts` — source-home equality, hook failure reporting, preservation, and narrow macOS ancestry policy.
+- `tests/fixture-cleanup.mjs` — explicit bounded test teardown; retains whole fixtures containing Git metadata or bare repository layouts and refuses uninspectable/unsafe roots. Read-only inspection is independent of production fault mocks; no production filesystem monkey-patch or later repository pruning.
+- `tests/fixture-cleanup.test.ts` — nested/worktree/symlink/case-folded metadata, real git-init retention without commits, bare layouts, direct metadata paths, unsafe roots, bounded traversal, inspection failures, mock independence, non-repository removal and an AST guard against raw test fs removals.
 - `tests/installer-configuration-backup.test.ts` — backup manifest, retention, skip and fail-closed restore coverage.
 - `src/installation/bundle-contract.mjs`
 - `src/installation/installer-lock.mjs`
@@ -571,3 +573,28 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/complete-release-fixture.ts` — four-target synthetic signed complete-bundle fixtures; no fixture binary is executed and keys are test-only.
 - `tests/release-complete.test.ts` — exact captured promotion plus missing/stale/unsigned/tampered evidence, dirty source and offline ceremony guards.
 - `tests/complete-release-workflow.test.ts` — protected manual candidate/promotion registration, signed tag/commit/origin checks, no signing secret exposure and inert hostile tag inputs.
+
+## Continuity handoff, ACP probe, Fovea call contexts and installer TUI (current implementation)
+
+- `src/continuity/conversation-archive.ts` — bounded conversation archive: append-only records, identity binding and tamper-evidence retention.
+- `src/continuity/handoff.ts` — deterministic fresh-session handoff packets: pinned objective, constraints, open checks, resume prompt and stable packet hash.
+- `src/continuity/rotation-journal.ts` — cross-schema rotation journal with CAS, abort, reconciliation and evidence retention.
+- `src/continuity/validation.ts` — shared validation kernel for continuity records, views and handoff packets.
+- `src/fovea/call-context.ts` — fovea call-context records joined for admission-qualified navigation.
+- `src/kiro/acp-capability-probe.ts` — ACP transport capability probe with qualification lifecycle and fail-closed defaults.
+- `src/kiro/acp-probe-contract.ts` — ACP wire-contract reader; documents the raw-byte cap a live transport must enforce before JSON parsing.
+- `src/kiro/fovea-call-context.ts` — native fovea call-context capture, propagation and joining.
+- `scripts/continuity-acp-probe.mjs` — offline ACP probe driver against the pinned wire fixture.
+- `scripts/install-tui.mjs` — presentation-only installer TUI front-end delegating to install.sh --source.
+- `tests/continuity-acp-probe.test.ts` — ACP probe contract, lifecycle and fault-injection coverage.
+- `tests/continuity-archive.test.ts` — archive identity, retention and refusal behavior.
+- `tests/continuity-handoff.test.ts` — handoff packet coverage, budgets and facade.
+- `tests/continuity-recall.test.ts` — bounded recall and search pointer coverage.
+- `tests/continuity-rotation.test.ts` — rotation journal CAS, abort and reconciliation.
+- `tests/fovea/call-context.test.ts` — call-context record admission and shape.
+- `tests/fovea/call-contexts.test.ts` — call-context joining across native fovea calls.
+- `tests/fovea/mcp-call-context.test.ts` — MCP-layer call-context propagation.
+- `tests/fovea/outline-structured.test.ts` — structured-outline demotion pins: real-binary behavior plus stub failure classes.
+- `tests/fovea/source-retention.test.ts` — streaming source capture, warm snapshot reuse and retention bounds.
+- `tests/state-durability.test.ts` — state-store durability fault matrix: committed versus acknowledged publication.
+

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -21,7 +22,7 @@ const temporary = (): string => {
   return root;
 };
 afterAll(() => {
-  for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 const readEvents = (file: string): TraceEvent[] =>

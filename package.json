@@ -52,6 +52,7 @@
     "qualify:fovea:external": "node scripts/fovea-reference-diagnostics.mjs",
     "qualify:fovea:controls": "node scripts/fovea-controls-probe.mjs",
     "qualify:fovea:human": "node scripts/fovea-human-qualification.mjs",
+    "probe:continuity": "node scripts/continuity-acp-probe.mjs",
     "lint:dead": "knip",
     "efficiency:manifest": "node scripts/efficiency-baseline.mjs manifest",
     "efficiency:probe": "node scripts/efficiency-baseline.mjs probe",

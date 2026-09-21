@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -370,7 +371,7 @@ describe('mandatory fixture coding qualification', () => {
       expect(assertCodingQualification(gate)).toBe(gate);
     } finally {
       await provider.close();
-      fs.rmSync(base, { recursive: true, force: true });
+      removeFixtureSync(base, { recursive: true, force: true });
     }
   });
   it('typechecks every exact coding model program against the product guest API', async () => {

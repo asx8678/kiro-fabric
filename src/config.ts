@@ -45,6 +45,7 @@ export interface FabricMcpConfig {
 export interface FabricWebConfig {
   enabled: boolean;
   command: string;
+  searchEngine: "google" | "bing";
   searchTimeoutMs: number;
   openTimeoutMs: number;
 }
@@ -130,6 +131,7 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
   web: {
     enabled: false,
     command: "browser-harness-js",
+    searchEngine: "google",
     searchTimeoutMs: 45_000,
     openTimeoutMs: 45_000,
   },
@@ -178,7 +180,7 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxConcurrentExecutions", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
-  web: ["enabled", "command", "searchTimeoutMs", "openTimeoutMs"],
+  web: ["enabled", "command", "searchEngine", "searchTimeoutMs", "openTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
   continuity: ["enabled", "captureFailureOutput", "maxTasks", "maxTaskBytes", "maxTotalBytes", "maxSummaryBytes"],
@@ -298,6 +300,7 @@ export const normalizeFabricConfig = (
     web: {
       enabled: bool(web.enabled, defaults.web.enabled),
       command: boundedString(web.command, defaults.web.command, 4_096),
+      searchEngine: web.searchEngine === "google" || web.searchEngine === "bing" ? web.searchEngine : defaults.web.searchEngine,
       searchTimeoutMs: callTimeout(web.searchTimeoutMs, defaults.web.searchTimeoutMs, maxTimeoutMs),
       openTimeoutMs: callTimeout(web.openTimeoutMs, defaults.web.openTimeoutMs, maxTimeoutMs),
     },

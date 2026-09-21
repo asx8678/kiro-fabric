@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
@@ -17,7 +18,7 @@ const fixtures: string[] = [];
 const runtimes: KiroRuntime[] = [];
 afterEach(async () => {
   for (const runtime of runtimes.splice(0)) await runtime.close();
-  for (const root of fixtures.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of fixtures.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 function fixture() {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-first-prompt-")));

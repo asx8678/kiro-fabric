@@ -1,6 +1,7 @@
+import { removeFixture as rm } from "../fixture-cleanup.mjs";
 import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
@@ -156,6 +157,16 @@ describe.skipIf(process.platform !== 'linux')('native source and navigation cove
     const cappedStorage = join(storage, 'capped'); await mkdir(cappedStorage);
     const capped = await captureSourceSnapshot(root, cappedStorage, undefined, { maxFiles: 1 });
     valid({ source: capped.coverage }); expect(capped.coverage.capped).toBe(true);
+  });
+
+  it('admits the warm snapshot-reuse marker on the navigation coverage contract', async () => {
+    const { root, storage } = await fixture();
+    await writeFile(join(root, 'stable.ts'), 'export const stable = 1;\n');
+    const first = await captureSourceSnapshot(root, storage, undefined, {});
+    const reusedStorage = join(storage, 'reused'); await mkdir(reusedStorage);
+    const second = await captureSourceSnapshot(root, reusedStorage, undefined, { previous: { id: first.id, root: first.root, hashes: first.hashes } });
+    expect(second.coverage.reusedPreviousSnapshot).toBe(true);
+    valid({ source: second.coverage });
   });
 
   it.skipIf(!existsSync(parser.path))('validates real sketch/focus/dwell/impact, transient augmentation and no-match host packet projections', async () => {

@@ -24,7 +24,7 @@ import "../chunks/chunk-AE4E2KSU.js";
 
 // src/fovea/engine.ts
 import { createHash as createHash10, randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir2, mkdtemp, lstat as lstat3, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
+import { mkdir as mkdir2, mkdtemp, lstat as lstat4, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, join as join10, resolve as resolve5 } from "node:path";
 
 // src/fovea/core/context.ts
@@ -780,7 +780,7 @@ var sweep = async (directory, now, dryRun = false) => {
     }
   }
   for (const kind of ["cache", "spill"]) {
-    const entries = groups[kind].sort((a, b) => a.stat.mtimeMs - b.stat.mtimeMs || a.path.localeCompare(b.path));
+    const entries = groups[kind].sort((a, b) => a.stat.mtimeMs - b.stat.mtimeMs || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
     const policy = policies[kind];
     let bytes = entries.reduce((n, e) => n + e.stat.size, 0);
     let count = entries.length;
@@ -973,7 +973,7 @@ var cmpNodes = (g, field) => (x, y) => {
   if (f !== 0) return f;
   const a = g.nodes[x];
   const b = g.nodes[y];
-  return a.file === b.file ? a.line - b.line || a.name.localeCompare(b.name) : a.file < b.file ? -1 : 1;
+  return a.file === b.file ? a.line - b.line || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) : a.file < b.file ? -1 : 1;
 };
 var revealFoveated = (g, field, opts) => {
   let vmax = 0;
@@ -1474,12 +1474,12 @@ var outlineStructured = async (files, _lang, cwd) => {
     (chunk) => ["outline", "--json=compact", "--view=expanded", "--", ...chunk],
     cwd
   );
+  const positions = new Map(files.map((file, i) => [file, i]));
   for (const { result } of settled) {
-    if (!result.stdout.trim()) return void 0;
+    if (!result.ok || !result.stdout.trim()) return void 0;
     try {
       const parsed = JSON.parse(result.stdout);
       if (!Array.isArray(parsed)) return void 0;
-      const positions = new Map(files.map((file, i) => [file, i]));
       if (parsed.some((file) => !positions.has(file.path))) return void 0;
       parsed.sort((a, b) => positions.get(a.path) - positions.get(b.path));
       for (const file of parsed) out.push(file);
@@ -1832,9 +1832,6 @@ var SIG_RULES = {
     RX(/\bfunction\s+([A-Za-z_$][\w$]*)/, "function"),
     RX(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)/, "function")
   ],
-  JavaScript: [],
-  // filled below (same as TypeScript)
-  Tsx: [],
   Go: [
     RX(/^func\s*\(\s*\w+\s+\*?([A-Za-z_]\w*)\s*\)\s*([A-Za-z_]\w*)/, "method", 1, 2),
     RX(/^func\s+([A-Za-z_]\w*)/, "function"),
@@ -1866,11 +1863,9 @@ var SIG_RULES = {
     RX(/^[A-Za-z_][\w\s*]*?\s+([A-Za-z_]\w*)\s*\([^;]*\)\s*\{?/, "function"),
     RX(/^\s*(?:struct|enum|union)\s+([A-Za-z_]\w*)/, "class")
   ],
-  "C++": [],
   Java: [
     RX(/\b(?:class|interface|enum|record)\s+([A-Za-z_]\w*)/, "class")
   ],
-  Kotlin: [],
   Lua: [RX(/\bfunction\s+([\w.:]+)/, "function")]
 };
 SIG_RULES["C++"] = SIG_RULES.C;
@@ -1935,9 +1930,10 @@ var topLocation = (item, sourceLines) => {
   let sig = cleanSig(item.signature || item.name);
   if (item.name && (!identifierRe(item.name).test(sig) || /^@/.test(sig))) {
     const end = Math.min(sourceLines.length - 1, item.range.end?.line ?? item.range.start.line + 12);
+    const nameRe = identifierRe(item.name);
     for (let i = item.range.start.line; i <= end; i++) {
       const candidate = sourceLines[i];
-      if (candidate && identifierRe(item.name).test(candidate)) {
+      if (candidate && nameRe.test(candidate)) {
         line = i + 1;
         sig = cleanSig(candidate);
         break;
@@ -2011,7 +2007,6 @@ var parseOutlineText = (text, lang) => {
     const entry = /^\s*(\d+):\s(.*)$/.exec(raw);
     const child = /^(\s+)(method|field):\s(.+)$/.exec(raw);
     if (entry) {
-      file = file || "";
       const sig = cleanSig(entry[2]);
       if (!sig) continue;
       const named = deriveName(sig, lang);
@@ -2432,7 +2427,14 @@ var pushAll = (out, more) => {
 };
 var dedupe = (arr, key) => {
   const seen2 = /* @__PURE__ */ new Set();
-  return arr.filter((x) => seen2.has(key(x)) ? false : (seen2.add(key(x)), true));
+  const out = [];
+  for (const item of arr) {
+    const id = key(item);
+    if (seen2.has(id)) continue;
+    seen2.add(id);
+    out.push(item);
+  }
+  return out;
 };
 
 // src/fovea/core/join.ts
@@ -2503,7 +2505,7 @@ var buildJoinIndex = (sites, resolveOccurrence) => {
           key
         };
         const previous = pairBest.get(pk);
-        if (!previous || w > previous.w || w === previous.w && key.localeCompare(previous.evidence.key ?? "") < 0) {
+        if (!previous || w > previous.w || w === previous.w && key < (previous.evidence.key ?? "")) {
           pairBest.set(pk, { w, evidence });
         }
       }
@@ -4348,7 +4350,7 @@ var extractProtocolAnchors = async (files, source) => {
     if (file.endsWith(".proto")) out.push(...protoAnchors(file, text));
     else out.push(...graphqlAnchors(file, text));
   }
-  out.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.id.localeCompare(b.id) || (a.ruleId ?? "").localeCompare(b.ruleId ?? ""));
+  out.sort((a, b) => (a.file < b.file ? -1 : a.file > b.file ? 1 : 0) || a.line - b.line || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0) || ((a.ruleId ?? "") < (b.ruleId ?? "") ? -1 : (a.ruleId ?? "") > (b.ruleId ?? "") ? 1 : 0));
   const seen2 = /* @__PURE__ */ new Set();
   return out.filter((item) => {
     const key = `${item.id}|${item.file}|${item.line}`;
@@ -4405,6 +4407,18 @@ var isGeneratedSource = (rel, text) => {
     i = nl + 1;
   }
   return false;
+};
+var isGeneratedSourceBytes = (rel, data) => {
+  if (GENERATED_NAME_RE.test(rel)) return true;
+  if (data.length < MINIFIED_LINE_CHARS) return false;
+  let start = 0;
+  for (; ; ) {
+    const nl = data.indexOf(10, start);
+    const end = nl === -1 ? data.length : nl;
+    if (end - start >= MINIFIED_LINE_CHARS) return true;
+    if (nl === -1) return false;
+    start = nl + 1;
+  }
 };
 var NO_BOUNDARIES = /* @__PURE__ */ new Set();
 var expandSubmodules = async (root, prefix, entries, enrolled, depth) => {
@@ -4520,7 +4534,7 @@ var discoverFiles = async (root, routeRes, enrolled = NO_BOUNDARIES, maxFiles = 
       excluded.push(prefix);
       return;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
       if (truncated) break;
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
@@ -6388,7 +6402,7 @@ var readRecords = async (root, since) => {
     } catch {
     }
   }));
-  return records.sort((a, b) => a.at - b.at || a.owner.localeCompare(b.owner) || (a.commitOrder ?? Number.MAX_SAFE_INTEGER) - (b.commitOrder ?? Number.MAX_SAFE_INTEGER) || a.toolCallId.localeCompare(b.toolCallId));
+  return records.sort((a, b) => a.at - b.at || (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : 0) || (a.commitOrder ?? Number.MAX_SAFE_INTEGER) - (b.commitOrder ?? Number.MAX_SAFE_INTEGER) || (a.toolCallId < b.toolCallId ? -1 : a.toolCallId > b.toolCallId ? 1 : 0));
 };
 var kindForOwners = (owners, currentOwner) => {
   if (!owners.size) return "unattributed";
@@ -6511,7 +6525,9 @@ var semanticFacts = (state, file) => {
     calls: stable(facts.calls.map((site) => [site.callee])),
     literals: stable(facts.literals.map((site) => [site.text])),
     anchors: stable(facts.anchors.map((anchor2) => [anchor2.id, anchor2.kind, anchor2.nodeId, anchor2.implicit === true])),
-    sigs: Object.entries(facts.sigs ?? {}).sort(([a], [b]) => a.localeCompare(b))
+    // Code-unit order keeps the semantic digest locale-independent (a locale
+    // or ICU change would otherwise mark every cached fact as drifted).
+    sigs: Object.entries(facts.sigs ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
   })).digest("hex");
   semanticCache.set(facts, value);
   return value;
@@ -6790,7 +6806,7 @@ var sync = async (root, params, now, opts) => {
       if (adjusted > (memory.get(key)?.m ?? 0)) memory.set(key, { m: adjusted, t: nowMs });
     }
   }
-  const orderedWarm = [...surprise.entries()].sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || a[0].localeCompare(b[0])).map(([file]) => file);
+  const orderedWarm = [...surprise.entries()].sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([file]) => file);
   commitBaseline({
     ...preparedBaseline ?? await snapshot(state),
     heat: memory.size ? memory : void 0,
@@ -6948,7 +6964,7 @@ function boundResultDetails(input, maxChars = 4e5, maxNodes = 18e3) {
 }
 
 // src/fovea/source-access.ts
-import { mkdir, writeFile as writeFile2 } from "node:fs/promises";
+import { lstat as lstat3, mkdir, writeFile as writeFile2 } from "node:fs/promises";
 import { isAbsolute as isAbsolute5, join as join9, relative as relative5, sep as sep5 } from "node:path";
 import { createHash as createHash9 } from "node:crypto";
 
@@ -7019,7 +7035,11 @@ var SourceAccess = class {
   }
   platform;
   /** Exact byte snapshots; destination must be a fresh, host-owned private
-   * staging directory (the engine uses mkdtemp). No live-source path reopens. */
+   * staging directory (the engine uses mkdtemp). No live-source path reopens.
+   * Admitted bytes stream to the staging tree one file at a time, so retained
+   * live memory is bounded by one bounded file read rather than the whole
+   * admitted tree; unchanged files relative to a pinned previous snapshot
+   * are reassembled from that private tree, never from live source paths. */
   async captureSourceSnapshot(root, destination, signal, options = {}) {
     const maxFiles = sourceLimit(options.maxFiles, 8e3, "files");
     const maxFileBytes2 = sourceLimit(options.maxFileBytes, 8 * 1024 * 1024, "file bytes");
@@ -7028,6 +7048,11 @@ var SourceAccess = class {
     if (trustedRulesSha256 !== void 0 && !/^[a-f0-9]{64}$/.test(trustedRulesSha256)) throw new Error("Invalid trusted project rule hash");
     let routePatterns = [];
     const hashes = /* @__PURE__ */ new Map();
+    const staged = /* @__PURE__ */ new Set();
+    const capFor = (path) => Math.min(maxFileBytes2, /\.(?:proto|graphql|gql)$/i.test(path) ? 8 * 1024 * 1024 : 1024 * 1024);
+    const previousRequested = options.previous ?? null;
+    const previousPinned = await this.pinPreviousSnapshot(previousRequested);
+    const previousHashOf = (path) => previousPinned === null ? void 0 : previousRequested.hashes.get(path);
     const counts = {};
     const examples2 = {};
     let bytes = 0, entries = 0, capped = false;
@@ -7061,7 +7086,7 @@ var SourceAccess = class {
         report("unreadableDirectories", prefix);
         return;
       }
-      names.sort((a, b) => a === ".fovea" ? -1 : b === ".fovea" ? 1 : a.localeCompare(b));
+      names.sort((a, b) => a === ".fovea" ? -1 : b === ".fovea" ? 1 : a < b ? -1 : a > b ? 1 : 0);
       for (const name of names) {
         signal?.throwIfAborted();
         if (hashes.size >= maxFiles || bytes >= maxBytes) {
@@ -7121,7 +7146,7 @@ var SourceAccess = class {
             report("unsupported", path);
             continue;
           }
-          const cap = Math.min(maxFileBytes2, /\.(?:proto|graphql|gql)$/i.test(path) ? 8 * 1024 * 1024 : 1024 * 1024);
+          const cap = capFor(path);
           if (before.size > cap) {
             report("oversized", path);
             continue;
@@ -7150,12 +7175,13 @@ var SourceAccess = class {
               return new RegExp(rule.re);
             });
           }
-          if (isGeneratedSource(path, data.toString("utf8"))) report("generated", path);
-          const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
-          signal?.throwIfAborted();
-          await mkdir(join9(destination, parent), { recursive: true, mode: 448 });
-          await writeFile2(join9(destination, path), data, { flag: "wx", mode: 256 });
-          hashes.set(path, sha256(data));
+          if (isGeneratedSourceBytes(path, data)) report("generated", path);
+          const hash = sha256(data);
+          if (previousHashOf(path) !== hash) {
+            await this.stageFile(destination, path, data, signal);
+            staged.add(path);
+          }
+          hashes.set(path, hash);
           bytes += data.length;
         } finally {
           await handle.close();
@@ -7172,12 +7198,82 @@ var SourceAccess = class {
     if (trustedRulesSha256 && hashes.get(".fovea/rules.json") !== trustedRulesSha256) throw new Error("Trusted project rules missing or unavailable");
     const digest = createHash9("sha256");
     for (const [path, hash] of hashes) digest.update(JSON.stringify([path, hash])).update("\n");
-    return {
-      id: digest.digest("hex"),
-      root: destination,
-      hashes,
-      coverage: { sourceFiles: hashes.size, sourceBytes: bytes, entriesVisited: entries, capped, maxFiles, maxFileBytes: maxFileBytes2, maxBytes, counts, examples: examples2, projectRules: trustedRulesSha256 ? "host-approved-hash" : "untrusted-skipped", trustedRulesSha256 }
-    };
+    const id = digest.digest("hex");
+    const coverage = { sourceFiles: hashes.size, sourceBytes: bytes, entriesVisited: entries, capped, maxFiles, maxFileBytes: maxFileBytes2, maxBytes, counts, examples: examples2, projectRules: trustedRulesSha256 ? "host-approved-hash" : "untrusted-skipped", trustedRulesSha256 };
+    if (previousPinned !== null && previousRequested.id === id && previousRequested.hashes.size === hashes.size && [...hashes].every(([path, hash]) => previousRequested.hashes.get(path) === hash) && await this.previousSnapshotStillPinned(previousPinned)) {
+      return { id, root: previousPinned.root, hashes, coverage: { ...coverage, reusedPreviousSnapshot: true } };
+    }
+    if (previousPinned !== null) {
+      if (!await this.previousSnapshotStillPinned(previousPinned)) {
+        throw new Error("Previous snapshot became unavailable during capture; retry without it");
+      }
+      for (const [path, hash] of hashes) {
+        if (staged.has(path)) continue;
+        signal?.throwIfAborted();
+        const data = await this.readPreviousFile(previousPinned.root, path, capFor(path), hash, signal);
+        await this.stageFile(destination, path, data, signal);
+      }
+    }
+    return { id, root: destination, hashes, coverage };
+  }
+  /** Stream one admitted file into the fresh private staging tree. */
+  async stageFile(destination, filePath, data, signal) {
+    signal?.throwIfAborted();
+    const parent = filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/")) : "";
+    await mkdir(join9(destination, parent), { recursive: true, mode: 448 });
+    await writeFile2(join9(destination, filePath), data, { flag: "wx", mode: 256 });
+  }
+  /** Pin the previous snapshot: its root must exist as a private directory. */
+  async pinPreviousSnapshot(previous) {
+    if (!previous) return null;
+    try {
+      const held = await lstat3(previous.root);
+      if (!held.isDirectory() || held.isSymbolicLink()) return null;
+      return { root: previous.root, dev: held.dev, ino: held.ino };
+    } catch {
+      return null;
+    }
+  }
+  /** Re-verify the pinned previous snapshot: same directory identity. */
+  async previousSnapshotStillPinned(pinned) {
+    try {
+      const held = await lstat3(pinned.root);
+      return held.isDirectory() && !held.isSymbolicLink() && held.dev === pinned.dev && held.ino === pinned.ino;
+    } catch {
+      return false;
+    }
+  }
+  /** Bounded, no-follow read of one file from the pinned private previous
+   * snapshot; the bytes must hash to the live-observed value or the copy
+   * fails closed. Never reads from a live source pathname. */
+  async readPreviousFile(root, filePath, cap, expectedHash, signal) {
+    const segments = filePath.split("/");
+    for (const segment of segments) assertSourceComponent(segment);
+    let directory = await openSourceDirectory(this.platform, root, signal);
+    try {
+      for (const segment of segments.slice(0, -1)) {
+        const next = await this.platform.openChild(directory, segment, "directory");
+        try {
+          await directory.close();
+        } catch (error) {
+          await next.close();
+          throw error;
+        }
+        directory = next;
+      }
+      const file = await this.platform.openChild(directory, segments.at(-1), "entry");
+      try {
+        const observed = await file.stat();
+        if (!observed.isFile() || observed.nlink !== 1 || observed.size > cap) throw new Error("Previous snapshot file is missing or unsafe");
+        const data = await readSourceBounded(file, cap, signal);
+        if (!data || sha256(data) !== expectedHash) throw new Error("Previous snapshot bytes do not match the observed hash");
+        return data;
+      } finally {
+        await file.close();
+      }
+    } finally {
+      await directory.close();
+    }
   }
   /** Bounded Git shallow-ledger reader; same ancestor/no-follow boundary as capture. */
   async readScopeSafeFile(root, path, maxBytes) {
@@ -7272,7 +7368,7 @@ var FoveaEngine = class {
   async initialize(signal) {
     if (this.parser) return;
     await mkdir2(this.options.storageRoot, { recursive: true, mode: 448 });
-    const info = await lstat3(this.options.storageRoot);
+    const info = await lstat4(this.options.storageRoot);
     if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 63 || info.uid !== process.getuid?.() || await realpath2(this.options.storageRoot) !== this.options.storageRoot) {
       throw new Error("Fovea storageRoot must be canonical, private, and owned");
     }
@@ -7300,7 +7396,7 @@ var FoveaEngine = class {
     const { operation, args } = request;
     if (!["sketch", "focus", "dwell", "impact", "status", "anchors", "rules", "reset", "reload", "sync"].includes(operation)) throw new Error(`Unsupported Fovea operation: ${operation}`);
     if (!object(args) || !request.conversationId || !request.rootId || !Number.isSafeInteger(request.conversationEpoch) || request.conversationEpoch < 0 || !Number.isSafeInteger(request.authorizationEpoch) || request.authorizationEpoch < 0) throw new Error("Invalid engine request identity");
-    const identity = await lstat3(request.root, { bigint: true });
+    const identity = await lstat4(request.root, { bigint: true });
     if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Fovea root must be a physical directory");
     const rootKey2 = JSON.stringify([request.root, String(identity.dev), String(identity.ino)]);
     const conversationKey = JSON.stringify([request.conversationId, request.conversationEpoch, rootKey2]);
@@ -7390,10 +7486,11 @@ var FoveaEngine = class {
       try {
         const snapshot2 = await this.source.captureSourceSnapshot(request.root, stage, signal, {
           exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
-          trustedRulesSha256: typeof args.trustedRulesSha256 === "string" ? args.trustedRulesSha256 : void 0
+          trustedRulesSha256: typeof args.trustedRulesSha256 === "string" ? args.trustedRulesSha256 : void 0,
+          ...root.snapshotId && root.snapshotHashes ? { previous: { id: root.snapshotId, root: root.path, hashes: root.snapshotHashes } } : {}
         });
         signal.throwIfAborted();
-        const snapshotReused = root.snapshotId === snapshot2.id;
+        const snapshotReused = snapshot2.root === root.path && root.snapshotId === snapshot2.id;
         if (!snapshotReused) {
           await rm(root.path, { recursive: true, force: true });
           await rename2(stage, root.path);
@@ -7403,6 +7500,7 @@ var FoveaEngine = class {
         const state = warm ?? await ensureState(root.path, { force: true, hints: [...snapshot2.hashes.keys()] });
         signal.throwIfAborted();
         root.snapshotId = snapshot2.id;
+        root.snapshotHashes = snapshot2.hashes;
         root.head = head;
         signal.throwIfAborted();
         const budget = number(args.maxTokens ?? args.budget, 512, operation === "sync" ? 128 : 256, operation === "sync" ? 8192 : 16e3);
@@ -7414,7 +7512,8 @@ var FoveaEngine = class {
           let value;
           if (operation === "anchors") {
             const filter = typeof args.filter === "string" ? args.filter : "";
-            const rows = state.graph.anchors.filter((a) => (!args.discovered || a.implicit) && (!filter || `${a.kind}	${a.id}	${a.file}:${a.line}`.includes(filter))).sort((a, b) => `${a.kind}	${a.id}	${a.file}:${a.line}`.localeCompare(`${b.kind}	${b.id}	${b.file}:${b.line}`));
+            const anchorKey = (anchor2) => `${anchor2.kind}	${anchor2.id}	${anchor2.file}:${anchor2.line}`;
+            const rows = state.graph.anchors.map((anchor2) => [anchorKey(anchor2), anchor2]).filter(([key, anchor2]) => (!args.discovered || anchor2.implicit) && (!filter || key.includes(filter))).sort((left, right) => left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0).map(([, anchor2]) => anchor2);
             value = { anchors: rows.slice(offset, offset + limit), total: rows.length, offset, limit, truncated: offset + limit < rows.length };
           } else {
             const sigs = aggregateFiles(Object.fromEntries(Object.entries(state.facts).map(([file, facts]) => [file, facts.sigs])));
@@ -7564,12 +7663,14 @@ var FoveaEngine = class {
       } catch (error) {
         root.store.clear();
         delete root.snapshotId;
+        delete root.snapshotHashes;
         throw error;
       } finally {
         await rm(stage, { recursive: true, force: true });
         if (signal.aborted) {
           root.store.clear();
           delete root.snapshotId;
+          delete root.snapshotHashes;
           this.preparedSync.delete(conversationKey);
           if (original.active || original.store.size) this.conversations.set(conversationKey, original);
           else this.conversations.delete(conversationKey);
@@ -7587,6 +7688,7 @@ var FoveaEngine = class {
     root.hot = false;
     root.gap = true;
     delete root.snapshotId;
+    delete root.snapshotHashes;
     delete root.head;
     for (const conversationKey of this.conversations.keys()) if (JSON.parse(conversationKey)[2] === key) this.conversations.delete(conversationKey);
     for (const conversationKey of this.preparedSync.keys()) if (JSON.parse(conversationKey)[2] === key) this.preparedSync.delete(conversationKey);

@@ -1,6 +1,6 @@
 // Built-in-only CLI contract shared by registration, validation, consent and help.
 import path from "node:path";
-/** @typedef {{command?: string, kiroHome?: string, archive?: string, version?: string, backup?: string, sourceRoot?: string, guidanceMode?: 'standard' | 'review' | 'minimal', yes?: boolean, nonInteractive?: boolean, json?: boolean, noColor?: boolean, purgeData?: boolean, migratePiFabric?: boolean, noShellIntegration?: boolean, dryRun?: boolean, help?: boolean}} ManagerArguments */
+/** @typedef {{command?: string, kiroHome?: string, archive?: string, version?: string, backup?: string, sourceRoot?: string, guidanceMode?: 'standard' | 'review' | 'minimal', yes?: boolean, nonInteractive?: boolean, json?: boolean, noColor?: boolean, verbose?: boolean, purgeData?: boolean, migratePiFabric?: boolean, noShellIntegration?: boolean, dryRun?: boolean, help?: boolean}} ManagerArguments */
 export class InstallerError extends Error {
   constructor(message, exitCode = 5, outcome = "conflict") { super(message); this.exitCode = exitCode; this.outcome = outcome; }
 }
@@ -17,6 +17,7 @@ export const MANAGER_OPTIONS = Object.freeze({
   guidanceMode: { flag: "--guidance-mode", value: "MODE", description: "standard, review or minimal; no native tool expansion" },
   yes: { flag: "--yes", description: "Explicit mutation consent (mandatory for restore and recover)" },
   nonInteractive: { flag: "--non-interactive", description: "Never prompt; mutations require --yes" },
+  verbose: { flag: "--verbose", description: "Stream build/subprocess output live and print per-stage detail; stdout stays result-only" },
   json: { flag: "--json", description: "One JSON result on stdout; no progress or prompts" },
   noColor: { flag: "--no-color", description: "Plain text output (the default)" },
   purgeData: { flag: "--purge-data", description: "Request purge; currently refused because process inactivity is unqualified" },
@@ -25,7 +26,7 @@ export const MANAGER_OPTIONS = Object.freeze({
   dryRun: { flag: "--dry-run", description: "Read-only scope preview; no downloads, builds, client probes, backups or changes" },
   help: { flag: "--help", description: "Show generated command help without accessing the installation" },
 });
-const common = ["kiroHome", "json", "noColor", "nonInteractive", "help"];
+const common = ["kiroHome", "json", "noColor", "nonInteractive", "verbose", "help"];
 const mutation = [...common, "yes", "dryRun"];
 /** @type {Readonly<Record<string, {description: string, options: readonly string[], confirmation: string, backup: boolean, kiro: string, preparation?: boolean, shell?: boolean}>>} */
 export const MANAGER_COMMANDS = Object.freeze(Object.fromEntries(Object.entries({

@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "../fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +8,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { LEDGER, PROFILE, lifecycleDriver, lifecycleProfile, main, streamIdentity, summarizeLifecycle, summarizeCancellationAcknowledgment } from '../../scripts/fovea-lifecycle-probe.mjs';
 const roots: string[] = [];
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const result = { stdout: '', stderr: '', exitCode: 0, error: null, stopReason: null, cleanup: 'leader-closed' };
 const stream = (sessionId = 'native-session', mode = PROFILE) => JSON.stringify({ data: { sessionId, update: { configOptions: [{ id: 'mode', currentValue: mode }] } } });
 const runs = () => ['initial', 'resume'].map((phase, i) => ({ phase, marker: phase + '-nonce', mcpStart: i, mcpEnd: i + 1, result: { ...result, stdout: stream() } }));

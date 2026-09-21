@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
 import { foveaHookCapability } from "./fovea-native.js";
 import { collectFoveaContext, FoveaResponseDelivery, type FoveaPostToolCapability } from "./fovea-context.js";
+import { collectFoveaCallContext, FoveaCallObservation } from "./fovea-call-context.js";
+import { FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS } from "../fovea/call-context.js";
 import { FabricDeadline } from "../runtime/deadline.js";
 import { FoveaHost, type FoveaBoundClient } from "../fovea/host.js";
 import type { FoveaParserDescriptor } from "../fovea/protocol.js";
@@ -86,6 +88,8 @@ export interface KiroMcpServerOptions {
   /** Trusted embedder qualification only. Managed/native profiles leave this absent
    * until real-client delivery and analysis-scope gates pass; minimal stays off. */
   foveaPostToolContext?: FoveaPostToolCapability;
+  /** Same-call visible Fovea suffix from this invocation's observed files. Not native session routing. */
+  foveaCallContext?: true;
   version?: string;
   /** Explicit host metadata: launch JSON may supply configured, never observed. */
   runProvenance?: RunProvenanceInput;
@@ -414,6 +418,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
       fovea: { nativeHooks: foveaHookCapability(),
         postToolContext: options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true ? "trusted-embedder-visible" : "disabled",
+        callContext: options.foveaCallContext === true ? "invocation-local-visible" : "disabled",
         nativeSessionAssociation: "unavailable", modelInputAcknowledged: false,
         sessionIsolation: { supported: false, stateOwner: "mcp-instance", nativeClearResetGuaranteed: false,
           warning: "A reused MCP instance can retain focus, results, session settings and rule trust across native chats. Native /clear is not a Fabric state boundary." },
@@ -586,13 +591,16 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
           return { status: "pending", action: parsed.action, committed: false, nextExecutionRequired: true };
         },
       };
+      const contextClient = foveaClients.get(current);
+      const callObservations = options.foveaCallContext === true && contextClient && workspaceVerified
+        ? new FoveaCallObservation(current.service.cwd, contextClient.observer) : undefined;
       const result = await current.service.execute({
         code: input.code,
         ...(input.payloads ? { payloads: input.payloads } : {}),
         ...(input.timeoutMs !== undefined ? { timeoutMs: input.timeoutMs } : {}),
         signal: controller.signal,
         approver,
-        ...(foveaClients.get(current) ? { operationObserver: foveaClients.get(current)!.observer } : {}),
+        ...(callObservations ? { operationObserver: callObservations } : contextClient ? { operationObserver: contextClient.observer } : {}),
         bootstrap,
         workspaceBound: workspaceVerified,
         workspaceUnavailable: unavailableWorkspace() || binding.workspaceObservation().status === "temporarily-unavailable",
@@ -605,20 +613,21 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
         maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? 512 : 0),
         writeArtifact: (content) => current.artifacts.write(content),
       });
-      const contextClient = foveaClients.get(current);
-      if (contextClient && workspaceVerified && !pendingMutation &&
-          options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true) {
+      // Optional analysis must not turn an approved write or one-time read
+      // into an unapproved repository-wide read. Skip ask/deny without prompting.
+      if (contextClient && workspaceVerified && !pendingMutation && current.service.config.approvals.read === "allow" &&
+          (options.foveaCallContext === true || (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true))) {
         // No extension of the original outer deadline. Analysis has its own
         // bounded cleanup scope and never holds a source-effect reservation.
-        const remaining = Math.min(2000, Math.max(0, outerStarted + outerDeadline - performance.now()));
-        if (remaining > 0 && !controller.signal.aborted) {
+        const remaining = Math.min(options.foveaCallContext === true ? FOVEA_CALL_COLLECTION_MS : 2_000, Math.max(0, outerStarted + outerDeadline - performance.now()));
+        if (remaining >= (options.foveaCallContext === true ? FOVEA_CALL_WARM_MS + FOVEA_CALL_RESERVE_MS : 1) && !controller.signal.aborted) {
           const automatic = new AbortController();
           const timer = setTimeout(() => automatic.abort(new Error("Fovea context budget elapsed")), remaining);
           try {
-            const context = await collectFoveaContext(contextClient, projection, {
-              cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]),
-              deadline: new FabricDeadline(remaining, remaining),
-            }, current.service.config.executor.maxOutputChars);
+            const invocation = { cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]), deadline: new FabricDeadline(remaining, remaining) };
+            const context = options.foveaCallContext === true && callObservations
+              ? await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars)
+              : await collectFoveaContext(contextClient, projection, invocation, current.service.config.executor.maxOutputChars);
             if (!context.delivery || foveaDelivery.track(extra.requestId, context.delivery, extra.signal, projection.text)) projection = context.projection;
           } finally { clearTimeout(timer); }
         }
@@ -675,7 +684,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   });
 
   const transport = new StdioServerTransport();
-  if (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true) {
+  if (options.foveaCallContext === true || (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true)) {
     const send = transport.send.bind(transport);
     transport.send = message => foveaDelivery.send(message, send);
   }

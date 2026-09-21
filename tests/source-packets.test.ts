@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +12,7 @@ const fixtures: { base: string; runtime: KiroRuntime }[] = [];
 afterEach(async () => {
   for (const { base, runtime } of fixtures.splice(0)) {
     await runtime.close();
-    fs.rmSync(base, { recursive: true, force: true });
+    removeFixtureSync(base, { recursive: true, force: true });
   }
 });
 function fixture(maxOutputChars = 50000, maxNestedResultChars = 2_000_000) {

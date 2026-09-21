@@ -2,9 +2,11 @@
 
 **Status: implementation started — Track A declaration checkpoints and explicit host-observed capture are implemented, disabled by default.**
 
-Current slice: strict records, deterministic rendering, private durable CAS storage, six checked `continuity.*` actions, execution-local receipts, and focused tests. See [current behavior and limits](configuration.md#deterministic-task-recovery-opt-in). This covers P1–P3 and the reachable P4/P5 wiring, not automatic recovery or Track B. `captureCurrentExecution` records a settled host prefix; it does not replace `/compact`. The rest of this document retains qualification gates; component tests do not qualify Kiro compaction.
+Current slice: strict records, deterministic rendering, private durable CAS storage, eight checked `continuity.*` actions, execution-local receipts, and focused tests. See [current behavior and limits](configuration.md#deterministic-task-recovery-opt-in). This covers P1–P3 and the reachable P4/P5 wiring, not automatic recovery or Track B. `captureCurrentExecution` records a settled host prefix; it does not replace `/compact`. The rest of this document retains qualification gates; component tests do not qualify Kiro compaction.
 
-Repository baseline: `7846af7`, `kiro-fabric` 0.64.0. The preceding capability investigation inspected Kiro CLI 2.22.0 with its v3 client integration and compared the deterministic engine in the sibling `pi-fabric` repository. Revalidate host capabilities against the exact release used for implementation; client code and documentation are not authenticated end-to-end qualification.
+First-slice explicit handoff and managed-rotation foundation (`continuity.handoff`, read-only ACP preflight and capability probe, private original-event archive and crash-safe rotation journal): see [continuity-handoff-plan.md](continuity-handoff-plan.md). Offline fixtures do not pass the live gates; automatic managed rotation stays unavailable.
+
+Repository baseline: `7846af7`, `kiro-fabric` 0.64.0. Host revalidation against **Kiro CLI 2.22.1** and public docs (2026-09-21): hook triggers remain Prompt Submit, Stop, Session Start/Agent Spawn, Pre/Post Tool Use, and file/spec events — there is still **no PreCompact / session_before_compact replacement-summary callback**. ACP `_kiro.dev/compaction/status` remains a progress notification, not a summary-injection API. Pi Fabric (`04871f59493670bf2b1960df0d8f5fcd93978b0f`) still owns LLM-free conversation compaction through `session_before_compact`. Track A in this repo is the reachable equivalent; Track B stays blocked. Client docs are not authenticated end-to-end qualification.
 
 ## 1. Decision and deliverables
 

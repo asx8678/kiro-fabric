@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -7,7 +8,7 @@ import { canonical, sha256 } from "../scripts/bundle-contract.mjs";
 import { packagingFixture, refreshFixtureClosure, fixtureDependencies, hash, put } from "./installer-packaging-fixture.js";
 const roots: string[] = [];
 const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
-afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("early installer bundle reuse", () => {
   it("skips copying, acquisition and manager compilation, including pre-pnpm lookup", async () => {

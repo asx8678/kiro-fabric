@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -12,7 +13,7 @@ const temporary = (): string => {
   return root;
 };
 afterAll(() => {
-  for (const root of roots) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 // High-cardinality reports legitimately exceed 1 MiB of pretty-printed JSON, and

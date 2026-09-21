@@ -180,10 +180,11 @@ const readRecords = async (root: string, since: number): Promise<MutationRecord[
       // A concurrent atomic replacement or malformed journal is unattributed.
     }
   }));
+  // Code-unit tie-breaks keep record ordering locale-independent.
   return records.sort((a, b) => a.at - b.at
-    || a.owner.localeCompare(b.owner)
+    || (a.owner < b.owner ? -1 : a.owner > b.owner ? 1 : 0)
     || (a.commitOrder ?? Number.MAX_SAFE_INTEGER) - (b.commitOrder ?? Number.MAX_SAFE_INTEGER)
-    || a.toolCallId.localeCompare(b.toolCallId));
+    || (a.toolCallId < b.toolCallId ? -1 : a.toolCallId > b.toolCallId ? 1 : 0));
 };
 
 const kindForOwners = (owners: Set<string>, currentOwner: string): ProvenanceKind => {

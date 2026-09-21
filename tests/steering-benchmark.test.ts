@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -29,7 +30,7 @@ beforeAll(async () => {
   python = executable('python3');
   for (const id of CASES) trials.set(id, await solvedTrial(root, id, python));
 });
-afterAll(() => { fs.rmSync(root, { recursive: true, force: true }); });
+afterAll(() => { removeFixtureSync(root, { recursive: true, force: true }); });
 
 function present<T>(value: T | undefined): T { if (value === undefined) throw Error('Missing fixture value'); return value; }
 function trial(id: string): Trial { const value = trials.get(id); if (!value) throw Error(id); return value; }

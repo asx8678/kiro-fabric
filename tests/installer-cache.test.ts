@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { afterEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
@@ -10,7 +11,7 @@ import { packagingFixture, fixtureDependencies, refreshFixtureClosure, put, hash
 import { canonical, sha256 } from "../scripts/bundle-contract.mjs";
 const roots: string[] = [];
 const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
-afterEach(() => { for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true }); });
+afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 async function generations(count = 3) {
   const root = fixture(), deps = fixtureDependencies(), bundles = [];
   for (let i = 0; i < count; i++) {

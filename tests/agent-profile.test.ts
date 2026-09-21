@@ -69,6 +69,7 @@ describe("Kiro Agent profile generation", () => {
             KIRO_FABRIC_LAUNCH_WORKSPACE: "${KIRO_FABRIC_LAUNCH_WORKSPACE}",
             KIRO_FABRIC_RUN_DECLARATION: "${KIRO_FABRIC_RUN_DECLARATION}",
             KIRO_FABRIC_WORKSPACE_SOURCE: "launch-cwd",
+            KIRO_FABRIC_FOVEA_CALL_CONTEXT: "1",
             KIRO_FABRIC_RUNTIME_ROOT: options.runtimeRoot,
             KIRO_FABRIC_DATA_ROOT: options.dataRoot,
             KIRO_FABRIC_EXPECTED_NODE: options.nodePath,

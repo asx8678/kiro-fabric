@@ -7,6 +7,7 @@ import { CONTINUITY_ACTION_DESCRIPTORS } from "./continuity-contract.js";
 import { LocalPaths } from "./local-path.js";
 import { assessChecks, renderTaskView } from "../continuity/task-view.js";
 import { recallContinuity, type ContinuityRecallArguments } from "../continuity/recall.js";
+import { buildContinuityHandoff, HANDOFF_PACKET_DEFAULT_BYTES, HANDOFF_PACKET_MIN_BYTES } from "../continuity/handoff.js";
 
 export class ContinuityProvider implements FabricProvider {
   readonly name = "continuity";
@@ -26,7 +27,7 @@ export class ContinuityProvider implements FabricProvider {
     this.#store = new ContinuityStore(root, options);
     if (options.workspaceRoot) this.#paths = new LocalPaths(options.workspaceRoot);
   }
-  discoveryRevision(): string { return "4"; }
+  discoveryRevision(): string { return "5"; }
   async list() { return structuredClone([...CONTINUITY_ACTION_DESCRIPTORS]); }
   async describe(name: string) { return structuredClone(CONTINUITY_ACTION_DESCRIPTORS.find(action => action.name === name)); }
   effectResources(): readonly string[] { return ["continuity:store"]; }
@@ -77,6 +78,19 @@ export class ContinuityProvider implements FabricProvider {
       }
       if (offset < source.tasks.length && !result.tasks.length) throw new Error("continuity output budget too small for task metadata");
       return result;
+    }
+    if (name === "handoff") {
+      const paths = this.#paths;
+      if (!paths) throw new Error("continuity handoff requires a workspace-bound provider");
+      const source = await this.#store.expandSource(args.taskId, args.expectedRevision, args.hash, context);
+      paths.verifyRoot();
+      const packetBudget = Math.min((args.maxPacketBytes as number | undefined) ?? HANDOFF_PACKET_DEFAULT_BYTES, budget);
+      if (packetBudget < HANDOFF_PACKET_MIN_BYTES) throw new Error("continuity output budget too small for a handoff packet");
+      return buildContinuityHandoff(source, {
+        workspace: { canonicalPath: paths.root, dev: paths.identity.dev, ino: paths.identity.ino },
+        ...(args.nextPrompt !== undefined ? { nextPrompt: args.nextPrompt as string } : {}),
+        maxPacketBytes: packetBudget,
+      });
     }
     const source = await this.#store.expandSource(args.taskId, args.expectedRevision, args.hash, context);
     const from = (args.fromSequence as number | undefined) ?? 1, limit = (args.limit as number | undefined) ?? 16;

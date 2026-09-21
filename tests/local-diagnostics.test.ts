@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -11,7 +12,7 @@ import { projectFabricExecutionText } from "../src/kiro/projection.js";
 import { runLocalShell } from "../src/providers/local-shell.js";
 
 const fixtures: { base: string; service: FabricExecutionService }[] = [];
-afterEach(async () => { vi.restoreAllMocks(); for (const f of fixtures.splice(0)) { await f.service.close(); fs.rmSync(f.base, { recursive: true, force: true }); } });
+afterEach(async () => { vi.restoreAllMocks(); for (const f of fixtures.splice(0)) { await f.service.close(); removeFixtureSync(f.base, { recursive: true, force: true }); } });
 function fixture(budget = 20000) {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-diagnostics-"))); const root = path.join(base, "workspace"); fs.mkdirSync(root);
   const registry = new ActionRegistry(); registry.register(new LocalCodingProvider({ root, lockRoot: path.join(base, "locks"), maxResultChars: budget }));

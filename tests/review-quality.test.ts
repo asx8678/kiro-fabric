@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -123,7 +124,7 @@ describe('opt-in controlled review adherence v1', () => {
       expect(bad.failures).toEqual([{ check: "answer", error: expect.stringContaining("controlled review claim adherence") }]);
       fs.appendFileSync(path.join(trial.workspace, 'scripts/cleanup.mjs'), '\n// unauthorized');
       expect((await validate(trial)).failures.some(f => f.check === 'scope')).toBe(true);
-    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it('aggregates optional adherence without rewarding empty, unsafe or historical reports', () => {

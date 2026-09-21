@@ -71,14 +71,62 @@ const privateRoot = (root: string): string => {
   return fs.realpathSync(root);
 };
 
-/** The mutation is visible, but a post-commit deadline or lock cleanup failed.
- * Transport-level interruption can still lose this acknowledgement entirely. */
+const openDirectoryDescriptor = (directory: string): number =>
+  fs.openSync(directory, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) |
+    (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+
+const syncDirectoryDescriptor = (directory: string): void => {
+  let descriptor: number | undefined;
+  try {
+    descriptor = openDirectoryDescriptor(directory);
+    fs.fsyncSync(descriptor);
+  } finally {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+  }
+};
+
+/** Establish directory-entry durability for the store root once at
+ * construction: flush the root's own entries and the parent entry that names
+ * it, so a freshly created store survives a host crash. A failure leaves the
+ * barrier "unconfirmed" instead of breaking reads; crash-safe publishers
+ * must refuse to claim durability over it. Windows has no directory fsync
+ * contract and reports "unconfirmed". */
+const establishDirectoryEntry = (root: string): StateDirectoryBarrier => {
+  if (process.platform === "win32") return "unconfirmed";
+  try {
+    syncDirectoryDescriptor(root);
+    syncDirectoryDescriptor(path.dirname(root));
+    return "fsync";
+  } catch {
+    return "unconfirmed";
+  }
+};
+
+/** How durable a committed mutation is: "confirmed" only when the directory
+ * barrier completed after the rename; "unconfirmed" when publication was
+ * observed but the barrier did not complete (the rename may not survive a
+ * host crash). */
+export type StateDurability = "confirmed" | "unconfirmed";
+/** Whether the store can establish directory-entry durability at all. */
+export type StateDirectoryBarrier = "fsync" | "unconfirmed";
+
+/** The mutation is visible, but a post-commit deadline, lock cleanup or the
+ * directory durability barrier failed. `durability` is "confirmed" only when
+ * the barrier completed: the published bytes survive process restarts and
+ * host crashes. An "unconfirmed" mutation is still visible but its rename
+ * may not be durable. Transport-level interruption can still lose this
+ * acknowledgement entirely; read state before any retry and never replay
+ * external effects from this error alone. */
 export class StateCommitAcknowledgementError extends Error {
   readonly committed = true;
+  readonly durability: StateDurability;
   readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { readonly version: 1; readonly operation: "set" | "delete" };
-  constructor(readonly revision: number, options: ErrorOptions, operation: "set" | "delete" = "set") {
-    super(`State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`, options);
+  constructor(readonly revision: number, options: ErrorOptions, operation: "set" | "delete" = "set", durability: StateDurability = "confirmed") {
+    super(durability === "confirmed"
+      ? `State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`
+      : `State mutation published at revision ${revision}; directory durability is unconfirmed; read state before any retry and do not replay external effects`, options);
     this.name = "StateCommitAcknowledgementError";
+    this.durability = durability;
     this[FABRIC_COMMIT_ACKNOWLEDGEMENT] = Object.freeze({ version: 1 as const, operation });
   }
 }
@@ -86,6 +134,13 @@ export class StateCommitAcknowledgementError extends Error {
 export class StateProvider implements FabricProvider {
   readonly name = "state";
   readonly description = "Workspace-bound atomic state";
+  /** How directory-entry durability is established for publications:
+   * "fsync" when the store root's directory entry barrier was established at
+   * construction, "unconfirmed" otherwise (a platform without a directory
+   * fsync contract, or a construction-time sync failure). Crash-safe
+   * publishers must refuse to claim durability over an "unconfirmed"
+   * barrier. */
+  readonly directoryBarrier: StateDirectoryBarrier;
   readonly #root: string;
   readonly #rootIdentity: { dev: number; ino: number };
   readonly #file: string;
@@ -109,6 +164,7 @@ export class StateProvider implements FabricProvider {
     this.#root = privateRoot(root);
     this.#rootIdentity = fs.lstatSync(this.#root);
     this.#assertRoot();
+    this.directoryBarrier = establishDirectoryEntry(this.#root);
     this.#file = path.join(this.#root, "state.json");
     this.#lock = path.join(this.#root, LOCK_NAME);
     this.#maxEntries = options.maxEntries ?? 1_000;
@@ -144,11 +200,15 @@ export class StateProvider implements FabricProvider {
     }
     if (actionName === "list") {
       const document = this.#read();
-      const limit = typeof args.limit === "number" ? args.limit : 100;
+      const limit = args.limit === undefined ? 100 : args.limit;
+      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+        throw new Error("state list limit is invalid");
+      }
       return {
         revision: document.revision,
         entries: Object.entries(document.entries)
-          .sort(([left], [right]) => left.localeCompare(right))
+          // Code-unit order keeps listing deterministic across locales.
+          .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
           .slice(0, limit)
           .map(([key, entry]) => ({ key, revision: entry.revision, updatedAt: entry.updatedAt })),
       };
@@ -156,48 +216,96 @@ export class StateProvider implements FabricProvider {
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);
     }
+    if (actionName === "set") {
+      // The undefined/bounds check lives inside the commit closure, after the
+      // CAS read, exactly where the original single-closure implementation
+      // performed it: a value that cannot serialize AND a stale revision must
+      // still report the revision conflict first.
+      const serialized = JSON.stringify(args.value);
+      return await this.#commitSetValue(args.key as string, serialized === undefined ? args.value : JSON.parse(serialized) as unknown, serialized, args.expectedRevision, context);
+    }
     let committedRevision: number | undefined;
+    let durability: StateDurability = "unconfirmed";
     try {
-      return await this.#withMutationLock(context, (assertOwnership) => {
+      return await this.#withMutationLock(context, (assertOwnership, rootFd) => {
         const document = this.#read();
         const key = args.key as string;
         const current = document.entries[key];
         if (args.expectedRevision !== undefined && args.expectedRevision !== (current?.revision ?? 0)) {
           throw new Error("state revision conflict");
         }
-        if (actionName === "delete") {
-          if (!current) return { key, deleted: false, revision: document.revision };
-          delete document.entries[key];
-          document.revision += 1;
-          this.#write(document, () => { assertOwnership(); throwIfAbortedOrExpired(context.signal, context.deadline); });
-          committedRevision = document.revision;
-          throwIfAbortedOrExpired(context.signal, context.deadline);
-          return { key, deleted: true, revision: document.revision };
-        }
+        // Publication is observed at the rename boundary; durability is only
+        // confirmed once the directory barrier completes. A failure after
+        // publication is reported as committed, never rolled back or retried.
+        const observe = {
+          published: (): void => { committedRevision = document.revision; },
+          durable: (): void => { durability = "confirmed"; },
+        };
+        if (!current) return { key, deleted: false, revision: document.revision };
+        delete document.entries[key];
+        document.revision += 1;
+        this.#write(document, () => { assertOwnership(); throwIfAbortedOrExpired(context.signal, context.deadline); }, rootFd, observe);
+        throwIfAbortedOrExpired(context.signal, context.deadline);
+        return { key, deleted: true, revision: document.revision };
+      });
+    } catch (error) {
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, actionName, durability);
+      throw error;
+    }
+  }
 
-        const serialized = JSON.stringify(args.value);
-        if (serialized === undefined || serialized.length > this.#maxValueChars || Buffer.byteLength(serialized, "utf8") > this.#maxValueBytes) {
+  /** Shared set core for the guest action and the host-only pre-serialized
+   * fast path: identical CAS, lock, ownership, durability barrier, entry
+   * limit and acknowledgement semantics. `text` is the value's canonical
+   * serialized form; callers that already hold it skip a redundant
+   * stringify + parse round trip. */
+  async #commitSetValue(key: string, value: unknown, text: string | undefined, expectedRevision: unknown, context: FabricInvocationContext): Promise<{ key: string; revision: number }> {
+    let committedRevision: number | undefined;
+    let durability: StateDurability = "unconfirmed";
+    try {
+      return await this.#withMutationLock(context, (assertOwnership, rootFd) => {
+        const document = this.#read();
+        const current = document.entries[key];
+        if (expectedRevision !== undefined && expectedRevision !== (current?.revision ?? 0)) {
+          throw new Error("state revision conflict");
+        }
+        // Publication is observed at the rename boundary; durability is only
+        // confirmed once the directory barrier completes. A failure after
+        // publication is reported as committed, never rolled back or retried.
+        const observe = {
+          published: (): void => { committedRevision = document.revision; },
+          durable: (): void => { durability = "confirmed"; },
+        };
+        if (text === undefined || text.length > this.#maxValueChars || Buffer.byteLength(text, "utf8") > this.#maxValueBytes) {
           throw new Error("state value exceeds configured bounds");
         }
         if (!current && Object.keys(document.entries).length >= this.#maxEntries) {
           throw new Error("state entry limit reached");
         }
         document.revision += 1;
-        document.entries[key] = {
-          revision: document.revision,
-          value: JSON.parse(serialized) as unknown,
-          updatedAt: Date.now(),
-        };
+        document.entries[key] = { revision: document.revision, value, updatedAt: Date.now() };
         throwIfAbortedOrExpired(context.signal, context.deadline);
-        this.#write(document, () => { assertOwnership(); throwIfAbortedOrExpired(context.signal, context.deadline); });
-        committedRevision = document.revision;
+        this.#write(document, () => { assertOwnership(); throwIfAbortedOrExpired(context.signal, context.deadline); }, rootFd, observe);
         throwIfAbortedOrExpired(context.signal, context.deadline);
         return { key, revision: document.revision };
       });
     } catch (error) {
-      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, actionName);
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, "set", durability);
       throw error;
     }
+  }
+
+  /** Host-only fast path for trusted writers that already hold a value's
+   * canonical serialized form (the continuity archive, rotation journal and
+   * task store build whole documents per mutation and would otherwise
+   * serialize each one repeatedly). `value` must be the parsed form of
+   * `text` and must not be mutated after this call. Not a guest action:
+   * invoke() admits only get/set/list/delete, so this stays reachable solely
+   * from trusted host code. */
+  async setSerialized(entry: { key: string; value: unknown; text: string; expectedRevision?: number }, context: FabricInvocationContext): Promise<{ key: string; revision: number }> {
+    if (!validStateKey(entry?.key)) throw new Error("state key exceeds configured bounds");
+    if (typeof entry.text !== "string") throw new Error("state serialized value is malformed");
+    return await this.#commitSetValue(entry.key, entry.value, entry.text, entry.expectedRevision, context);
   }
 
   #assertRoot(): void {
@@ -288,9 +396,17 @@ export class StateProvider implements FabricProvider {
     }
   }
 
-  #write(document: StateDocument, beforeCommit: () => void): void {
+  /** Publish one state document atomically: exclusive owned temporary, write +
+   * chmod + fsync, precommit checks, rename, then the directory barrier
+   * through the mutation lock's verified root descriptor. `observe.published`
+   * fires at the rename boundary — the mutation is visible from then on — and
+   * `observe.durable` fires only after the barrier completes. */
+  #write(document: StateDocument, beforeCommit: () => void, rootFd: number, observe: { published: () => void; durable: () => void }): void {
     this.#assertRoot();
-    const text = `${JSON.stringify(document, null, 2)}\n`;
+    // Compact form: measured ~32% smaller on disk than the pretty form for
+    // nested documents, with an identical JSON round trip — readers parse
+    // either, and the caps below are computed on the exact written bytes.
+    const text = `${JSON.stringify(document)}\n`;
     if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
     const temporary = path.join(
       this.#root,
@@ -311,6 +427,22 @@ export class StateProvider implements FabricProvider {
         throw new Error("uncertain state temporary publication: replacement preserved");
       }
       fs.renameSync(temporary, this.#file);
+      observe.published();
+      // The barrier must apply to the directory that actually received the
+      // rename: re-verify the lexical root and the pinned descriptor before
+      // flushing the directory entry.
+      this.#assertRoot();
+      const barrier = fs.fstatSync(rootFd);
+      if (!barrier.isDirectory() || !sameFile(barrier, this.#rootIdentity)) {
+        throw new Error("state directory descriptor identity mismatch");
+      }
+      if (process.platform !== "win32") {
+        fs.fsyncSync(rootFd);
+        observe.durable();
+      }
+      // Platforms without a directory fsync contract leave the mutation
+      // published-but-unconfirmed; the barrier capability is reported
+      // separately and durability is never claimed without the barrier.
     } catch (error) {
       if (owned.created) {
         try {
@@ -455,6 +587,8 @@ export class StateProvider implements FabricProvider {
     if (!owner.token) throw new Error("legacy state lock requires operator recovery; preserve it and stop old writers first");
     const claim = path.join(this.#root, `.state-recovery-${owner.token}.claim`);
     const owned: OwnedFile = { created: false };
+    let reclaimError: unknown;
+    let reclaimFailed = false;
     try {
       try {
         initializeOwnedFile(claim, owned, (fd) => {
@@ -475,20 +609,26 @@ export class StateProvider implements FabricProvider {
       this.#assertLock(owned.identity!, claim);
       this.#releaseLock(inspected, this.#lock, rootFd);
       return true;
+    } catch (error) {
+      reclaimFailed = true; reclaimError = error; throw error;
     } finally {
       if (owned.created) {
         try {
           if (!owned.identity) throw new Error("state recovery claim ownership identity unavailable");
           this.#releaseLock(owned.identity, claim, rootFd);
-        } catch (cause) {
+        } catch (cleanup) {
           this.#uncertainLock = true;
-          throw new Error("uncertain state recovery claim cleanup; operator recovery required", { cause });
+          // Aggregate like #withMutationLockLocked: a reclaim failure and a
+          // cleanup failure must both reach the operator; the cleanup error
+          // must never silently replace the original one.
+          if (reclaimFailed) throw new AggregateError([reclaimError, cleanup], "state recovery and claim cleanup failed", { cause: reclaimError });
+          throw new Error("uncertain state recovery claim cleanup; operator recovery required", { cause: cleanup });
         }
       }
     }
   }
 
-  async #withMutationLock<T>(context: FabricInvocationContext, operation: (assertOwnership: () => void) => T): Promise<T> {
+  async #withMutationLock<T>(context: FabricInvocationContext, operation: (assertOwnership: () => void, rootFd: number) => T): Promise<T> {
     if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
     const rootFd = this.#openRoot();
     // The inner lock holder releases through the /proc/self/fd alias; closing
@@ -498,7 +638,7 @@ export class StateProvider implements FabricProvider {
     finally { fs.closeSync(rootFd); }
   }
 
-  async #withMutationLockLocked<T>(context: FabricInvocationContext, operation: (assertOwnership: () => void) => T, rootFd: number): Promise<T> {
+  async #withMutationLockLocked<T>(context: FabricInvocationContext, operation: (assertOwnership: () => void, rootFd: number) => T, rootFd: number): Promise<T> {
     const lockDeadline = performance.now() + LOCK_TIMEOUT_MS;
     let identity: { dev: number; ino: number } | undefined;
     let operationError: unknown;
@@ -547,7 +687,7 @@ export class StateProvider implements FabricProvider {
       const acquiredIdentity = identity;
       const assertOwnership = (): void => { this.#assertRoot(); this.#assertLock(acquiredIdentity); };
       assertOwnership();
-      const result = operation(assertOwnership);
+      const result = operation(assertOwnership, rootFd);
       throwIfAbortedOrExpired(context.signal, context.deadline);
       return result;
     } catch (error) {

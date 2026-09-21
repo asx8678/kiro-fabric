@@ -1,3 +1,4 @@
+import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
@@ -27,7 +28,7 @@ const temporary = (): string => {
   return root;
 };
 afterEach(() => {
-  for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
+  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
 const seedConfiguration = (kiroHome: string): void => {
@@ -586,7 +587,7 @@ describe("configuration backup", () => {
       expect(manifest.skipped).toEqual([{ path: "daemon.sock", reason: "non-regular" }]);
     } finally {
       server.close();
-      fs.rmSync(socketPath, { force: true });
+      removeFixtureSync(socketPath, { force: true });
     }
   });
 

@@ -1,7 +1,8 @@
+import { removeFixture as rm } from "../fixture-cleanup.mjs";
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as operations from '../../src/fovea/core/ops.js';
 import { existsSync } from 'node:fs';
-import { mkdtemp, mkdir, writeFile, readFile, rm, link, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, link, chmod } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';

@@ -255,12 +255,22 @@ export const outlineStructured = async (files: string[], _lang: string, cwd: str
     (chunk) => ["outline", "--json=compact", "--view=expanded", "--", ...chunk],
     cwd,
   );
+  // Requested-position index for membership checks and ordering; hoisted
+  // because it depends only on the full requested list, not any chunk.
+  const positions = new Map(files.map((file, i) => [file, i]));
   for (const { result } of settled) {
-    if (!result.stdout.trim()) return undefined;
+    // Probe-verified (tests/fovea/outline-structured.test.ts): a real
+    // ast-grep exits 0 with non-empty JSON even for symbol-less or
+    // unparseable files (`items: []`), so an empty or failed result can
+    // only mean the structured interface is unavailable (old ast-grep,
+    // spawn error, or a silent non-zero exit). Demote the batch to the
+    // text outline: the fallback records the genuine failure there and
+    // still recovers symbols when the text interface works. A failed
+    // run's stdout is never parsed.
+    if (!result.ok || !result.stdout.trim()) return undefined;
     try {
       const parsed = JSON.parse(result.stdout) as OutlineFile[];
       if (!Array.isArray(parsed)) return undefined;
-      const positions = new Map(files.map((file, i) => [file, i]));
       if (parsed.some(file => !positions.has(file.path))) return undefined;
       parsed.sort((a, b) => positions.get(a.path)! - positions.get(b.path)!);
       for (const file of parsed) out.push(file);

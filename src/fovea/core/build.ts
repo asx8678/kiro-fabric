@@ -116,7 +116,9 @@ export interface FileDiscovery {
 
 const IGNORE_DIRS = new Set([".git", "node_modules", "dist", "vendor", ".venv", "venv", "target", "coverage", ".next", "build", "__pycache__", ".pi", ".pi-fovea", "deps", "_build", ".tox", "Pods", ".cargo"]);
 // File count is also a resident-graph budget, not just a discovery limit.
-// Override deliberately for giant monorepos; normal roots stay bounded.
+// Fixed at 8000 in this managed runtime: env overrides are deliberately
+// inert (untrusted guest environment), so a giant monorepo needs a host-side
+// build with the constant changed, not an environment variable.
 const MAX_FILES = envInt("FOVEA_MAX_FILES", 8000, 100, 100_000);
 const MAX_FILE_BYTES = envInt("FOVEA_MAX_FILE_BYTES", 1024 * 1024, 64 * 1024, 64 * 1024 * 1024);
 // Protocol documents never reach ast-grep; their exact readers are
@@ -169,6 +171,23 @@ export const isGeneratedSource = (rel: string, text: string): boolean => {
     i = nl + 1;
   }
   return false;
+};
+
+/** Byte-based variant for callers that already hold the raw buffer (the source
+ * snapshot walk): no full UTF-8 decode — which allocates a transient string as
+ * large as the file, up to the 8 MiB cap — and line length is measured in
+ * bytes, the same minification signal for real bundles. */
+export const isGeneratedSourceBytes = (rel: string, data: Buffer): boolean => {
+  if (GENERATED_NAME_RE.test(rel)) return true;
+  if (data.length < MINIFIED_LINE_CHARS) return false;
+  let start = 0;
+  for (;;) {
+    const nl = data.indexOf(10, start);
+    const end = nl === -1 ? data.length : nl;
+    if (end - start >= MINIFIED_LINE_CHARS) return true;
+    if (nl === -1) return false;
+    start = nl + 1;
+  }
 };
 
 const NO_BOUNDARIES: ReadonlySet<string> = new Set();
@@ -322,7 +341,10 @@ export const discoverFiles = async (
       excluded.push(prefix);
       return;
     }
-    entries.sort((a, b) => a.name.localeCompare(b.name));
+    // Code-unit order is deterministic across machines, locales and ICU
+    // versions; localeCompare made discovery order — and everything derived
+    // from it, like the rule-pack digest — environment-dependent.
+    entries.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
     for (const entry of entries) {
       if (truncated) break;
       const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
