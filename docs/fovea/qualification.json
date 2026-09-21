@@ -255,64 +255,80 @@
     {
       "id": "H07",
       "surface": "native-tui",
-      "status": "unqualified",
+      "status": "partial",
       "qualified": false,
       "requirement": "cancel stops automatic work and queued user input wins",
       "blocker": null,
-      "observation": "Hook completed 7305 ms after Escape input was written to the PTY while the TUI rendered esc to cancel; no instrumented SIGTERM/SIGINT/SIGHUP was logged. There was no acknowledged session/cancel event and no second UserPromptSubmit observed. Cancellation and queued-input precedence remain unverified, not proven failures.",
-      "remaining": "Observe an acknowledged native session/cancel event and accepted queued input, then verify hook cancellation and input precedence. Retained KAS FQi source uses a fresh hook AbortController rather than the turn signal: a wiring concern, not proof of native cancellation failure.",
+      "observation": "Matched native session/cancel, _kiro/hooks/cancel and cancelled response for prompt ID 3 were observed. A submitted queued prompt started 6 ms after the cancellation response and completed; the original fixture hook still ended 5517 ms after acknowledgment, after the queued turn, with no instrumented signal. Turn cancellation and queued execution are observed, not complete automatic-work cancellation.",
+      "remaining": "Qualify stopping automatic hook/engine work and complete queued-user precedence after supported session routing exists. The earlier Escape-only probe remains historical evidence, not the basis of this observation.",
       "evidence": [
-        ".tmp/fovea-cancel-wgPbJV/timeline.jsonl",
-        ".tmp/fovea-cancel-wgPbJV/driver.exp",
-        ".tmp/fovea-cancel-wgPbJV/hook.mjs",
-        ".tmp/fovea-cancel-wgPbJV/native-tui.raw"
+        ".tmp/fovea-lifecycle-FddnQz/report.json",
+        ".tmp/fovea-lifecycle-FddnQz/native-acp.jsonl",
+        ".tmp/fovea-lifecycle-FddnQz/hooks.jsonl",
+        ".tmp/fovea-lifecycle-FddnQz/driver.jsonl"
       ]
     },
     {
       "id": "H08",
-      "surface": "headless",
+      "surface": "headless-and-native-tui",
       "status": "partial",
       "qualified": false,
       "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
       "blocker": null,
-      "observation": "The headless resume stream retained the initial TUI session ID, selected the probe mode and completed a fixture MCP call on newly initialized instance fe190816-e5a0-41d0-be62-72ec04eb943b, distinct from initial TUI instance fcab2cb8-07fb-4998-9d9b-f28bcc4624fc. MCP still reports generic clientInfo kiro 0.0.0 and call keys [name, arguments] with meta null, not a native session association. The TUI resume transcript is replay, not new-hook evidence. Resume hook lifecycle, clear/compact/profile-swap and Fabric state restoration are not established.",
-      "remaining": "Verify native hook lifecycle and restored Fabric state plus clear, compact and profile-swap signals or safe recovery.",
+      "observation": "Headless resume preserved chat identity on MCP instance fe190816-e5a0-41d0-be62-72ec04eb943b, distinct from initial TUI instance fcab2cb8-07fb-4998-9d9b-f28bcc4624fc; generic kiro 0.0.0 and absent MCP session metadata remain insufficient association. The TUI resume transcript is replay, not new-hook evidence. Separate native UI compact, agent swap and clear produced matched native responses and four fresh fixture MCP marker calls; clear created a distinct session. The corrected session-controls driver exited 0 with all four checks true. These are native fixture transitions, not actual Fabric state isolation.",
+      "remaining": "Verify restored actual Fabric state and cross-session isolation across the observed native transitions. Supported session-to-MCP association remains absent.",
       "evidence": [
         ".tmp/fovea-native-VEArYZ/report.json",
         ".tmp/fovea-native-VEArYZ/resume-headless.jsonl",
-        ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl",
+        ".tmp/fovea-session-controls-3Dq60v/report.json",
+        ".tmp/fovea-session-controls-3Dq60v/native-acp.jsonl"
       ],
       "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H09",
       "surface": "headless",
-      "status": "untested",
+      "status": "partial",
       "qualified": false,
       "requirement": "visible/model-only/disabled and status/settings/reset/reload",
       "blocker": null,
-      "remaining": "Exercise each presentation mode and status/settings/reset/reload on its claimed surface.",
-      "evidence": []
+      "remaining": "Exercise actual settings changes/reset/reload and visible/model-only/disabled presentation with native approval support; read-only status/settings/focus do not qualify those effects.",
+      "evidence": [
+        "/private/tmp/fovea-explicit-controls-MYbSrn/report.json",
+        "/private/tmp/fovea-explicit-controls-MYbSrn/stream.jsonl"
+      ],
+      "observation": "One real headless Fabric call against a validated private Darwin bundle completed repo.status(), repo.settings() and repo.focus(): status was lazy (engineStarts 0), settings used defaults, source matched controls.ts, then engineStarts was 1 and automatic remained false. Bundle and fixture bytes were unchanged."
     },
     {
       "id": "H10",
       "surface": "native-tui",
-      "status": "untested",
+      "status": "host-blocked",
       "qualified": false,
       "requirement": "accepted/declined exact effects and workspace revocation",
-      "blocker": null,
-      "remaining": "Native-TUI accept/decline/revoke exact effects not exercised; no effects authorized by this harness.",
-      "evidence": []
+      "blocker": "native-form-handler-missing",
+      "remaining": "A supported native form handler is required before real human accept/decline exact edit/shell effects and workspace revocation can be qualified. No auto-approval or native fallback used.",
+      "evidence": [
+        ".tmp/fovea-approval-wYMWdU/report.json",
+        ".tmp/fovea-approval-wYMWdU/native-acp.jsonl",
+        ".tmp/fovea-approval-wYMWdU/build-identity.json"
+      ],
+      "observation": "Native TUI selected the private real-Fabric profile and called fabric_exec/local.edit. Matched native form ID 1 returned No handler registered for method: _kiro/mcp/elicitation; corresponding Fabric request/response traces were recorded. Fixture SHA256 stayed 73cc836b87afeb7110eedea254489a0559cfa4a98c06fabb6aa4a46848d27cf9. Native process exited 0; diagnostic completion is not approval acceptance or decline."
     },
     {
       "id": "H11",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "headless-and-native-tui",
+      "status": "partial",
       "qualified": false,
       "requirement": "authoritative complete model-visible tool inventory",
       "blocker": null,
-      "remaining": "Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.",
-      "evidence": []
+      "remaining": "Capture authoritative complete model-input tool inventory; neither observed calls, configured tools, picker counts nor model prose proves absence of hidden client tools.",
+      "evidence": [
+        ".tmp/fovea-approval-wYMWdU/report.json",
+        "/private/tmp/fovea-standard-inventory-sgwRsQ/report.json",
+        "/private/tmp/fovea-standard-inventory-sgwRsQ/native-output.json"
+      ],
+      "observation": "Observed only @fabric/fabric_exec in the real-Fabric native TUI diagnostic and in a read-only run using the unchanged installed kiro-fabric standard profile with both resources enabled. No extra client tool was observed in these runs. Observed calls are a lower bound, not an authoritative complete model-visible tool inventory."
     },
     {
       "id": "H12",
@@ -1277,6 +1293,78 @@
         "report": ".tmp/fovea-native-VEArYZ/resume-headless.jsonl"
       }
     },
+    "acceptanceFollowup": {
+      "date": "2026-09-21",
+      "client": "Kiro CLI 2.22.1",
+      "platform": "darwin-arm64",
+      "evidence": "docs/fovea/native-acceptance-2026-09-21.md",
+      "automatic": false,
+      "qualified": false,
+      "approval": {
+        "status": "host-blocked",
+        "reason": "native-form-handler-missing",
+        "actualFabricExecution": true,
+        "nativeFormId": 1,
+        "fixtureUnchanged": true,
+        "acceptedObserved": false,
+        "declinedObserved": false,
+        "revokedObserved": false,
+        "humanApprovalQualified": false,
+        "exitCode": 0,
+        "report": ".tmp/fovea-approval-wYMWdU/report.json"
+      },
+      "cancellation": {
+        "status": "partial",
+        "turnCancellationAcknowledged": true,
+        "hookCancelNotificationObserved": true,
+        "cancelledPromptId": 3,
+        "acknowledgedAtMs": 1789972066056,
+        "hookCompletedAfterAcknowledgmentMs": 5517,
+        "queuedPromptAccepted": true,
+        "queuedTurnCompleted": true,
+        "queuedPromptAfterCancelMs": 6,
+        "oldHookCompletedAfterQueuedTurn": true,
+        "hookSignals": [],
+        "fullAutomaticCancellationContractQualified": false,
+        "exitCode": 0,
+        "report": ".tmp/fovea-lifecycle-FddnQz/report.json"
+      },
+      "sessionTransitions": {
+        "compactResponseObserved": true,
+        "profileSwapResponseObserved": true,
+        "clearCreatedNewSession": true,
+        "freshFixtureCalls": 4,
+        "actualFabricStateIsolationQualified": false,
+        "driverExitCode": 0,
+        "historicalDriverFailure": { "exitCode": 1, "reason": "post-quit expect: spawn id exp5 not open", "report": ".tmp/fovea-session-controls-DNIhGm/report.json" },
+        "report": ".tmp/fovea-session-controls-3Dq60v/report.json"
+      },
+      "controls": {
+        "actualFabricExecution": true,
+        "statusLazy": true,
+        "settingsDefaults": true,
+        "engineStartedOnce": true,
+        "sourceMatched": true,
+        "fixtureUnchanged": true,
+        "bundleUnchanged": true,
+        "settingsMutationResetReloadQualified": false,
+        "report": "/private/tmp/fovea-explicit-controls-MYbSrn/report.json"
+      },
+      "inventory": {
+        "complete": false,
+        "observedTools": [
+          "@fabric/fabric_exec"
+        ],
+        "extraClientToolObserved": false,
+        "installedProfileUnchanged": true,
+        "installedProfileResourcesEnabled": 2,
+        "report": "/private/tmp/fovea-standard-inventory-sgwRsQ/report.json"
+      },
+      "retainedGeneration": {
+        "tested": false,
+        "reason": "No update with an active native session performed"
+      }
+    },
     "darwinProvenance": { "implemented": true, "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0, "report": ".tmp/fovea-reference-qualification/run-PyYFeE/vitest.json", "generationAdmission": "fixture-substituted, not installed/native-client lifecycle proof" }
   },
   "currentEvidence": {
@@ -1287,6 +1375,6 @@
     "installedSourceDigest": "47d2ec45d8ede0f4c783145f4be596720239d6362e702814c764dc0ad8bb3271",
     "nativeQualified": false,
     "releaseReady": false,
-    "latestWork": "docs/fovea/completion-ledger.md"
+    "latestWork": "docs/fovea/native-acceptance-2026-09-21.md"
   }
 }

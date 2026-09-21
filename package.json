@@ -49,6 +49,7 @@
     "test:built": "node scripts/build-agent-dev.mjs && node scripts/build-complete-bundle.mjs && vitest run --reporter=default --reporter=json --outputFile=.tmp/vitest-report.json",
     "test:installer": "node scripts/test-installer.mjs run",
     "qualify:fovea:references": "node scripts/qualify-fovea-references.mjs",
+    "qualify:fovea:external": "node scripts/fovea-reference-diagnostics.mjs",
     "lint:dead": "knip",
     "efficiency:manifest": "node scripts/efficiency-baseline.mjs manifest",
     "efficiency:probe": "node scripts/efficiency-baseline.mjs probe",
@@ -72,6 +73,10 @@
     "sbom:agent": "node scripts/generate-agent-sbom.mjs --output .tmp/kiro-fabric-agent.spdx.json",
     "agent:archive": "node scripts/create-agent-archive.mjs --output .tmp/kiro-fabric-agent.tar.gz",
     "release:candidate": "pnpm run check && pnpm run agent:archive && node scripts/release-candidate-report.mjs",
+    "release:complete:prepare": "node scripts/prepare-complete-release.mjs",
+    "release:complete:signing-inputs": "node scripts/complete-release-signing-inputs.mjs",
+    "release:complete:promote": "node scripts/complete-release-promotion.mjs",
+    "release:complete:inputs": "node scripts/complete-release-inputs.mjs",
     "check": "pnpm run guidance:check && pnpm run typecheck && pnpm run build && pnpm run test:built && pnpm run lint:dead && node scripts/certify-kiro-agent.mjs && pnpm run sbom:agent",
     "prepack": "pnpm run check"
   },

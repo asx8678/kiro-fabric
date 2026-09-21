@@ -1,0 +1,146 @@
+name: Complete bundle release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Reviewed annotated signed tag at this protected workflow commit
+        required: true
+        type: string
+      qualification_run_id:
+        description: Same-commit successful protected manual run containing operator-reviewed complete-release-inputs artifact
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: complete-release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.ref_protected == true
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.verify.outputs.commit }}
+      tag_object: ${{ steps.verify.outputs.tag_object }}
+    steps:
+      - id: verify
+        name: Verify annotated GitHub-signed tag before checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]
+          ref=$(gh api "repos/$REPOSITORY/git/ref/tags/$TAG")
+          test "$(jq -r '.object.type' <<<"$ref")" = tag
+          tag_object=$(jq -r '.object.sha' <<<"$ref")
+          tag=$(gh api "repos/$REPOSITORY/git/tags/$tag_object")
+          test "$(jq -r '.verification.verified' <<<"$tag")" = true
+          test "$(jq -r '.object.type' <<<"$tag")" = commit
+          commit=$(jq -r '.object.sha' <<<"$tag")
+          test "$commit" = "$EXPECTED"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tag_object=$tag_object" >> "$GITHUB_OUTPUT"
+
+  qualify:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: complete-release-qualification
+    timeout-minutes: 90
+    permissions: { contents: read, actions: read }
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { ref: '${{ needs.verify.outputs.commit }}', fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 24 }
+      - name: Require reviewed static production root before fetching artifacts
+        run: node --input-type=module -e 'import {PRODUCTION_TRUST_ROOT} from "./scripts/release-trust.mjs"; if (!PRODUCTION_TRUST_ROOT) throw Error("Production release trust root unavailable");'
+      - run: npm install --global pnpm@11.20.0
+      - name: Provision build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          command -v rg
+          rg --version
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - name: Bind canonical package version
+        env: { TAG: '${{ inputs.tag }}' }
+        run: test "$TAG" = "v$(node -p 'require("./package.json").version')"
+      - name: Authenticate private qualification artifact origin
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ needs.verify.outputs.commit }}
+          RUN: ${{ inputs.qualification_run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$RUN" =~ ^[1-9][0-9]*$ ]]
+          run=$(gh api "repos/$REPOSITORY/actions/runs/$RUN")
+          test "$(jq -r '.head_sha' <<<"$run")" = "$COMMIT"
+          test "$(jq -r '.head_branch' <<<"$run")" = "$DEFAULT_BRANCH"
+          test "$(jq -r '.event' <<<"$run")" = workflow_dispatch
+          test "$(jq -r '.conclusion' <<<"$run")" = success
+          gh run download "$RUN" --repo "$REPOSITORY" -n "complete-release-inputs-${COMMIT}" -D "$RUNNER_TEMP/complete-inputs"
+      - name: Decrypt private native witnesses only inside approved environment
+        env:
+          KIRO_RELEASE_INPUTS_PASSPHRASE: ${{ secrets.COMPLETE_RELEASE_INPUTS_PASSPHRASE }}
+        run: node scripts/complete-release-inputs.mjs unpack "$RUNNER_TEMP/complete-inputs/inputs.enc" "$RUNNER_TEMP/complete-private"
+      - name: Verify all signed native gates and capture exact final assets
+        env: { COMMIT: '${{ needs.verify.outputs.commit }}', TAG: '${{ inputs.tag }}' }
+        run: node scripts/complete-release-promotion.mjs "$RUNNER_TEMP/complete-private" "$RUNNER_TEMP/complete-assets" "$COMMIT" "$TAG"
+      - name: Remove decrypted qualification witnesses
+        if: always()
+        run: rm -rf -- "$RUNNER_TEMP/complete-private" "$RUNNER_TEMP/complete-inputs"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: verified-complete-release-${{ needs.verify.outputs.commit }}
+          if-no-files-found: error
+          path: ${{ runner.temp }}/complete-assets/
+
+  publish:
+    needs: [verify, qualify]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: verified-complete-release-${{ needs.verify.outputs.commit }}
+          path: ${{ runner.temp }}/release
+      - name: Require immutable tags and rebind immediately before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          COMMIT: ${{ needs.verify.outputs.commit }}
+          TAG_OBJECT: ${{ needs.verify.outputs.tag_object }}
+        run: |
+          set -euo pipefail
+          # An environment approval alone cannot prevent a moved tag. Require
+          # active no-bypass update/deletion protection, then recheck identity.
+          locked=false
+          for id in $(gh api --paginate "repos/$REPOSITORY/rulesets?includes_parents=true" --jq '.[] | select(.target == "tag" and .enforcement == "active") | .id'); do
+            rules=$(gh api "repos/$REPOSITORY/rulesets/$id")
+            if jq -e --arg ref "refs/tags/$TAG" '.target == "tag" and .enforcement == "active" and has("bypass_actors") and (.bypass_actors | length) == 0 and (.conditions.ref_name.exclude | length) == 0 and (.conditions.ref_name.include | any(. == "~ALL" or . == $ref)) and ([.rules[].type] | index("update") != null and index("deletion") != null)' <<<"$rules" >/dev/null; then locked=true; fi
+          done
+          test "$locked" = true
+          ref=$(gh api "repos/$REPOSITORY/git/ref/tags/$TAG")
+          test "$(jq -r '.object.type' <<<"$ref")" = tag
+          test "$(jq -r '.object.sha' <<<"$ref")" = "$TAG_OBJECT"
+          tag=$(gh api "repos/$REPOSITORY/git/tags/$TAG_OBJECT")
+          test "$(jq -r '.verification.verified' <<<"$tag")" = true
+          test "$(jq -r '.object.type' <<<"$tag")" = commit
+          test "$(jq -r '.object.sha' <<<"$tag")" = "$COMMIT"
+      - uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
+        with:
+          tag_name: ${{ inputs.tag }}
+          files: ${{ runner.temp }}/release/*
+          fail_on_unmatched_files: true

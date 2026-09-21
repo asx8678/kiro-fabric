@@ -4,7 +4,17 @@ Status: **not qualified**. The harness now attempts actual native lifecycle
 commands, not only help. **No H01–H12 pass is claimed.** Missing harness
 instrumentation is `untested`, not an external host limitation.
 
-## Current authenticated Darwin evidence (2026-09-20)
+## Latest native acceptance follow-up (2026-09-21)
+
+See [native-acceptance-2026-09-21.md](native-acceptance-2026-09-21.md) for the
+latest real-Fabric approval, installed-profile visibility, acknowledged
+cancel/queue, controls, release and reference probes. H07/H09/H11 are now
+**partial**; H10 is **host-blocked** by the observed missing native form handler.
+H08 has additional scoped compact/swap/clear observations. No complete gate is
+qualified. The 2026-09-20 observations below remain historical snapshots;
+especially their absence of cancellation acknowledgment is not the latest claim.
+
+## Earlier authenticated Darwin evidence (2026-09-20)
 
 Kiro CLI **2.22.1** was exercised with existing authorized authentication and
 owned temporary scratch profiles by `scripts/fovea-native-probe.mjs`:

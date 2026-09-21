@@ -41,11 +41,11 @@ describe('current Fovea qualification records', () => {
       ['H04', 'unqualified', 'native-tui', null],
       ['H05', 'partial', 'native-tui', null],
       ['H06', 'partial', 'native-tui', null],
-      ['H07', 'unqualified', 'native-tui', null],
-      ['H08', 'partial', 'headless', null],
-      ['H09', 'untested', 'headless', null],
-      ['H10', 'untested', 'native-tui', null],
-      ['H11', 'untested', 'headless', null],
+      ['H07', 'partial', 'native-tui', null],
+      ['H08', 'partial', 'headless-and-native-tui', null],
+      ['H09', 'partial', 'headless', null],
+      ['H10', 'host-blocked', 'native-tui', 'native-form-handler-missing'],
+      ['H11', 'partial', 'headless-and-native-tui', null],
       ['H12', 'untested', 'headless', null],
     ]);
     for (const gate of gates) {
@@ -86,7 +86,7 @@ describe('current Fovea qualification records', () => {
     const qualification = read('qualification.json');
     const resume = qualification.currentNativeProtocol.followup.resume;
     const gate = qualification.gates.find((entry: Gate) => entry.id === 'H08');
-    expect(gate).toMatchObject({ status: 'partial', surface: 'headless', qualified: false, blocker: null });
+    expect(gate).toMatchObject({ status: 'partial', surface: 'headless-and-native-tui', qualified: false, blocker: null });
     expect(resume).toMatchObject({
       surface: 'headless', sessionId: 'sess_f5aa7b83-c6dd-491f-98f9-1a0425304cb2',
       sessionIdentityPreserved: true, selectedModeObserved: true, fixtureMcpCallCompleted: true,
@@ -114,10 +114,10 @@ describe('current Fovea qualification records', () => {
     const qualification = read('qualification.json');
     const cancellation = qualification.currentNativeProtocol.followup.cancellation;
     const gate = qualification.gates.find((entry: Gate) => entry.id === 'H07');
-    expect(gate).toMatchObject({ status: 'unqualified', qualified: false, blocker: null });
-    expect(gate.observation).toContain('no acknowledged session/cancel event');
-    expect(gate.observation).toContain('no second UserPromptSubmit observed');
-    expect(gate.remaining).toContain('a wiring concern, not proof of native cancellation failure');
+    expect(gate).toMatchObject({ status: 'partial', qualified: false, blocker: null });
+    expect(gate.observation).toContain('cancelled response for prompt ID 3');
+    expect(gate.observation).toContain('5517 ms after acknowledgment');
+    expect(gate.remaining).toContain('stopping automatic hook/engine work');
     expect(text('host-capability-probes.md')).toContain('**cancellation/queue contract unverified**');
     expect(text('completion-ledger.md')).toContain('H07 is **unqualified**, not host-blocked');
     expect(cancellation).toMatchObject({
@@ -134,6 +134,25 @@ describe('current Fovea qualification records', () => {
     expect(cancellation.escapeSentMs).toBeLessThan(cancellation.nextUserSentMs);
     expect(cancellation.nextUserSentMs).toBeLessThan(cancellation.hookEndMs);
     expect(cancellation.hookEndMs - cancellation.escapeSentMs).toBe(cancellation.completionAfterEscapeMs);
+  });
+
+  it('records new native cancellation separately from the preserved Escape-only snapshot', () => {
+    const current = read('qualification.json').currentNativeProtocol.acceptanceFollowup;
+    expect(current).toMatchObject({ automatic: false, qualified: false,
+      cancellation: { status: 'partial', turnCancellationAcknowledged: true, hookCancelNotificationObserved: true,
+        hookCompletedAfterAcknowledgmentMs: 5517, queuedPromptAccepted: true, queuedTurnCompleted: true,
+        oldHookCompletedAfterQueuedTurn: true, fullAutomaticCancellationContractQualified: false },
+      sessionTransitions: { freshFixtureCalls: 4, driverExitCode: 0, actualFabricStateIsolationQualified: false },
+      retainedGeneration: { tested: false } });
+    expect(current.cancellation.hookCompletedAfterAcknowledgmentMs).toBeGreaterThan(current.cancellation.queuedPromptAfterCancelMs);
+  });
+
+  it('does not turn missing native approval handlers or observed tools into complete qualification', () => {
+    const current = read('qualification.json').currentNativeProtocol.acceptanceFollowup;
+    expect(current.approval).toMatchObject({ status: 'host-blocked', reason: 'native-form-handler-missing', actualFabricExecution: true,
+      fixtureUnchanged: true, acceptedObserved: false, declinedObserved: false, revokedObserved: false, humanApprovalQualified: false });
+    expect(current.inventory).toMatchObject({ complete: false, observedTools: ['@fabric/fabric_exec'], installedProfileUnchanged: true, installedProfileResourcesEnabled: 2 });
+    expect(current.controls).toMatchObject({ actualFabricExecution: true, statusLazy: true, settingsDefaults: true, engineStartedOnce: true, sourceMatched: true, settingsMutationResetReloadQualified: false });
   });
 
   it('records observed Darwin explicit support separately from historical Linux counts', () => {

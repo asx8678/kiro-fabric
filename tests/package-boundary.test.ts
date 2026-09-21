@@ -101,7 +101,7 @@ describe("Agent product boundary", () => {
       return fs.statSync(target).isDirectory() ? files(target) : [target];
     });
     // Pinned-reference environment configuration is development-only.
-    const referenceHarnesses = ["scripts/fovea-reference-harness.mjs", "scripts/fovea-lifecycle-harness.mjs"];
+    const referenceHarnesses = ["scripts/fovea-reference-harness.mjs", "scripts/fovea-lifecycle-harness.mjs", "scripts/fovea-reference-diagnostics.mjs"];
     const body = selected.filter(file => !referenceHarnesses.includes(path.relative(root, file))).map((file) => fs.readFileSync(file, "utf8")).join("\n");
     const closure = fs.readFileSync(path.join(root, "dist/kiro-agent-closure/closure-manifest.json"), "utf8");
     for (const harness of referenceHarnesses) expect(closure).not.toContain(harness);

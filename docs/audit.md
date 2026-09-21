@@ -546,3 +546,21 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.
 - `tests/fovea/coverage-contract.test.ts` — real engine coverage packet/schema and guest typing checks.
 - `tests/fovea/mcp-context.test.ts` — real built MCP collector/default-off integration; not native-client evidence.
+- `scripts/fovea-approval-probe.mjs` — opt-in actual built-Fabric native form diagnostic with private ask-policy fixtures, correlated native/trace evidence and no auto-approval; never complete human or inventory qualification.
+- `tests/fovea/native-approval.test.ts` — actual recorder envelopes, typed response identity, missing-handler versus decline, final-mode guards and unchanged effects.
+- `scripts/fovea-lifecycle-probe.mjs` — opt-in bounded native resume/cancel/queue fixture with fresh recorder nonces and correlated acknowledgments; not actual Fabric lifecycle qualification.
+- `tests/fovea/native-lifecycle.test.ts` — native identity/replay/order guards, surviving hooks, generated Tcl recorder and real fixture stdio/input boundaries.
+- `tests/fovea/fixtures/lifecycle-contract-hook.mjs` — owned bounded hook-input recorder and cancellable-signal observation; no model context or continuation authority.
+- `tests/fovea/fixtures/lifecycle-contract-mcp.mjs` — harmless nonce MCP recorder with instance identity; deliberately no invented native chat mapping.
+- `scripts/release-native-evidence.mjs` — explicitly trusted-local read-only native smoke of exact schema-2 bundle/archive bytes, closure provenance and tools; never production promotion or installation.
+- `tests/release-native-evidence.test.ts` — mismatched host/translation/archive/provenance refusal, spawn failure and byte-identity regression checks.
+- `scripts/fovea-reference-diagnostics.mjs` — unchanged pinned cold reference/native repeats and exact graph identity preimages; multiset diagnostics never waive strict output parity.
+- `tests/fovea/reference-diagnostics.test.ts` — identity reconstruction, empty-discovery refusal and order-only mismatch diagnostics without normalization.
+- `scripts/prepare-complete-release.mjs` — exact clean-commit schema-2 candidate snapshots, release provenance before qualification, unsigned final-byte signing inputs and native smoke; no install or signing authority.
+- `scripts/complete-release-signing-inputs.mjs` — all-target native evidence/witness capture and offline signing request creation, with no key access or signature generation.
+- `scripts/complete-release-inputs.mjs` — bounded authenticated encrypted private-witness transport and allowlisted create-only extraction; never a signing or qualification authority.
+- `tests/complete-release-inputs.test.ts` — ciphertext authentication, distinct nonces, wrong-secret refusal and pre-extraction path/digest/schema rejection.
+- `scripts/complete-release-promotion.mjs` — static-root signed metadata and independently signed qualification, all-four-target exact archive/SPDX/closure checks, private witness binding and captured-byte bootstrap/asset publication.
+- `tests/complete-release-fixture.ts` — four-target synthetic signed complete-bundle fixtures; no fixture binary is executed and keys are test-only.
+- `tests/release-complete.test.ts` — exact captured promotion plus missing/stale/unsigned/tampered evidence, dirty source and offline ceremony guards.
+- `tests/complete-release-workflow.test.ts` — protected manual candidate/promotion registration, signed tag/commit/origin checks, no signing secret exposure and inert hostile tag inputs.

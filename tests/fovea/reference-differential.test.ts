@@ -193,7 +193,12 @@ async function compareColdFamily(budget: number, controlled: boolean, scheduled 
         expect(tapeEvidence.runs).toHaveLength(3);
       }
       const differences = compareOutputs(expected, actual), referenceRepeatDifferences = compareOutputs(expected, repeat);
-      fs.writeFileSync(path.join(scope.root, 'family-comparison.json'), JSON.stringify({ referenceCommit: PINNED.upstreamCommit, parserHash, productionNative: production, ...(production ? { nativeByteIdentical: rawOutputs.native === rawOutputs['native-repeat'] } : {}), inputContract: production ? 'production-batched-v17-vs-scheduled-reference-v1' : scheduled ? 'fifo-source-rule-order-live-parser-v1' : controlled ? 'fifo-source-rule-order-parser-tape-v2' : 'independent-cold-v1', independentCold: !controlled, ...(tapeEvidence ? { tapeEvidence, tapeScheduleEvidence: tapeSchedule!.inspect() } : {}), ...(scheduleEvidence ? { scheduleEvidence, referenceByteIdentical: rawOutputs.reference === rawOutputs['reference-repeat'], outputSha256: Object.fromEntries(Object.entries(rawOutputs).map(([label, text]) => [label, createHash('sha256').update(text).digest('hex')])) } : {}), qualified: !controlled && differences.length === 0 && referenceRepeatDifferences.length === 0, controlledInputsMatched: controlled && differences.length === 0 && referenceRepeatDifferences.length === 0, clock: REFERENCE_CLOCK_MS, budget, queries: familyQueries, inputs, tolerance: NUMERICAL_TOLERANCE, differences, referenceRepeatDifferences }), { mode: 0o600, flag: 'wx' });
+      const report = { referenceCommit: PINNED.upstreamCommit, parserHash, productionNative: production, ...(production ? { nativeByteIdentical: rawOutputs.native === rawOutputs['native-repeat'] } : {}), inputContract: production ? 'production-batched-v17-vs-scheduled-reference-v1' : scheduled ? 'fifo-source-rule-order-live-parser-v1' : controlled ? 'fifo-source-rule-order-parser-tape-v2' : 'independent-cold-v1', independentCold: !controlled, ...(tapeEvidence ? { tapeEvidence, tapeScheduleEvidence: tapeSchedule!.inspect() } : {}), ...(scheduleEvidence ? { scheduleEvidence, referenceByteIdentical: rawOutputs.reference === rawOutputs['reference-repeat'], outputSha256: Object.fromEntries(Object.entries(rawOutputs).map(([label, text]) => [label, createHash('sha256').update(text).digest('hex')])) } : {}), qualified: false, controlledInputsMatched: false, acceptanceVerified: false, clock: REFERENCE_CLOCK_MS, budget, queries: familyQueries, inputs, tolerance: NUMERICAL_TOLERANCE, differences, referenceRepeatDifferences };
+      // Equality on empty discovery is not parity. Preserve diagnostic differences
+      // first, but publish success only after coverage, inventories and exact-byte
+      // assertions below all succeed. Failures retain an explicitly unqualified report.
+      const reportPath = path.join(scope.root, 'family-comparison.json');
+      fs.writeFileSync(reportPath, JSON.stringify(report), { mode: 0o600, flag: 'wx' });
       expect(inventory(scope.workspace)).toEqual(inputs); expect(inventory(path.join(archived, 'src'))).toEqual(sourceBefore);
       for (const output of [expected, repeat, actual]) {
         expect(output.extraction).toEqual({ failed: [], unreadable: [], oversized: [], generated: [] });
@@ -211,6 +216,7 @@ async function compareColdFamily(budget: number, controlled: boolean, scheduled 
         expect(rawOutputs['native-repeat'], `byte-identical production rerun: ${scope.root}`).toBe(rawOutputs.native);
         expect(rawOutputs.native, `byte-identical scheduled reference / production: ${scope.root}`).toBe(rawOutputs.reference);
       }
+      fs.writeFileSync(reportPath, JSON.stringify({ ...report, qualified: !controlled, controlledInputsMatched: controlled, acceptanceVerified: true }), { mode: 0o600 });
       passed = true;
     } finally { if (passed && process.env.FOVEA_RETAIN_CONTROLLED_REPORT !== '1') fs.rmSync(scope.root, { recursive: true, force: true }); }
 }

@@ -43,6 +43,14 @@ Missing/stale bindings fail before approval. On conflict, reread and reassess an
 - [ ] Only after separate maintainer authorization and all gates pass, follow the signed annotated-tag workflow and exact qualified-asset promotion. This preparation authorizes no commit, tag, publication or installation.
 
 
+## Complete-bundle candidate and promotion path
+
+The new [complete-bundle pipeline](complete-bundle-release.md) provides clean exact-commit
+candidate preparation, four-target signed qualification, confidential witness transport
+and captured-byte promotion. Production signer/runners/native-client receipts remain
+unprovisioned; this is not a release-ready declaration. Legacy gates below remain
+blocked and cannot qualify the new path.
+
 ## Complete installer distribution gate
 
 Complete installer distribution is currently BLOCKED. Production readiness is checked before legacy artifact reads/promotion; legacy candidate reports cannot become installer release-ready even when their historical authenticated evidence is valid. Genuine production trust/signing, signed final-byte metadata, release-pinned bootstrap artifacts and complete-bundle exact-client qualification are required. The existing annotated-tag, commit, signature and captured-archive gates are retained; no newly compressed artifact inherits qualification.

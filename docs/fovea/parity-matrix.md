@@ -54,10 +54,11 @@ call were observed; headless emitted no hooks. Neither MCP surface supplies a
 native chat/session identity, so supported hook-to-host routing remains missing.
 No intended-model-input acknowledgment was observed. The table below separates
 **partial observations and blockers from complete gate qualification**. No H gate
-is passed: the demonstrated continuation bound belongs to the fixture, and a
-separate native probe observed hook completion after Escape input, not an
-acknowledged cancellation or accepted queued prompt.
-Details: [host-capability-probes.md](host-capability-probes.md).
+is passed: the demonstrated continuation bound belongs to the fixture. The latest
+native probe **did acknowledge cancellation and execute a submitted queued turn**,
+but the old hook completed 5,517 ms later. Real Fabric approval is host-blocked by
+a missing native form handler, not a user decline. Details and exact scope:
+[native-acceptance-2026-09-21.md](native-acceptance-2026-09-21.md).
 
 Darwin descriptor-safe provenance and all 15 pinned lifecycle component cases
 now pass without skips; fixture generation admission is not installed/native-Kiro
@@ -73,11 +74,11 @@ session qualification. See [completion-ledger.md](completion-ledger.md).
 | H04 | prompt marker delivered to intended model turn | unqualified: actual prompt-marker input unobserved; following a Stop reason is not prompt-delivery proof |
 | H05 | post-tool marker delivered without changing result or error | partial: native-TUI success/error PreToolUse/PostToolUse and tool_response observed; real Fabric preservation and next-step delivery unqualified |
 | H06 | stop marker causes bounded continuation, not merely hook firing | partial: mechanism demonstrated on native-TUI by a real third MCP fixture call; one-shot bound belongs to the fixture, not a verified client contract |
-| H07 | cancel stops automatic work and queued user input wins | unqualified: hook completed 7,305 ms after PTY Escape input; no acknowledged session/cancel event or second UserPromptSubmit observed. Cancellation/queue contract unverified, not a proven host failure |
-| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | partial: headless resume preserved chat identity and completed a fixture call on a distinct MCP instance still lacking native session metadata; TUI replay is not new-hook evidence; hook/Fabric restoration and clear/compact/profile-swap unqualified |
-| H09 | visible/model-only/disabled and status/settings/reset/reload | untested |
-| H10 | accepted/declined exact effects and workspace revocation | untested |
-| H11 | authoritative complete model-visible tool inventory | untested |
+| H07 | cancel stops automatic work and queued user input wins | partial: native cancellation and submitted queued-turn completion acknowledged; original fixture hook ended 5,517 ms later, after the queued turn. Complete automatic-work cancellation/precedence unqualified |
+| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | partial: resumed new fixture call and native compact/swap/clear responses plus fresh calls observed; no supported MCP session association or actual Fabric restoration/isolation; corrected native fixture driver exited 0 with all four checks, not actual Fabric state isolation |
+| H09 | visible/model-only/disabled and status/settings/reset/reload | partial: real read-only Fabric status/settings/focus passed, bytes unchanged; settings mutation/reset/reload and presentation modes unqualified |
+| H10 | accepted/declined exact effects and workspace revocation | host-blocked: real Fabric edit form returned native-form-handler-missing; matched native response and unchanged fixture, not a user decline. Human accept/decline/revoke unqualified |
+| H11 | authoritative complete model-visible tool inventory | partial: only fabric_exec observed in real-Fabric TUI and unchanged installed standard-profile run; complete authoritative model-input inventory unavailable |
 | H12 | old session retains generation-matched engine and hooks | untested |
 
 Additional F04/F11/F16 evidence: `tests/fovea/reference-lifecycle.test.ts`

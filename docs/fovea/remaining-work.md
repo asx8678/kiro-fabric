@@ -1,5 +1,7 @@
 # Fovea remaining-work execution plan (all five items)
 
+Latest native/release/reference follow-up: [native-acceptance-2026-09-21.md](native-acceptance-2026-09-21.md). The remaining work is now evidenced blockers and incomplete full contracts, not blanket untested status. Automatic integration and release readiness remain off.
+
 Owner-selected original scope, 2026-09-20.
 
 ## Current follow-up

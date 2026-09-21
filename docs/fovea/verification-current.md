@@ -1,5 +1,7 @@
 # Current-source verification supplement — 2026-09-20
 
+Latest **2026-09-21** evidence is in [native-acceptance-2026-09-21.md](native-acceptance-2026-09-21.md): real native approval handler failure, scoped tool visibility/cancellation/controls, exact preserved Darwin smoke and failing optional reference gates. Prior verification counts below keep their original scope; no current full-suite or release certification is implied.
+
 ## Current follow-up
 
 [completion-ledger.md](completion-ledger.md) owns the latest eight-item

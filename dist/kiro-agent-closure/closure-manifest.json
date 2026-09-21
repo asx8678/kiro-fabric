@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "93c9e639d8804ef5fa5ea467667bb55d5cd16025759ad258f16b5803337eccfa"
+        "sha256": "c5da2bc49617f28bc4ba6da1c6db4f437566f26bbac1f5c7a06d217eeefb054b"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -816,7 +816,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "47d2ec45d8ede0f4c783145f4be596720239d6362e702814c764dc0ad8bb3271"
+    "digest": "0ddc73522d8339ca3f8203ddf49974f11d598674638d6854cd41fc98d49dce46"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",

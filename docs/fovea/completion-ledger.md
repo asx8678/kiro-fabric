@@ -1,5 +1,50 @@
 # Fovea completion ledger
 
+**Latest follow-up (2026-09-21):** [native acceptance ledger](native-acceptance-2026-09-21.md).
+Real Fabric approval is host-blocked by Kiro's missing form handler; observed
+inventory is incomplete. Native cancellation/queued execution and read-only
+controls have partial evidence, not automatic qualification. The earlier
+implementation/commit checkpoints below retain their original dates and scopes;
+the old Escape-only H07 and untested H09–H11 dispositions are superseded.
+
+## Current reference/release closeout
+
+This follow-up diagnoses strict reference identity mismatches without changing
+assertions: [reference identity diagnosis](reference-identity-diagnosis.md).
+Four current reproducible native blockers are prepared as
+[unpublished upstream issue drafts](../upstream-client-issues.md).
+The [complete-bundle pipeline](../complete-bundle-release.md) now has distinct
+candidate, offline-signing-input, encrypted transport and signed promotion paths;
+actual production signing, runner provisioning and native qualification remain pending.
+The inherited native acceptance work and these additions passed the final trusted-Node
+`pnpm run check`: **3,231 passed / 63 skipped / 0 failed**, 205 passing files /
+5 skipped files. All **15 pinned lifecycle cases executed and passed**. Guidance,
+both typechecks, fresh build/staging, Knip, component certification and SBOM passed.
+
+- Terminal log/exit: `.tmp/fovea-release-closeout-recheck.log` and
+  `.tmp/fovea-release-closeout-recheck.exit`.
+- Full report: `.tmp/fovea-release-closeout-recheck-full.json`, SHA-256
+  `5098d47f65138f0e83fbb108bb3ad33920cc151f49bc4732526198297eac1420`.
+- Initial full run: 3,228 passed / 3 failed / 63 skipped, retained separately in
+  `.tmp/fovea-release-closeout-full.json`. Its confirmed 15-second whole-fixture
+  crash/replay timeout was replaced with a 60-second **harness-only** budget;
+  executable fixture logic and assertions are otherwise byte-identical. The new
+  development-only reference diagnostic was added to the exact package-boundary
+  exception list; shipped-code prohibitions remain intact.
+- The initial cancellation test reported conservative cleanup uncertainty. Its
+  underlying census cause was not established. No production cleanup budget or
+  cancellation assertion changed: the complete focused modules passed **75 / 3
+  skipped**, and the subsequent full run passed it unchanged. Do not call that an
+  identified or repaired production defect.
+- Independent source reviews checked release trust/privacy/tag boundaries and
+  native/reference evidence scope. Public CLI probes confirmed static-root refusal
+  before output creation. Documented pnpm argument forwarding was checked directly.
+
+This is local implementation verification, not native Kiro or production release
+qualification. GitHub authentication, signer custody and all-four-target native
+runner/evidence provisioning remain unavailable; no external issue or release was
+published. Automatic Fovea remains disabled.
+
 ## Scope
 
 Follow-up to `020d86c37178ab17453d9a03ec6e60318fcda243` on Darwin arm64.
