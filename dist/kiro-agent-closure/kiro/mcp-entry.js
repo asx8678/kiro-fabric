@@ -897,7 +897,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
       const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : void 0;
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-CFCSK553.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-6OPNCWZF.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {} });
     } finally {
       release?.();

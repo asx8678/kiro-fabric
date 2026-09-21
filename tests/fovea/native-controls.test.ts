@@ -61,7 +61,7 @@ describe('native controls evidence, never a full lifecycle qualification', () =>
     for (const traces of [[], [{ ev: 'tool.fabric_exec' }, { ev: 'tool.fabric_exec' }]]) expect(summarizeControlRun({ ...fixture(), traces }).completed).toBe(false);
     for (const patch of [{ exitCode: 1 }, { error: 'spawn-error' }, { stopReason: 'timeout' }, { cleanup: 'uncertain' }]) expect(summarizeControlRun({ ...fixture(), result: { ...result, ...patch } }).completed).toBe(false);
   });
-  it.each(['prose', 'replay', 'wrong-session', 'wrong-id', 'typed-id', 'wrong-input', 'extra-argument', 'fallback', 'mode', 'nonce', 'failed', 'duplicate', 'missing-end', 'result-before-call', 'status-regression'])('rejects %s evidence', kind => {
+  it.each(['prose', 'replay', 'wrong-session', 'wrong-id', 'typed-id', 'wrong-input', 'extra-argument', 'fallback', 'mode', 'nonce', 'failed', 'duplicate', 'missing-end', 'result-before-call', 'status-regression', 'duplicate-end', 'error-and-end'])('rejects %s evidence', kind => {
     const f = fixture();
     if (kind === 'prose') f.frames[2]!.msg.params.update.sessionUpdate = 'agent_message_chunk';
     if (kind === 'replay') { const replay = f.frames.splice(2, 2); f.frames.unshift(...replay); }
@@ -78,6 +78,8 @@ describe('native controls evidence, never a full lifecycle qualification', () =>
     if (kind === 'missing-end') f.frames.pop();
     if (kind === 'result-before-call') [f.frames[2], f.frames[3]] = [f.frames[3]!, f.frames[2]!];
     if (kind === 'status-regression') f.frames.splice(4, 0, update({ sessionUpdate: 'tool_call_update', toolCallId: 'call-1', status: 'pending' }));
+    if (kind === 'duplicate-end') f.frames.push(structuredClone(f.frames[4]!));
+    if (kind === 'error-and-end') f.frames[4]!.msg.error = { message: 'failed turn' };
     expect(summarizeControlRun(f).completed).toBe(false);
   });
   it('distinguishes a matched missing handler from decline and mismatched form responses', () => {

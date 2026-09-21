@@ -546,6 +546,8 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.
 - `tests/fovea/coverage-contract.test.ts` — real engine coverage packet/schema and guest typing checks.
 - `tests/fovea/mcp-context.test.ts` — real built MCP collector/default-off integration; not native-client evidence.
+- `scripts/fovea-human-qualification.mjs` — six genuine terminal cases, private checkpoints, replay/drift rejection and stop-on-block; no automated responses or native gate promotion.
+- `tests/fovea/human-qualification.test.ts` — exact rule/mode review arguments and effects, decision matrix anti-replay/drift checks and human-terminal prerequisite.
 - `scripts/fovea-control-cases.mjs` — exact-hash adoption, mode-setting and matched native approval/effect diagnostics; no automated approvals or native UI qualification claims.
 - `scripts/fovea-session-probe.mjs` — real-Fabric TUI compact/swap/clear and same-MCP deferred-detach diagnostics, with bounded driver and witnessed transition acknowledgments.
 - `tests/fovea/native-control-cases.test.ts` — generated guest typing, matched decisions and negative rule/mode/lifecycle/revocation evidence cases.

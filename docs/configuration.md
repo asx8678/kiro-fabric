@@ -19,6 +19,17 @@ presentation, not an accepted configuration field, and does not change stored
 bytes or revision hashes. Other automatic lifecycle limitations remain explicit
 in `repo.status().capabilities`.
 
+`fabric.info().fovea.sessionIsolation` explicitly reports MCP-instance ownership,
+unsupported native isolation and no guaranteed reset on native `/clear`. A reused
+MCP instance can retain focus, results, session settings and rule trust across
+native chats. `automaticQualification` reports `ready:false`, all required native
+H01–H12 gates and no qualified native gates; neither guest input nor an environment
+flag enables them. This is a limitation report, not a session-isolation fix.
+
+Use [the human/native follow-up](fovea/native-followup.md) for the six-case terminal
+runner and the current client blockers. Never change `ask` to `allow` to make a
+qualification case pass.
+
 See the [control/lifecycle implementation plan](fovea/control-lifecycle-plan.md)
 for reproducible native verification and the remaining host gates.
 

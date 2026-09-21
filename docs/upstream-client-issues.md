@@ -1,6 +1,6 @@
 # Upstream native Kiro issue drafts
 
-**Unpublished; no issue or PR numbers.** These four reproducible drafts use the
+**Unpublished; no issue or PR numbers.** These issue/API drafts use the
 2026-09-21 Darwin arm64 / Kiro CLI **2.22.1** observations, not the earlier Linux
 2.21.1/2.22.0 results. Existing authorized authentication was used; no credentials,
 private conversation logs or ordinary user configuration are attached. Every
@@ -34,6 +34,15 @@ raw recording remains private. Regression: `tests/fovea/native-approval.test.ts`
 After a client fix, use `--interactive` from a human terminal and verify exact
 accepted/declined effects independently. Do not use blanket allow or native tools
 as an approval bypass.
+
+### Fresh follow-up
+
+A new real-Fabric native TUI run again observed a matched missing-handler reply:
+`.tmp/fovea-followup-approval.log` and `.tmp/fovea-approval-Lbb82d/report.json`.
+One native form request/response, actual Fabric invocation, unchanged exact fixture;
+no human accept/decline was observed. Diagnostic exit 0 is not an approval pass.
+The six-case human runner is now available as `pnpm run qualify:fovea:human` after
+a client fix. It never supplies form responses and refuses non-human terminals.
 
 ## 2. Acknowledged cancellation leaves the previous prompt hook running
 
@@ -82,6 +91,23 @@ Evidence: `.tmp/fovea-native-VEArYZ/report.json` and the source/evidence discuss
 [host capability probes](fovea/host-capability-probes.md). Production remains
 `native-session-rendezvous-unavailable`; no guessed routing is enabled.
 
+### Fresh routing and state follow-up
+
+`.tmp/fovea-followup-routing.log` / `.tmp/fovea-native-4upKSf/report.json`
+reobserved real native hooks carrying `session_id`, while all three MCP fixture
+calls carried only `name` and `arguments` with `meta:null`. All hook kinds and a
+continuation call were observed; intended model-input delivery was **not**.
+This is protocol-fixture evidence, not Fabric automatic integration.
+
+Actual Fabric also demonstrated prior-focus retention after native `/clear` in
+[the previous closeout](fovea/native-controls-closeout.md). The current lifecycle
+probe now emits an explicit isolation failure and exit 3 for a completed run that
+retains the prior chat's exact focus ID. Missing evidence never counts as a pass.
+This proves a sequential cross-chat state boundary gap in the tested path, not
+concurrent pooling or cross-workspace access. Required native routing/isolation
+semantics remain the expected contract above; no filesystem rendezvous, cwd
+heuristic or guest-supplied session ID is an acceptable repair.
+
 ## 4. An authoritative complete model-visible tool inventory is needed
 
 **Title:** Expose and enforce the final model tool inventory, including client-injected tools.
@@ -101,8 +127,55 @@ it as a fresh 2.22.1 failure. See [historical coding readiness](coding-readiness
 
 ## Filing and closure
 
-Review/sanitize attachments before filing. No raw private transcript should be
-attached automatically. These are local issue drafts; no GitHub authentication,
-issue publication, client update, policy override or installation was performed.
-Close gates only with the exact native client version's positive and negative
-behavioral evidence—not unit mocks, model prose, ACP substitute clients, or help.
+### Reporting preflight (2026-09-21)
+
+The plan is valid with a distinction: the missing form handler is an observed
+client failure; native session association is a request for a supported API or
+lifecycle guarantee, not a base-MCP protocol violation. Neither requires rewriting
+Fovea navigation or weakening approvals.
+
+- Official destination: [kirodotdev/Kiro](https://github.com/kirodotdev/Kiro/issues).
+- The official stable manifest currently reports **2.22.1**, matching the tested
+  client: <https://prod.download.cli.kiro.dev/stable/latest/manifest.json>.
+  The installer and manifest were read only; no client update was performed.
+- Targeted open/closed issue searches found related scopes, not an exact duplicate:
+  [#4580](https://github.com/kirodotdev/Kiro/issues/4580) (general elicitation, later
+  closed with an invitation to report current versions),
+  [#11385](https://github.com/kirodotdev/Kiro/issues/11385) (IDE Power-bundled MCP),
+  and [#9140](https://github.com/kirodotdev/Kiro/issues/9140) (HTTP transport session
+  headers, not shared native chat ownership). Recheck immediately before filing.
+- **Publication blocked:** `gh api user --jq .login` exits **4** and requests
+  `gh auth login`. No issue was submitted and no issue number is invented.
+- The checkout repository returns 404 to the unauthenticated public API. That does
+  not prove its visibility; public report bodies therefore do not depend on its
+  source links. Repository visibility was not changed.
+
+Reviewed, sanitized issue bodies (not raw evidence attachments):
+
+1. [CLI form-handler bug report](fovea/upstream-approval-report.md)
+2. [Native session-binding API request](fovea/upstream-session-report.md)
+
+The reduced reproduction recipes are explicitly distinguished from the actually
+executed integration probes. They contain no private recording, absolute local
+path, native conversation ID, credential, or assumed-public checkout link.
+
+After the owner authenticates `gh`, recheck duplicates and review these bodies:
+
+```sh
+gh issue create --repo kirodotdev/Kiro \
+  --title 'CLI 2.22.1 (--v3): advertised MCP form elicitation has no native handler' \
+  --body-file docs/fovea/upstream-approval-report.md
+gh issue create --repo kirodotdev/Kiro \
+  --title 'CLI v3: document or expose native chat ownership to hooks and MCP' \
+  --body-file docs/fovea/upstream-session-report.md
+```
+
+Record the real returned issue URLs here after successful publication. Do not
+upload this local evidence index or raw transcripts as a substitute for those
+sanitized bodies. No policy override or installation is part of reporting.
+
+After a supported client fix, rerun the human matrix and actual `/clear` lifecycle
+probe described in [native follow-up](fovea/native-followup.md), then qualify
+remaining automatic-integration gates. Close gates only with the exact native
+client version's positive and negative behavioral evidence—not unit mocks,
+model prose, ACP substitute clients, or help.

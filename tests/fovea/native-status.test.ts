@@ -26,7 +26,10 @@ describe('public native Fovea diagnostics', () => {
       const response = await wire.handlers.get(CallToolRequestSchema)!({ params: { name: 'fabric_info', arguments: {} } }, { signal: new AbortController().signal });
       expect(response.isError).not.toBe(true);
       const info = JSON.parse(response.content[0].text);
-      expect(info.fovea).toEqual({ nativeHooks: { schemaVersion: 1, status: 'host-blocked', reason: 'native-session-rendezvous-unavailable', dispatched: false, automatic: false, modelContextDelivered: false }, postToolContext: enabled ? 'trusted-embedder-visible' : 'disabled', nativeSessionAssociation: 'unavailable', modelInputAcknowledged: false });
+      expect(info.fovea).toEqual({ nativeHooks: { schemaVersion: 1, status: 'host-blocked', reason: 'native-session-rendezvous-unavailable', dispatched: false, automatic: false, modelContextDelivered: false }, postToolContext: enabled ? 'trusted-embedder-visible' : 'disabled', nativeSessionAssociation: 'unavailable', modelInputAcknowledged: false,
+        sessionIsolation: { supported: false, stateOwner: 'mcp-instance', nativeClearResetGuaranteed: false,
+          warning: 'A reused MCP instance can retain focus, results, session settings and rule trust across native chats. Native /clear is not a Fabric state boundary.' },
+        automaticQualification: { ready: false, requiredNativeGates: Array.from({ length: 12 }, (_, i) => 'H' + String(i + 1).padStart(2, '0')), qualifiedNativeGates: [] } });
       expect(info.lifecycle.runtimeActive).toBe(false);
       expect(info.nativeKiroTools.modelInventoryVerified).toBe(false);
     } finally { await server.close(); }

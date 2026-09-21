@@ -11,8 +11,8 @@ import { generateAgentProfile } from './agent-profile.mjs';
 import { validateBundle } from './bundle-contract.mjs';
 import { verifyBuildClosure } from './build-inputs.mjs';
 import { runBounded } from './fovea-capability-probe.mjs';
-import { RULE_FIXTURES, extraControlProgram, summarizeExtraControl, controlDecisionEvidence } from './fovea-control-cases.mjs';
-import { runSessionProbe } from './fovea-session-probe.mjs';
+import { RULE_FIXTURES, extraControlProgram, summarizeExtraControl, controlDecisionEvidence, extraDecisionEvidence } from './fovea-control-cases.mjs';
+import { runSessionProbe, promptBounds, sessionProbeExit } from './fovea-session-probe.mjs';
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONTROL_PROFILE = 'fovea-native-controls';
@@ -84,27 +84,31 @@ function controlPacket({ updates, modes, sessionId, traces, marker, phase, code,
 // replay, assistant prose and tool-shaped content outside that interval do not count.
 export function summarizeControlRun({ frames, traces, result, marker, phase, code, expectedProfile = CONTROL_PROFILE }) {
   const incoming = f => f?.dir === 'in' && f.msg;
-  const prompts = frames.filter(f => f?.dir === 'out' && f.msg?.method === 'session/prompt' && f.msg.id !== undefined &&
-    f.msg.params?.prompt?.some(p => p.type === 'text' && p.text?.includes(marker)));
-  const prompt = prompts.length === 1 ? prompts[0] : null;
+  const { prompt, start, end } = promptBounds(frames, marker);
   const sessionId = prompt?.msg.params?.sessionId;
-  const start = prompt ? frames.indexOf(prompt) : -1;
-  const end = prompt ? frames.findIndex((f, i) => i > start && incoming(f) && !f.msg.method && f.msg.id === prompt.msg.id && f.msg.result?.stopReason === 'end_turn') : -1;
   const interval = start >= 0 && end > start ? frames.slice(start + 1, end) : [];
   const updates = interval.filter(f => incoming(f) && f.msg.method === 'session/update' && f.msg.params?.sessionId === sessionId).map(f => f.msg.params.update);
   const modes = frames.filter(f => incoming(f) && f.msg.method === 'session/update' && f.msg.params?.sessionId === sessionId)
     .flatMap(f => f.msg.params.update?.configOptions ?? []).filter(o => o.id === 'mode').map(o => o.currentValue);
   const evidence = controlPacket({ updates, modes, sessionId, traces, marker, phase, code, expectedProfile });
-  const forms = interval.filter(f => incoming(f) && f.msg.method === '_kiro/mcp/elicitation' && f.msg.id !== undefined);
+  const callFrame = f => incoming(f) && f.msg.method === 'session/update' && f.msg.params?.sessionId === sessionId && f.msg.params?.update?.toolCallId === evidence.toolCallId;
+  const callStart = interval.findIndex(f => callFrame(f) && f.msg.params.update.sessionUpdate === 'tool_call');
+  const callEnd = interval.findIndex(f => callFrame(f) && f.msg.params.update.sessionUpdate === 'tool_call_update' && f.msg.params.update.status === 'completed');
+  const forms = interval.filter((f, i) => i > callStart && i < callEnd && incoming(f) && f.msg.method === '_kiro/mcp/elicitation' && f.msg.id !== undefined);
   const formPairs = forms.flatMap(f => {
     if (f.msg.params?.sessionId !== sessionId || f.msg.params?.toolCallId !== evidence.toolCallId || forms.filter(other => other.msg.id === f.msg.id).length !== 1) return [];
-    const responses = interval.filter((r, i) => i > interval.indexOf(f) && r?.dir === 'out' && !r.msg?.method && r.msg?.id === f.msg.id);
-    if (responses.length !== 1) return [];
+    const responses = interval.filter(r => r?.dir === 'out' && !r.msg?.method && r.msg?.id === f.msg.id);
+    if (responses.length !== 1 || interval.indexOf(responses[0]) <= interval.indexOf(f) || interval.indexOf(responses[0]) >= callEnd) return [];
     const response = responses[0];
     const message = f.msg.params?.elicitation?.message;
     const operation = typeof message === 'string' ? /^Risk: write\nAction: (repo\.(?:configure|reset|reload|adoptRules))\n/u.exec(message)?.[1] ?? null : null;
-    return [{ id: f.msg.id, operation, action: response.msg.error ? null : response.msg.result?.action ?? null,
-      approved: !response.msg.error && response.msg.result?.content?.approved === true,
+    let reviewedArguments = null;
+    try {
+      const parsed = operation ? JSON.parse(message.slice(message.indexOf('\n', message.indexOf('\n') + 1) + 1)) : null;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) reviewedArguments = parsed;
+    } catch { /* Truncated or redacted review is not exact argument evidence. */ }
+    return [{ id: f.msg.id, operation, reviewedArguments, action: response.msg.error ? null : response.msg.result?.action ?? null,
+      approved: !response.msg.error && typeof response.msg.result?.content?.approved === 'boolean' ? response.msg.result.content.approved : null,
       missingHandler: [response.msg.error?.message, response.msg.error?.data?.details].includes('No handler registered for method: _kiro/mcp/elicitation') }];
   });
   return { phase, marker, sessionId: sessionId ?? null, ...evidence, evidenceSource: 'native-acp-recorder',
@@ -180,14 +184,14 @@ export function controlsArgs(argv) {
     else if (arg === '--case' && ['controls', 'rules', 'modes', 'lifecycle'].includes(argv[i + 1])) scenario = argv[++i];
     else throw Error('Unsupported diagnostic option');
   }
-  if (decision && (!interactive || scenario !== 'controls')) throw Error('--decision requires interactive controls');
+  if (decision && (!interactive || scenario === 'lifecycle')) throw Error('--decision requires an interactive controls, rules or modes case');
   if (interactive && scenario === 'lifecycle') throw Error('Lifecycle uses a non-approving native TUI driver, not human approval');
   return { interactive, decision, scenario };
 }
 
-export async function main(argv = process.argv.slice(2)) {
+export async function main(argv = process.argv.slice(2), onReport = (_report, _root) => {}) {
   if (argv.length === 1 && argv[0] === '--help') {
-    console.log('Usage: node scripts/fovea-controls-probe.mjs --authenticated --bundle TRUSTED_CURRENT_BUNDLE [--interactive] [--decision accept|decline] [--case controls|rules|modes|lifecycle]\nControls run configure/reset/reload then resume. Rules/modes are separate cases; lifecycle drives native compact/swap/clear/detach without approving anything. Normal ask policy; never approves. --interactive requires human terminal review and /quit after each turn. Uses live authentication, private evidence/data/workspace; no installation or live profile edits. Exit 0 means diagnostic complete, not qualification.'); return 0;
+    console.log('Usage: node scripts/fovea-controls-probe.mjs --authenticated --bundle TRUSTED_CURRENT_BUNDLE [--interactive] [--decision accept|decline] [--case controls|rules|modes|lifecycle]\nControls run configure/reset/reload then resume. Rules/modes are separate cases; lifecycle drives native compact/swap/clear/detach without approving anything. Normal ask policy; never approves. --interactive requires human terminal review and /quit after each turn. Uses live authentication, private evidence/data/workspace; no installation or live profile edits. Exit 0 means diagnostic complete (and requested decisions observed), not qualification; exit 3 reports observed cross-chat focus retention.'); return 0;
   }
   const { interactive, decision, scenario } = controlsArgs(argv);
   if (interactive && (!process.stdin.isTTY || !process.stdout.isTTY)) throw Error('--interactive requires a human terminal');
@@ -222,8 +226,8 @@ export async function main(argv = process.argv.slice(2)) {
       processes.push(outcome.result);
       const bundleUnchanged = bundle.digest === (await validateBundle(bundleRoot)).digest, fixtureUnchanged = fixtureIntact();
       const report = { ...outcome.report, bundleUnchanged, fixtureUnchanged, diagnosticCompleted: outcome.report.diagnosticCompleted && bundleUnchanged && fixtureUnchanged };
-      write('report.json', report); console.log(JSON.stringify({ evidence: root, ...report }, null, 2));
-      return report.diagnosticCompleted ? 0 : 2;
+      write('report.json', report); onReport(report, root); console.log(JSON.stringify({ evidence: root, ...report }, null, 2));
+      return sessionProbeExit(report);
     }
     for (const phase of scenario === 'controls' ? ['initial', 'resume'] : [scenario]) {
       const prior = runs[0];
@@ -236,7 +240,7 @@ export async function main(argv = process.argv.slice(2)) {
       const args = ['chat', '--v3', '--agent', CONTROL_PROFILE, '--require-mcp-startup', ...(phase === 'resume' ? ['--resume-id', prior.sessionId] : []), ...(!interactive ? ['--output-format', 'stream-json'] : []), prompt];
       let result;
       if (interactive) {
-        console.log(`${phase}: ${decision ? `Please ${decision} each configure/reset/reload request for this case.` : 'Review each requested control individually.'} /quit when the turn finishes. Nothing is auto-approved.`);
+        console.log(`${phase}: ${decision ? `Please ${decision} each requested ${scenario} action for this case (including the deliberately stale rule hash).` : 'Review each requested control individually.'} /quit when the turn finishes. Nothing is auto-approved.`);
         result = await new Promise(resolve => {
           const child = spawn('kiro-cli', args, { cwd: workspace, env, stdio: 'inherit' });
           child.once('error', e => resolve({ exitCode: null, error: String(e), stopReason: null, cleanup: 'not-spawned' }));
@@ -253,9 +257,11 @@ export async function main(argv = process.argv.slice(2)) {
     const bundleUnchanged = bundle.digest === after.digest, fixtureUnchanged = fixtureIntact();
     const report = scenario === 'controls' ? { ...summarizeControls({ runs, bundleUnchanged, fixtureUnchanged }),
       approvalObservations: controlDecisionEvidence(runs[0], interactive ? 'human-terminal' : 'headless', decision) }
-      : { ...summarizeExtraControl(runs[0], bundleUnchanged && fixtureUnchanged), bundleUnchanged, fixtureUnchanged };
-    write('report.json', report); console.log(JSON.stringify({ evidence: root, ...report }, null, 2));
-    return report.diagnosticCompleted ? 0 : 2;
+      : { ...summarizeExtraControl(runs[0], bundleUnchanged && fixtureUnchanged), bundleUnchanged, fixtureUnchanged,
+        approvalObservations: extraDecisionEvidence(runs[0], interactive ? 'human-terminal' : 'headless', decision) };
+    const recorded = { ...report, bundleDigest: bundle.digest, nativeRun: { marker: runs[0]?.marker ?? null, sessionId: runs[0]?.sessionId ?? null, toolCallId: runs[0]?.toolCallId ?? null } };
+    write('report.json', recorded); onReport(recorded, root); console.log(JSON.stringify({ evidence: root, ...recorded }, null, 2));
+    return report.diagnosticCompleted && (!decision || report.approvalObservations.requestedDecisionObserved) ? 0 : 2;
   } finally {
     if (processes.length && processes.every(r => r.cleanup === 'leader-closed' && !r.error && !r.stopReason)) fs.unlinkSync(registration);
   }

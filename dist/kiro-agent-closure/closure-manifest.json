@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "42d6670dd1e4788744d2031370431cbadb01e2805293433ad8039a60de8749f9"
+        "sha256": "7d679dc9cfb66bfb6d571a93540748bd43e87ad99ad70a9c9912c6691bedadc5"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -605,7 +605,7 @@
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "3a0152b6a2d6cb04dd4974c5f67aec991ab31a71fa3715c6a2de77bc208c95ae"
+        "sha256": "3fe472861c182e4921dbcd934330dd9b033df978fb7b586274fd710c355c9313"
       },
       {
         "path": "src/kiro/memory-provider.ts",
@@ -816,7 +816,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "18c8e75a0d60b5d9d9b82e0033e8587ed7d671d49b7469c14f8013bf44a7eb6d"
+    "digest": "ff59d63c7d0fecaa4da2b1fa5786faaf15f7a4b99161a8812f51cc97d65a29a8"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1506,9 +1506,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-CFCSK553.js",
-      "bytes": 1104833,
-      "sha256": "a972dd27101d9491e0397cdf8760954c9222358a28cd8858f1b6af05795741b4"
+      "path": "chunks/mcp-server-6OPNCWZF.js",
+      "bytes": 1105335,
+      "sha256": "5a1a04b38218de5dca2f1c9ebbe6e1d54146d00ac6beda13e2612e0f0132cd47"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1568,7 +1568,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 56455,
-      "sha256": "583f4f96582c46aa26d7d3cf17453170e770b0362e4d97f5963533c66290ffcc"
+      "sha256": "ba0da7ccdfed5992b329296aeae645691e7a4c87a8c0c4c9e9b5434203e02f28"
     },
     {
       "path": "package.json",
@@ -1586,5 +1586,5 @@
       "sha256": "0fe0c3bcef742ee1abd02ae00f0764c389b3b60aedb81daa9d2d9e475b8f3afd"
     }
   ],
-  "contentDigest": "68be5091ce6c0d25306ffb1a953cfb1f9aafc29b10b79de2ae29f98dd341e34a"
+  "contentDigest": "68b0817170dd15cd2e18afbee12020300dd4a84fae998fb8b0d182ae95b9370c"
 }

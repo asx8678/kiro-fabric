@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { controlsArgs, summarizeControlRun } from '../../scripts/fovea-controls-probe.mjs';
 import { controlDecisionEvidence, extraControlProgram, RULE_FIXTURES, summarizeExtraControl } from '../../scripts/fovea-control-cases.mjs';
-import { SESSION_TIMEOUT_MS, SESSION_PHASES, sessionDriver, sessionProgram, summarizeSessionTransitions } from '../../scripts/fovea-session-probe.mjs';
+import { SESSION_TIMEOUT_MS, SESSION_PHASES, sessionDriver, sessionProgram, sessionProbeExit, summarizeSessionTransitions } from '../../scripts/fovea-session-probe.mjs';
 import { typeCheckFabricCode } from '../../src/runtime/type-checker.js';
 import { fabricGuestDeclarations } from '../../src/runtime/guest-types.js';
 const result = { exitCode: 0, error: null, stopReason: null, cleanup: 'leader-closed' };
@@ -30,14 +30,15 @@ describe('bounded native control case programs', () => {
   });
   it('validates opt-in arguments and incompatible options before filesystem setup', () => {
     expect(controlsArgs(['--authenticated', '--bundle', '/trusted', '--interactive', '--decision', 'decline'])).toEqual({ interactive: true, decision: 'decline', scenario: 'controls' });
+    expect(controlsArgs(['--authenticated', '--bundle', '/trusted', '--interactive', '--decision', 'accept', '--case', 'rules'])).toMatchObject({ scenario: 'rules', decision: 'accept' });
     expect(controlsArgs(['--authenticated', '--bundle', '/trusted', '--case', 'lifecycle'])).toMatchObject({ interactive: false, scenario: 'lifecycle' });
-    for (const tail of [['--decision', 'accept'], ['--interactive', '--decision', 'accept', '--case', 'rules'], ['--case', 'lifecycle', '--interactive'], ['--interactive', '--interactive'], ['--case', 'unknown'], ['--decision', 'cancel']]) expect(() => controlsArgs(['--authenticated', '--bundle', '/trusted', ...tail])).toThrow();
+    for (const tail of [['--decision', 'accept'], ['--case', 'lifecycle', '--interactive'], ['--interactive', '--interactive'], ['--case', 'unknown'], ['--decision', 'cancel']]) expect(() => controlsArgs(['--authenticated', '--bundle', '/trusted', ...tail])).toThrow();
     expect(() => sessionProgram('bad"', 'detach')).toThrow();
     expect(() => extraControlProgram('nonce', 'shell')).toThrow();
   });
   it('requires exact adoption/hash/anchor effects and an actual stale-source validation failure', () => {
     const sha256 = createHash('sha256').update(RULE_FIXTURES['.fovea/rules.json']).digest('hex');
-    const packet: any = { before: { anchors: [] }, after: { anchors: ['/probe-approved/hello'] }, sha256, rereadSha256: sha256,
+    const packet: any = { before: { anchors: [] }, after: { anchors: ['/probe-approved/hello'] }, afterStale: { anchors: ['/probe-approved/hello'] }, sha256, rereadSha256: sha256,
       adoption: { ok: true, value: { adopted: true, sha256, sourceMutation: false } }, stale: { ok: false, error: 'Rule source changed; reread before adoption' },
       status: { capabilities: { automatic: false, hiddenDelivery: false, continuation: false } } };
     const report = () => summarizeExtraControl({ phase: 'rules', completed: true, packet }, true);
@@ -60,10 +61,10 @@ describe('bounded native control case programs', () => {
 });
 
 function decisionRun(decision: 'accept' | 'decline') {
-  const before = { config: { sync: { ackClean: false } } }, configured = { scope: 'session', config: { sync: { ackClean: true, mode: 'hidden' }, tools: { defaultBudget: 1024 } } };
+  const before = { revision: 'absent', config: { sync: { ackClean: false } } }, configured = { scope: 'session', config: { sync: { ackClean: true, mode: 'hidden' }, tools: { defaultBudget: 1024 } } };
   const replay = { ok: true, value: { resultId: 'retained', text: 'exact page' } };
   const rejected = { ok: false, error: 'Fovea result unavailable: revoked' };
-  return { completed: true, formPairs: ['configure', 'reset', 'reload'].map(operation => ({ operation: 'repo.' + operation, action: decision, approved: decision === 'accept', missingHandler: false })),
+  return { completed: true, formPairs: ['configure', 'reset', 'reload'].map(operation => ({ operation: 'repo.' + operation, reviewedArguments: operation === 'configure' ? { scope: 'session', expectedRevision: 'absent', config: configured.config } : {}, action: decision, approved: decision === 'accept', missingHandler: false })),
     packet: { settingsBefore: before, settingsConfigured: decision === 'accept' ? configured : before, configure: { ok: decision === 'accept', value: configured },
       reset: { ok: decision === 'accept' }, retainedBefore: replay, resetReplay: decision === 'accept' ? rejected : replay,
       reload: { ok: decision === 'accept', value: { restarted: true } }, settingsReloaded: before, reloadReplayBefore: replay, reloadReplay: decision === 'accept' ? rejected : replay,
@@ -83,13 +84,16 @@ describe('native approval decisions and actual effects', () => {
     const declined = decisionRun('decline'); declined.formPairs.push(declined.formPairs[0]!);
     expect(controlDecisionEvidence(declined, 'human-terminal', 'decline').actions[0]!.effectVerified).toBe(false);
   });
-  it.each(['valid', 'session', 'tool', 'typed-id', 'duplicate', 'error-and-accept'])('correlates %s form envelopes to the exact tool call', kind => {
+  it.each(['valid', 'session', 'tool', 'typed-id', 'duplicate', 'error-and-accept', 'request-before-call', 'response-after-complete', 'request-after-complete'])('correlates %s form envelopes to the exact tool call', kind => {
     const form = row('in', { id: 9, method: '_kiro/mcp/elicitation', params: { sessionId: kind === 'session' ? 'other' : 's', toolCallId: kind === 'tool' ? 'other' : 'call', elicitation: { message: 'Risk: write\nAction: repo.reset\n{}' } } });
     const response = row('out', { id: kind === 'typed-id' ? '9' : 9, result: { action: 'accept', content: { approved: true } }, ...(kind === 'error-and-accept' ? { error: { message: 'failure' } } : {}) });
     const frames = [update({ configOptions: [{ id: 'mode', currentValue: 'fovea-native-controls' }] }), row('out', { id: 1, method: 'session/prompt', params: { sessionId: 's', prompt: [{ type: 'text', text: 'nonce' }] } }),
       update({ sessionUpdate: 'tool_call', toolCallId: 'call', title: '@fabric/fabric_exec', rawInput: { code: 'return true;', resultFormat: 'json' } }), form, response,
       ...(kind === 'duplicate' ? [response] : []),
       update({ sessionUpdate: 'tool_call_update', toolCallId: 'call', status: 'completed', rawOutput: { response: '{"marker":"nonce","phase":"initial"}' } }), row('in', { id: 1, result: { stopReason: 'end_turn' } })];
+    if (kind === 'request-before-call') [frames[2], frames[3]] = [frames[3]!, frames[2]!];
+    if (kind === 'response-after-complete') [frames[4], frames[5]] = [frames[5]!, frames[4]!];
+    if (kind === 'request-after-complete') { const pair = frames.splice(3, 2); frames.splice(4, 0, ...pair); }
     const summary = summarizeControlRun({ frames, traces: [{ ev: 'tool.fabric_exec' }], result, code: 'return true;', marker: 'nonce', phase: 'initial' });
     expect(summary.formPairs.some((f: { operation: string | null; action: unknown; approved: boolean }) => f.operation === 'repo.reset' && f.action === 'accept' && f.approved)).toBe(kind === 'valid');
   });
@@ -106,7 +110,7 @@ function lifecycleFixture() {
     frames.push(row('out', { id: i + 1, method: 'session/prompt', params: { sessionId, prompt: [{ type: 'text', text: p.marker }] } }), row('in', { id: i + 1, result: { stopReason: 'end_turn' } }));
     return { ...p, sessionId, completed: true, exactCall: true, toolCallId: 'call-' + i,
       transition: i === 4 ? { committed: true, status: 'unbound', nextExecutionRequired: true } : null,
-      packet: { lifecycle: { mcpInstanceId: 'mcp-instance' }, workspace: { status: i === 5 ? 'unbound' : 'bound', verification: i === 5 ? 'unbound' : 'verified' },
+      packet: { fovea: { nativeHooks: { automatic: false }, automaticQualification: { ready: false }, modelInputAcknowledged: false }, lifecycle: { mcpInstanceId: 'mcp-instance' }, workspace: { status: i === 5 ? 'unbound' : 'bound', verification: i === 5 ? 'unbound' : 'verified' },
         before: { hostInstanceId: 'host' }, after: { capabilities: { automatic: false } }, seed: { status: 'ok' },
         detached: { status: 'pending', committed: false }, navigation: { ok: false, error: 'repo.focus action unavailable' } } };
   });
@@ -128,6 +132,21 @@ describe('actual Fabric native lifecycle evidence', () => {
     if (kind === 'generic-error') f.runs[5]!.packet.navigation.error = 'timeout';
     if (kind === 'unsettled') f.runs[2]!.completed = false;
     expect(summarizeSessionTransitions(f).diagnosticCompleted).toBe(false);
+  });
+  it.each(['retained', 'unavailable', 'missing', 'unmatched', 'same-chat'])('classifies %s prior focus without a fabricated native isolation pass', kind => {
+    const f = lifecycleFixture();
+    const before = f.runs[2]!.packet as any, after = f.runs[3]!.packet as any;
+    before.seed.focusId = 'focus-before-clear';
+    after.previousFocus = kind === 'unavailable' ? { ok: false, error: 'Unknown or expired focusId after root retirement; focus again' } : { ok: true, value: { focusId: 'focus-before-clear' } };
+    if (kind === 'missing') delete before.seed.focusId;
+    if (kind === 'unmatched') f.runs[3]!.exactCall = false;
+    if (kind === 'same-chat') f.runs[3]!.sessionId = f.runs[2]!.sessionId;
+    const report = summarizeSessionTransitions(f);
+    expect(report.nativeSessionIsolation.previousFocusRetained).toBe(kind === 'retained' ? true : kind === 'unavailable' ? false : null);
+    expect(report.nativeSessionIsolation.status).toBe(kind === 'retained' ? 'failed' : 'unqualified');
+    expect(report.isolationQualified).toBe(false);
+    expect(sessionProbeExit(report)).toBe(['same-chat', 'unmatched'].includes(kind) ? 2 : kind === 'retained' ? 3 : 0);
+    expect(sessionProbeExit({ ...report, diagnosticCompleted: false })).toBe(2);
   });
   it('driver uses native slash commands, never approvals or private protocol requests', () => {
     expect(SESSION_TIMEOUT_MS).toBeGreaterThan(0); expect(SESSION_TIMEOUT_MS).toBeLessThanOrEqual(300000);

@@ -10,7 +10,7 @@ export function sessionProgram(marker, phase) {
   const start = `async function attempt(run: () => Promise<JsonValue>): Promise<JsonObject> { try { return {ok:true,value:await run()}; } catch(error) { return {ok:false,error:String(error)}; } }
 const info = await fabric.info();
 const workspace = await fabric.workspace({action:"status"});`;
-  const prefix = `marker:${JSON.stringify(marker)},phase:${JSON.stringify(phase)},lifecycle:info.lifecycle ?? null,workspace`;
+  const prefix = `marker:${JSON.stringify(marker)},phase:${JSON.stringify(phase)},lifecycle:info.lifecycle ?? null,fovea:info.fovea ?? null,workspace`;
   if (phase === 'detach') return `${start}
 return {${prefix},detached:await fabric.workspace({action:"detach"})};`;
   if (phase === 'post-detach') return `${start}
@@ -24,12 +24,13 @@ const focus = await repo.focus({query:"ControlSentinel",fresh:true,maxTokens:512
 return {${prefix},before,settings,previousFocus,seed:{status:focus.status,resultId:focus.resultId,focusId:focus.focusId ?? null,reads:focus.reads},after:await repo.status()};`;
 }
 
-function promptBounds(frames, marker) {
+export function promptBounds(frames, marker) {
   const starts = frames.filter(f => f?.dir === 'out' && f.msg?.method === 'session/prompt' && f.msg.id !== undefined &&
     f.msg.params?.prompt?.some(p => p.type === 'text' && p.text?.includes(marker)));
   const start = starts.length === 1 ? frames.indexOf(starts[0]) : -1;
-  const end = start < 0 ? -1 : frames.findIndex((f, i) => i > start && f?.dir === 'in' && !f.msg?.method && f.msg?.id === frames[start].msg.id && f.msg.result?.stopReason === 'end_turn');
-  return { start, end };
+  const replies = start < 0 ? [] : frames.filter((f, i) => i > start && f?.dir === 'in' && !f.msg?.method && f.msg?.id === frames[start].msg.id);
+  const reply = replies.length === 1 && !replies[0].msg.error && replies[0].msg.result?.stopReason === 'end_turn' ? replies[0] : null;
+  return { prompt: start < 0 ? null : frames[start], start, end: reply ? frames.indexOf(reply) : -1 };
 }
 function acknowledged(frames, after, before, predicate) {
   const requests = frames.filter((f, i) => i > after && i < before && f?.dir === 'out' && f.msg?.id !== undefined && predicate(f.msg));
@@ -40,7 +41,7 @@ function acknowledged(frames, after, before, predicate) {
 }
 export function summarizeSessionTransitions({ frames, runs, plans }) {
   const bounds = plans.map(p => promptBounds(frames, p.marker));
-  const complete = runs.length === SESSION_PHASES.length && runs.every((r, i) => r.completed && r.phase === SESSION_PHASES[i]) &&
+  const complete = runs.length === SESSION_PHASES.length && runs.every((r, i) => r.completed === true && r.exactCall === true && r.phase === SESSION_PHASES[i]) &&
     new Set(runs.map(r => r.marker)).size === runs.length && new Set(runs.map(r => r.toolCallId)).size === runs.length &&
     bounds.every((b, i) => b.start >= 0 && b.end > b.start && (!i || b.start > bounds[i - 1].end));
   const [a, b, c, d, detach, revoked] = runs;
@@ -52,6 +53,7 @@ export function summarizeSessionTransitions({ frames, runs, plans }) {
   const clear = acknowledged(frames, bound(2).end, bound(3).start, m => m.method === 'session/new');
   const checks = {
     freshFabricTurns: complete,
+    automaticGateClosed: complete && runs.every(r => r.packet?.fovea?.nativeHooks?.automatic === false && r.packet?.fovea?.automaticQualification?.ready === false && r.packet?.fovea?.modelInputAcknowledged === false),
     compactAcknowledged: Boolean(a && b && native(a) && compact && native(a) === native(b)),
     profileSwapAcknowledged: Boolean(b && c && native(b) === native(c) && swap?.configOptions?.some(o => o.id === 'mode' && o.currentValue === plans[2]?.profile)),
     clearCreatedNewSession: Boolean(c && d && native(c) !== native(d) && clear?.sessionId === native(d)),
@@ -59,12 +61,26 @@ export function summarizeSessionTransitions({ frames, runs, plans }) {
     detachCommitted: Boolean(detach?.completed && detach.packet?.workspace?.status === 'bound' && detach.packet?.detached?.status === 'pending' && detach.packet.detached.committed === false && detach.transition?.committed === true && detach.transition.status === 'unbound' && detach.transition.nextExecutionRequired === true),
     revokedInSameMcpInstance: Boolean(detach?.completed && revoked?.completed && native(detach) === native(revoked) && typeof mcp(detach) === 'string' && mcp(detach) === mcp(revoked) && revoked.packet?.workspace?.status === 'unbound' && revoked.packet?.workspace?.verification === 'unbound' && revoked.packet?.navigation?.ok === false && /not (?:found|available)|unavailable|unknown.*(?:action|repo)|no provider|unbound|workspace/i.test(revoked.packet?.navigation?.error ?? '')),
   };
+  const priorFocusId = c?.packet?.seed?.focusId;
+  const comparable = complete && checks.clearCreatedNewSession && c?.exactCall === true && d?.exactCall === true && typeof priorFocusId === 'string' && priorFocusId.length > 0;
+  const previousFocusRetained = comparable && d?.packet?.previousFocus?.ok === true && d.packet.previousFocus.value?.focusId === priorFocusId;
+  const priorFocusUnavailable = comparable && d?.packet?.previousFocus?.ok === false && /Unknown or expired focusId/u.test(d.packet.previousFocus.error ?? '');
+  const nativeSessionIsolation = {
+    status: previousFocusRetained ? 'failed' : 'unqualified',
+    previousFocusRetained: previousFocusRetained ? true : priorFocusUnavailable ? false : null,
+    sameMcpInstance: comparable && typeof mcp(c) === 'string' && typeof mcp(d) === 'string' ? mcp(c) === mcp(d) : null,
+    reason: previousFocusRetained ? 'prior-chat-focus-accessible-after-native-clear' : priorFocusUnavailable ? 'prior-focus-unavailable; other state and concurrent-chat isolation untested' : 'insufficient-correlated-focus-evidence',
+  };
   return { schemaVersion: 1, kind: 'kiro-fabric.native-session-controls', qualified: false, automatic: false, checks,
     diagnosticCompleted: Object.values(checks).every(Boolean),
     observations: runs.map(r => ({ phase: r.phase, nativeSessionId: r.sessionId, mcpInstanceId: mcp(r) ?? null, hostInstanceId: r.packet?.before?.hostInstanceId ?? null,
       previousFocus: r.packet?.previousFocus ?? null, workspace: r.packet?.workspace ?? null, exactCall: r.exactCall, completed: r.completed })),
-    stateRestorationQualified: false, isolationQualified: false,
+    nativeSessionIsolation, stateRestorationQualified: false, isolationQualified: false,
     remaining: ['supported native session-to-MCP association', 'restoration/isolation of settings, focus, results and rule trust', 'active in-flight workspace revocation', 'human approval and native delivery', 'old-generation retention across update'] };
+}
+
+export function sessionProbeExit(report) {
+  return report.diagnosticCompleted !== true ? 2 : report.nativeSessionIsolation?.status === 'failed' ? 3 : 0;
 }
 
 export function sessionDriver(profile, alternate) {

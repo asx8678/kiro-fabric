@@ -1,5 +1,9 @@
 # Fovea completion ledger
 
+**Current native follow-up:** [human matrix, isolation and automatic gates](native-followup.md).
+Kiro 2.22.1 was rechecked: native form UI handling and supported MCP chat identity
+remain host blockers. New tooling does not repair or qualify either contract.
+
 **Native controls/lifecycle closeout:** [plan and results](native-controls-closeout.md).
 Full trusted-Node check: **3,294 passed / 63 skipped / 0 failed**. Real Fabric
 compact/swap/clear and post-detach denial were observed; clear retained the prior

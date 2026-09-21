@@ -414,7 +414,10 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
       fovea: { nativeHooks: foveaHookCapability(),
         postToolContext: options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true ? "trusted-embedder-visible" : "disabled",
-        nativeSessionAssociation: "unavailable", modelInputAcknowledged: false },
+        nativeSessionAssociation: "unavailable", modelInputAcknowledged: false,
+        sessionIsolation: { supported: false, stateOwner: "mcp-instance", nativeClearResetGuaranteed: false,
+          warning: "A reused MCP instance can retain focus, results, session settings and rule trust across native chats. Native /clear is not a Fabric state boundary." },
+        automaticQualification: { ready: false, requiredNativeGates: ["H01", "H02", "H03", "H04", "H05", "H06", "H07", "H08", "H09", "H10", "H11", "H12"], qualifiedNativeGates: [] } },
     };
   };
 
