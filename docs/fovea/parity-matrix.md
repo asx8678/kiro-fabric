@@ -52,8 +52,11 @@ Machine-readable exact reference/target/test mapping: `docs/fovea/parity-matrix.
 Authenticated Kiro 2.22.1 TUI hooks and a subsequent stop-hook continuation MCP
 call were observed; headless emitted no hooks. Neither MCP surface supplies a
 native chat/session identity, so supported hook-to-host routing remains missing.
-No intended-model-input acknowledgment was observed. The table below records
-**complete gate qualification**, not whether any constituent event was witnessed.
+No intended-model-input acknowledgment was observed. The table below separates
+**partial observations and blockers from complete gate qualification**. No H gate
+is passed: the demonstrated continuation bound belongs to the fixture, and a
+separate native probe observed hook completion after Escape input, not an
+acknowledged cancellation or accepted queued prompt.
 Details: [host-capability-probes.md](host-capability-probes.md).
 
 Darwin descriptor-safe provenance and all 15 pinned lifecycle component cases
@@ -64,14 +67,14 @@ session qualification. See [completion-ledger.md](completion-ledger.md).
 
 | ID | Gate | Status |
 | --- | --- | --- |
-| H01 | same session and MCP instance across multiple turns | untested (authentication available) |
-| H02 | concurrent session-to-host mapping and ambiguity rejection | untested (authentication available) |
-| H03 | readiness, authorized binding and first-hook ordering | untested |
-| H04 | prompt marker delivered to intended model turn | untested |
-| H05 | post-tool marker delivered without changing result or error | untested |
-| H06 | stop marker causes bounded continuation, not merely hook firing | untested |
-| H07 | cancel stops automatic work and queued user input wins | untested |
-| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | untested (authentication available) |
+| H01 | same session and MCP instance across multiple turns | host-blocked: observed MCP initialize/calls/environment lack supported native session identity; cross-turn association unqualified |
+| H02 | concurrent session-to-host mapping and ambiguity rejection | host-blocked: required session identity unavailable; concurrent mapping and ambiguity rejection not exercised (pooling across sessions is not established) |
+| H03 | readiness, authorized binding and first-hook ordering | partial: native-TUI SessionStart then UserPromptSubmit observed; real engine readiness and authorized binding unqualified |
+| H04 | prompt marker delivered to intended model turn | unqualified: actual prompt-marker input unobserved; following a Stop reason is not prompt-delivery proof |
+| H05 | post-tool marker delivered without changing result or error | partial: native-TUI success/error PreToolUse/PostToolUse and tool_response observed; real Fabric preservation and next-step delivery unqualified |
+| H06 | stop marker causes bounded continuation, not merely hook firing | partial: mechanism demonstrated on native-TUI by a real third MCP fixture call; one-shot bound belongs to the fixture, not a verified client contract |
+| H07 | cancel stops automatic work and queued user input wins | unqualified: hook completed 7,305 ms after PTY Escape input; no acknowledged session/cancel event or second UserPromptSubmit observed. Cancellation/queue contract unverified, not a proven host failure |
+| H08 | new/resume/clear/compact/profile-swap signals or safe recovery | partial: headless resume preserved chat identity and completed a fixture call on a distinct MCP instance still lacking native session metadata; TUI replay is not new-hook evidence; hook/Fabric restoration and clear/compact/profile-swap unqualified |
 | H09 | visible/model-only/disabled and status/settings/reset/reload | untested |
 | H10 | accepted/declined exact effects and workspace revocation | untested |
 | H11 | authoritative complete model-visible tool inventory | untested |
@@ -133,4 +136,4 @@ Separate claims: deterministic analysis, host lifecycle, functional controls,
 native UI presentation, installed packaging, and task effectiveness.
 No complete-parity or model-token saving claim is made.
 
-Historical follow-up: source collector/default-off MCP probes passed, but no native delivery gate passed. H01/H02/H08 hit isolated authentication failure in the Linux harness. Authentication now works in the authorized Darwin scope; those gates are untested until their actual routing/lifecycle assertions run, not authentication-blocked and not passed by explicit navigation. New bounded coverage and retained-read/rule inventory tests are listed in the machine-readable matrix. `ackClean` is an upstream UI-only notification (pinned index.ts), not model context; its native UI counterpart remains unqualified.
+Historical follow-up: source collector/default-off MCP probes passed, but no native delivery gate passed. H01/H02/H08 hit isolated authentication failure in the Linux harness. The current authenticated Darwin observations supersede that prerequisite blocker: H01/H02 lack supported session-to-MCP association and H08 has partial resume-identity evidence. The historical Linux report remains unchanged; explicit navigation does not qualify these gates. New bounded coverage and retained-read/rule inventory tests are listed in the machine-readable matrix. `ackClean` is an upstream UI-only notification (pinned index.ts), not model context; its native UI counterpart remains unqualified.

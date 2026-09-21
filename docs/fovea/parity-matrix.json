@@ -26,6 +26,32 @@
     "qualified": false,
     "blocker": "Observed MCP initialize/tools/call carries no native session identity for supported hook session_id association; cwd, arguments and process ancestry are not safe routing authority",
     "scope": "Authenticated harmless protocol fixture, not Fabric execution or complete H-gate qualification",
+    "followup": {
+      "scope": "Kiro CLI 2.22.1 on darwin-arm64; local protocol artifacts, not automatic Fabric qualification",
+      "routing": { "nativeSessionIdentityObserved": false, "concurrentSessionMappingTested": false, "initialTuiStartedInstances": 2, "initialTuiInitializedInstances": 1, "report": ".tmp/fovea-native-VEArYZ/report.json" },
+      "stopContinuation": { "surface": "native-tui", "mechanismDemonstrated": true, "boundOwner": "test-fixture", "maxRequestsPerSession": 1, "clientBoundQualified": false, "report": ".tmp/fovea-native-VEArYZ/report.json", "fixture": "tests/fovea/fixtures/native-hook-probe.mjs" },
+      "cancellation": {
+        "surface": "native-tui", "status": "unqualified", "timeline": ".tmp/fovea-cancel-wgPbJV/timeline.jsonl",
+        "hookStartMs": 1789939858365, "escapeSentMs": 1789939861063, "nextUserSentMs": 1789939862213, "hookEndMs": 1789939868368,
+        "completionAfterEscapeMs": 7305, "loggedSignals": [], "instrumentedSignals": ["SIGTERM", "SIGINT", "SIGHUP"],
+        "sessionCancelAcknowledgementObserved": false, "secondUserPromptSubmitObserved": false,
+        "cancellationContractQualified": false, "queuedInputPrecedenceQualified": false
+      },
+      "resume": {
+        "surface": "headless", "sessionId": "sess_f5aa7b83-c6dd-491f-98f9-1a0425304cb2",
+        "sessionIdentityPreserved": true, "selectedModeObserved": true, "fixtureMcpCallCompleted": true,
+        "mcp": {
+          "initialTuiInstance": "fcab2cb8-07fb-4998-9d9b-f28bcc4624fc",
+          "resumedInstance": "fe190816-e5a0-41d0-be62-72ec04eb943b", "instanceChanged": true,
+          "clientInfo": { "name": "kiro", "version": "0.0.0" },
+          "callParameterKeys": ["name", "arguments"], "callMeta": null,
+          "nativeSessionIdentityObserved": false, "report": ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+        },
+        "tuiReplayIsHookEvidence": false, "hookLifecycleEstablished": false,
+        "fabricStateRestorationEstablished": false, "clearCompactProfileSwapTested": false,
+        "report": ".tmp/fovea-native-VEArYZ/resume-headless.jsonl"
+      }
+    },
     "darwinProvenance": { "implemented": true, "pinnedLifecyclePassed": 15, "pinnedLifecycleSkipped": 0, "report": ".tmp/fovea-reference-qualification/run-PyYFeE/vitest.json", "generationAdmission": "fixture-substituted, not installed/native-client lifecycle proof" }
   },
   "reference": {
@@ -575,83 +601,130 @@
   "hostGates": [
     {
       "id": "H01",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "headless-and-native-tui",
+      "status": "host-blocked",
+      "qualified": false,
       "requirement": "same session and MCP instance across multiple turns",
-      "blocker": null,
-      "remaining": "Correlate resumed turns with authoritative session and MCP instance identities.",
-      "evidence": [],
+      "blocker": "native-session-rendezvous-unavailable",
+      "observation": "Observed initialize/tools/call and server environment carry no supported native session identity. Three TUI fixture calls used one initialized MCP instance; cross-turn association is not qualified.",
+      "remaining": "Obtain supported native session-to-MCP identity and verify attribution across resumed turns.",
+      "evidence": [
+        ".tmp/fovea-native-contract/final-headless-report.json",
+        ".tmp/fovea-native-VEArYZ/report.json",
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+      ],
       "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H02",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "headless-and-native-tui",
+      "status": "host-blocked",
+      "qualified": false,
       "requirement": "concurrent session-to-host mapping and ambiguity rejection",
-      "blocker": null,
-      "remaining": "Correlate concurrent same-workspace sessions with hosts and exercise ambiguous routing rejection.",
-      "evidence": [],
+      "blocker": "native-session-rendezvous-unavailable",
+      "observation": "The required per-session identity is absent on observed MCP requests. Two processes started and one initialized in the initial TUI run; this does not demonstrate concurrent-session pooling or ambiguity rejection.",
+      "remaining": "With supported session identity, exercise concurrent same-workspace mapping and actual ambiguity rejection. Do not route by cwd, arguments or process ancestry.",
+      "evidence": [
+        ".tmp/fovea-native-contract/final-headless-report.json",
+        ".tmp/fovea-native-VEArYZ/report.json",
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+      ],
       "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H03",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "native-tui",
+      "status": "partial",
+      "qualified": false,
       "requirement": "readiness, authorized binding and first-hook ordering",
-      "blocker": null,
-      "remaining": "Instrument real engine-ready, authorized binding and first-hook ordering.",
-      "evidence": []
+      "blocker": "native-session-rendezvous-unavailable",
+      "observation": "SessionStart preceded UserPromptSubmit in the harmless native TUI fixture; no real Fabric engine readiness or authorized session binding was established.",
+      "remaining": "Instrument real engine-ready, authorized binding and first-hook ordering after supported routing exists.",
+      "evidence": [
+        ".tmp/fovea-native-VEArYZ/hooks.jsonl"
+      ]
     },
     {
       "id": "H04",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "native-tui",
+      "status": "unqualified",
+      "qualified": false,
       "requirement": "prompt marker delivered to intended model turn",
       "blocker": null,
-      "remaining": "Observe hook marker in actual intended model input, not model prose or hook stdout.",
-      "evidence": []
+      "observation": "Hook stdout is observed, not actual intended model input. The Stop reason was behaviorally followed, but that does not establish prompt-marker delivery.",
+      "remaining": "Observe prompt marker in actual intended model input, not model prose or hook stdout.",
+      "evidence": [
+        ".tmp/fovea-native-VEArYZ/report.json",
+        ".tmp/fovea-native-VEArYZ/hooks.jsonl"
+      ]
     },
     {
       "id": "H05",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "native-tui",
+      "status": "partial",
+      "qualified": false,
       "requirement": "post-tool marker delivered without changing result or error",
       "blocker": null,
-      "remaining": "Exercise successful and failed tool results plus next-step marker delivery.",
-      "evidence": []
+      "observation": "PreToolUse/PostToolUse fired for success and error fixture calls with tool_response fields. Next-step marker delivery and real Fabric result preservation are not qualified.",
+      "remaining": "Verify intended next-step marker delivery while preserving real successful and failed Fabric results.",
+      "evidence": [
+        ".tmp/fovea-native-VEArYZ/hooks.jsonl",
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+      ]
     },
     {
       "id": "H06",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "native-tui",
+      "status": "partial",
+      "qualified": false,
       "requirement": "stop marker causes bounded continuation, not merely hook firing",
       "blocker": null,
-      "remaining": "Exercise stop-hook bounded continuation through documented native semantics.",
-      "evidence": []
+      "observation": "Mechanism demonstrated: Stop decision block caused an actual third MCP call with marker continuation. One request per session is enforced by the test fixture, not a verified client bound.",
+      "remaining": "Qualify production continuation bounds, cancellation and queued-input precedence through supported routing; literal model input remains unobserved.",
+      "evidence": [
+        ".tmp/fovea-native-VEArYZ/report.json",
+        ".tmp/fovea-native-VEArYZ/hooks.jsonl",
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl",
+        "tests/fovea/fixtures/native-hook-probe.mjs"
+      ]
     },
     {
       "id": "H07",
-      "surface": "headless",
-      "status": "untested",
+      "surface": "native-tui",
+      "status": "unqualified",
+      "qualified": false,
       "requirement": "cancel stops automatic work and queued user input wins",
       "blocker": null,
-      "remaining": "Exercise native cancellation and queued-input precedence; process timeout is not cancellation evidence.",
-      "evidence": []
+      "observation": "Hook completed 7305 ms after Escape input was written to the PTY while the TUI rendered esc to cancel; no instrumented SIGTERM/SIGINT/SIGHUP was logged. There was no acknowledged session/cancel event and no second UserPromptSubmit observed. Cancellation and queued-input precedence remain unverified, not proven failures.",
+      "remaining": "Observe an acknowledged native session/cancel event and accepted queued input, then verify hook cancellation and input precedence. Retained KAS FQi source uses a fresh hook AbortController rather than the turn signal: a wiring concern, not proof of native cancellation failure.",
+      "evidence": [
+        ".tmp/fovea-cancel-wgPbJV/timeline.jsonl",
+        ".tmp/fovea-cancel-wgPbJV/driver.exp",
+        ".tmp/fovea-cancel-wgPbJV/hook.mjs",
+        ".tmp/fovea-cancel-wgPbJV/native-tui.raw"
+      ]
     },
     {
       "id": "H08",
       "surface": "headless",
-      "status": "untested",
+      "status": "partial",
+      "qualified": false,
       "requirement": "new/resume/clear/compact/profile-swap signals or safe recovery",
       "blocker": null,
-      "remaining": "Verify new/resume identity plus clear, compact and profile-swap signals or safe recovery.",
-      "evidence": [],
+      "observation": "The headless resume stream retained the initial TUI session ID, selected the probe mode and completed a fixture MCP call on newly initialized instance fe190816-e5a0-41d0-be62-72ec04eb943b, distinct from initial TUI instance fcab2cb8-07fb-4998-9d9b-f28bcc4624fc. MCP still reports generic clientInfo kiro 0.0.0 and call keys [name, arguments] with meta null, not a native session association. The TUI resume transcript is replay, not new-hook evidence. Resume hook lifecycle, clear/compact/profile-swap and Fabric state restoration are not established.",
+      "remaining": "Verify native hook lifecycle and restored Fabric state plus clear, compact and profile-swap signals or safe recovery.",
+      "evidence": [
+        ".tmp/fovea-native-VEArYZ/report.json",
+        ".tmp/fovea-native-VEArYZ/resume-headless.jsonl",
+        ".tmp/fovea-native-VEArYZ/mcp.jsonl"
+      ],
       "historicalPrerequisite": "Isolated Linux auth failed; authorized Darwin 2.22.1 authentication now works. Explicit navigation does not qualify this gate."
     },
     {
       "id": "H09",
       "surface": "headless",
       "status": "untested",
+      "qualified": false,
       "requirement": "visible/model-only/disabled and status/settings/reset/reload",
       "blocker": null,
       "remaining": "Exercise each presentation mode and status/settings/reset/reload on its claimed surface.",
@@ -659,8 +732,9 @@
     },
     {
       "id": "H10",
-      "surface": "headless",
+      "surface": "native-tui",
       "status": "untested",
+      "qualified": false,
       "requirement": "accepted/declined exact effects and workspace revocation",
       "blocker": null,
       "remaining": "Native-TUI accept/decline/revoke exact effects not exercised; no effects authorized by this harness.",
@@ -670,6 +744,7 @@
       "id": "H11",
       "surface": "headless",
       "status": "untested",
+      "qualified": false,
       "requirement": "authoritative complete model-visible tool inventory",
       "blocker": null,
       "remaining": "Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.",
@@ -679,6 +754,7 @@
       "id": "H12",
       "surface": "headless",
       "status": "untested",
+      "qualified": false,
       "requirement": "old session retains generation-matched engine and hooks",
       "blocker": null,
       "remaining": "Generation update with a retained native session not exercised; no installer/activation in this harness.",

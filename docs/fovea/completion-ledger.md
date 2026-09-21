@@ -11,7 +11,7 @@ is distinct from automatic native-client and release qualification.
 
 | Request | Implementation / acceptance status |
 | --- | --- |
-| 1. Native automatic integration | **Blocked/incomplete.** Authenticated Kiro 2.22.1 TUI hooks and one stop-hook continuation MCP call observed. MCP supplies no native session identity to associate with hook `session_id`; actual intended model input is unobserved. No cwd/PID/argument rendezvous, private RPC or fabricated delivery. Automatic hooks remain off. |
+| 1. Native automatic integration | **Blocked/incomplete.** Authenticated Kiro 2.22.1 TUI hooks and one stop-hook continuation MCP call observed. MCP supplies no native session identity to associate with hook `session_id`; actual intended model input is unobserved. A separate TUI probe's hook completed 7,305 ms after Escape input, without observed cancellation acknowledgement or a second prompt hook; cancellation/queue behavior remains unverified. Headless resume preserved chat identity without establishing hook restoration. No cwd/PID/argument rendezvous, private RPC or fabricated delivery. Automatic hooks remain off. |
 | 2. Darwin provenance | **Implemented.** Authenticated native journal ABI: descriptor-relative bounded reads, exclusive lock, compare-and-publish, fsync, renameat and identity-checked cleanup. Cross-host origin attribution, cancellation/revocation and adversarial publication tests run on Darwin. Gaps remain explicit; no pathname fallback or stale-lock deletion. |
 | 3. Qualification records | **Reconciled.** Current JSON and Markdown distinguish Darwin execution from historical isolated Linux auth failures. Observed protocol subsets are not complete H-gate passes. Regression tests enforce matching machine records. |
 | 4. Native packaging | **Implemented.** New Darwin schema-2 bundles require both native assets on every validator host; Agent staging on Darwin requires them too. Rehashed omission, metadata/source/architecture mismatch and corruption are rejected. Linux/pre-Fovea historical contracts remain supported. |
@@ -39,7 +39,108 @@ is distinct from automatic native-client and release qualification.
   disabled capability explicitly, while default invocation emits no model-context
   stdout and exits 3. Managed profiles intentionally register no automatic Fovea hooks.
 
+## Native contract records follow-up
+
+Follow-up to implementation commit `3688e70`; this is a records/test change,
+not another install. Initial scoped checks are recorded below, followed by the
+final full pre-commit verification; the runtime payload is unchanged.
+
+| Acceptance check | Result / evidence |
+| --- | --- |
+| Mirror all 12 current gates and preserve historical Linux auth evidence | `qualification.json#gates` equals `parity-matrix.json#hostGates`; Markdown uses the same dispositions. `tests/fovea/qualification-records.test.ts` enforces consistency and no full gate passes. |
+| Record positive mechanisms without promoting automatic integration | Native-TUI hooks and Stop → actual continuation MCP call observed; one request per session is a **fixture bound**, not a client guarantee. H03/H05/H06 are partial; H04 actual prompt input remains unqualified. |
+| Record real blockers without inferring unsupported topology | H01/H02 lack supported session-to-MCP identity on observed transports. Two started processes/one initialized process do not establish concurrent-session pooling. |
+| Record cancellation and resume honestly | H07 is **unqualified**, not host-blocked: hook ended 7,305 ms after PTY Escape input, with no logged instrumented signal. No acknowledged session/cancel event or second UserPromptSubmit was observed; cancellation/queue contract unverified. Fresh source AbortControllers support a wiring concern only. H08 headless resume preserved chat identity and completed a fixture call on distinct MCP instance `fe190816-e5a0-41d0-be62-72ec04eb943b` (initial TUI: `fcab2cb8-07fb-4998-9d9b-f28bcc4624fc`); generic `kiro 0.0.0` and absent session metadata do not establish session association. TUI replay is not new-hook evidence or hook/Fabric restoration. |
+| Preserve fail-closed production behavior | Public `fabric.info().fovea` remains automatic-off, association-unavailable and model-input-unacknowledged; embedder post-tool visibility is separate. Default hook stdout stays empty; `--status` is diagnostic-only; no automatic Fovea hooks are registered. |
+| Preserve unrelated state and evidence | No runtime source, profile, live-home, partition or mount changes in this follow-up. Prior full-suite reports and the residual 63-skip inventory below are unchanged. |
+
+Additional raw artifacts: `.tmp/fovea-native-VEArYZ/{report.json,hooks.jsonl,mcp.jsonl,resume-headless.jsonl}`
+and `.tmp/fovea-cancel-wgPbJV/{timeline.jsonl,driver.exp,hook.mjs,native-tui.raw}`.
+`currentNativeProtocol.followup` in both machine records retains exact cancellation
+timestamps and the limits of routing, continuation and resume evidence. Scratch
+artifacts are local evidence references, not dependencies of portable unit tests.
+H09–H12 remain untested; no H01–H12 gate is passed. See
+[host-capability-probes.md](host-capability-probes.md) for the surface split.
+
+Records follow-up verification: **45 passed / 0 failed / 0 skipped** across the
+five complete qualification-records, capability, native-status, context-delivery
+and native-probe modules. Both TypeScript checks passed. Reports:
+`.tmp/fovea-native-records-tests.json`, `.tmp/fovea-native-records-tests.log`,
+`.tmp/fovea-native-records-typecheck.log`.
+The direct artifact probe passed, matching the timestamps, actual continuation
+and resumed tool result to the raw logs and checking that unrelated machine
+records are unchanged: `.tmp/fovea-native-records-probe.json`. It also verifies
+and hashes the preserved prior full-suite report and lists its 63 skips; that
+suite was **not rerun at that initial checkpoint**. Final build and packaged
+hook-probe outputs use `.tmp/fovea-native-records-build.log` and
+`.tmp/fovea-native-records-built-probe.json` respectively. No new live Kiro
+qualification or install is implied.
+
+H07 evidence caveat correction: **7 passed / 0 failed / 0 skipped** in the
+complete `tests/fovea/qualification-records.test.ts` module; both TypeScript
+checks passed. The regression now requires `unqualified`, no host blocker,
+unobserved session/cancel acknowledgement and second UserPromptSubmit, and
+unverified cancellation/queue contracts in both machine records. Reports:
+`.tmp/fovea-h07-caveat-tests.json`, `.tmp/fovea-h07-caveat-tests.log`,
+`.tmp/fovea-h07-caveat-typecheck.log`. Fresh build and raw-evidence/packaged-hook
+probe artifact paths: `.tmp/fovea-h07-caveat-build.log` and
+`.tmp/fovea-h07-caveat-probe.json`. No full-suite rerun or new live cancellation
+qualification is claimed by this correction.
+
+H08 final evidence reconciliation: **46 passed / 0 failed / 0 skipped** across
+all five complete records/capability/native-status/context-delivery/native-probe
+modules (including eight records tests). Both TypeScript checks and
+`git diff --check` passed. The added regression distinguishes the resumed native
+chat ID from the new MCP instance, retains generic client metadata and absent
+session association, and refuses to count TUI replay as new-hook evidence.
+Reports: `.tmp/fovea-h08-final-tests.json`, `.tmp/fovea-h08-final-tests.log`,
+`.tmp/fovea-h08-final-typecheck.log`. Final fresh build and independent
+raw-evidence/packaged-hook probe artifacts: `.tmp/fovea-h08-final-build.log` and
+`.tmp/fovea-h08-final-probe.json` (runner: `.tmp/fovea-h08-final-probe.mjs`).
+The probe checks mirrored records, preserved historical data, raw resumed MCP
+initialization/call metadata, fail-closed profiles and packaged hook behavior.
+At this H08 checkpoint no full-suite rerun, new native lifecycle qualification or
+live-home change was claimed. The subsequent full check is recorded separately.
+
 ## Full verification
+
+The final trusted-Node `pnpm run check` completed with **exit 0: 3,153 passed /
+63 skipped / 0 failed**, 198 passing files / 5 skipped, **1,328.78 seconds** in
+the serial test phase. Guidance, both TypeScript checks, fresh build, staging,
+Knip, component MCP certification and 30-package SBOM generation all passed.
+The three explicit reference/parser environment variables were set and their
+exact pins validated before this run. All **15 lifecycle cases passed without
+skips**; differential coverage was **8 passed / 2 uncontrolled-cold skips**.
+The remaining 63 excluded cases match the prior full report exactly; they are
+not passes or native-client qualification.
+
+- Full log/exit: `.tmp/fovea-final-records-check-final.log` and
+  `.tmp/fovea-final-records-check-final.exit`.
+- Preserved full report: `.tmp/fovea-final-records-full.json`, SHA-256
+  `01fb0cefb85627af089573ffe87943f3eb1a5ca3684c30520e43de6d9c0ac971`.
+- Mechanically asserted summary: `.tmp/fovea-final-records-verification.json`.
+- Initial final-check attempt: **3,132 passed / 83 skipped / 1 failed**;
+  `.tmp/fovea-final-records-check.log` and
+  `.tmp/fovea-final-records-full-initial.json`. It omitted the pinned-reference
+  environment. Its sole failure was a Markdown citation whose line suffix was
+  interpreted as part of a filename. The citation was corrected without changing
+  the path validator; both complete affected modules passed **18/18** in
+  `.tmp/fovea-final-records-repair.json` before the successful full rerun.
+- Post-ledger complete-module check: `.tmp/fovea-final-records-final-modules.json`.
+  Final fresh build: `.tmp/fovea-final-records-finish-build.log` and `.exit`.
+- Built/installed closure integrity and fresh hook behavior:
+  `.tmp/fovea-final-records-installed-probe.json`. Source, dist and installed
+  build-input digests agree; default/unknown hook invocations emit no stdout,
+  while `--status` returns automatic-off diagnostics. Retained actual Fabric
+  stream evidence was rechecked, **not** replaced by a new native session.
+- Clean-commit candidate report target: `.tmp/fovea-final-records-candidate.json`;
+  no production signing, four-target or native-client release pass is implied.
+
+No runtime source, installed profile, live-home or storage-layout changes were
+made in this records follow-up. Historical reports remain preserved. H07 stays
+unqualified; resumed chat identity is not supported session-to-MCP association.
+
+## Prior implementation verification
 
 The final `PATH="$PWD/.tmp/trusted-node:$PATH" pnpm run check` completed with
 **exit 0: 3,148 passed / 63 skipped / 0 failed**, 198 passing files / 5 skipped,
@@ -49,8 +150,9 @@ fresh build, staging, full tests, clean Knip, component MCP certification and
 **all 15 lifecycle cases executed within this full run**, with zero lifecycle skips.
 
 - Final log/exit: `.tmp/fovea-completion-final-check.log` and `.exit`.
-- Preserved full report: `.tmp/fovea-completion-final.json`; also
-  `.tmp/vitest-report.json`. No focused run overwrites that full report.
+- Preserved implementation full report: `.tmp/fovea-completion-final.json`.
+  The mutable `.tmp/vitest-report.json` now belongs to the final records check
+  above; neither historical report is overwritten by focused runs.
 - Initial full run: **exit 1, 3,134 passed / 11 failed / 63 skipped**;
   `.tmp/fovea-completion-check.log`, `.tmp/fovea-completion-initial.json`.
   Nine staging failures came from incomplete Darwin fixtures; two archived-manager
@@ -99,7 +201,7 @@ previous generations and configuration backup were retained.
 - Fresh authenticated Kiro session `sess_78ba092b-6680-4c47-932d-290824e1dc4e`
   selected `kiro-fabric` and made one actual `@fabric/fabric_exec` call, with no
   fallback calls. `repo.focus()` returned `status:"ok"`, matched
-  `src/fovea/git-executable.ts:5`, and returned hash-bound read windows. Captured
+  `src/fovea/git-executable.ts` (line 5), and returned hash-bound read windows. Captured
   **514 source files / 6,002,484 bytes**, with source budget not capped.
 - Stream: `.tmp/fovea-completion-kiro.jsonl`; mechanically asserted summary:
   `.tmp/fovea-completion-installed-evidence.json`. The model's final prose

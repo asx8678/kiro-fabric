@@ -16,14 +16,60 @@ owned temporary scratch profiles by `scripts/fovea-native-probe.mjs`:
   `session_id`. Exact tool matcher: `^mcp_fabric_fabric_exec$`. A stop-hook
   continuation led to a subsequent actual MCP call, not just assistant prose.
   `.tmp/fovea-native-contract/final-tui-report.json`.
-- **Routing limit:** neither observed MCP initialize nor tools/call supplies the
-  native chat identity. A server may be pooled. Cwd, arguments, PID ancestry and
-  status stdout are not a supported association or delivery acknowledgment.
-- **Still unqualified:** actual intended model input, session restoration,
-  cancellation/queued-input precedence, approvals, complete tool inventory and
-  retained-generation behavior. One continuation does not qualify the complete
-  bounded continuation/queue contract. These are protocol fixtures, not Fabric
-  execution or automatic integration.
+- **H01/H02 routing blocker:** neither observed MCP initialize nor tools/call nor
+  server environment supplies the native chat identity. In the initial TUI run,
+  two processes started, only one initialized, and all three calls used that
+  instance with keys `[name, arguments]` and no `_meta`. This does **not** establish
+  concurrent-session pooling or ambiguity rejection. Cwd, arguments, PID ancestry
+  and status stdout are not supported routing authority. Evidence:
+  `.tmp/fovea-native-VEArYZ/report.json`,
+  `.tmp/fovea-native-VEArYZ/mcp.jsonl`, `.tmp/fovea-native-VEArYZ/hooks.jsonl`.
+- **H03/H05 partial observations:** SessionStart preceded UserPromptSubmit;
+  success and error fixture calls each fired PreToolUse/PostToolUse with
+  `tool_response`. Real Fabric readiness, binding, result preservation and
+  intended-next-step delivery remain unqualified.
+- **H06 mechanism demonstrated, not passed:** the initial TUI Stop decision
+  `{decision:"block",reason:...}` caused a third actual MCP fixture call with
+  marker `continuation`. `tests/fovea/fixtures/native-hook-probe.mjs` requests at
+  most one continuation per session. That bound belongs to the fixture, not a
+  verified client contract; cancellation and queue precedence remain open.
+  Following the reason is behavioral evidence, not literal model-input capture
+  or H04 prompt-marker delivery. The report records exit 0 and leader closure.
+- **H07 unqualified — hook completed after Escape input:** a ten-second
+  UserPromptSubmit hook started at `1789939858365`; the driver wrote Escape to
+  the PTY at `1789939861063` while the TUI rendered “esc to cancel”, then wrote
+  next input at `1789939862213`. The hook ended at `1789939868368` (**7,305 ms
+  after Escape input**), with no logged SIGTERM/SIGINT/SIGHUP. The raw terminal
+  exposes no acknowledged `session/cancel` event, and no second
+  `UserPromptSubmit` was observed. Input written is not input accepted:
+  **cancellation/queue contract unverified**, not a proven native cancellation
+  failure or queued-input precedence result. Retained KAS `FQi` source inspection
+  (a fresh hook AbortController rather than the turn signal) supports a missing
+  wiring concern, not a stronger behavioral conclusion.
+  Artifacts: `.tmp/fovea-cancel-wgPbJV/{timeline.jsonl,driver.exp,hook.mjs,native-tui.raw}`.
+- **H08 partial headless resume:** the stream retains session
+  `sess_f5aa7b83-c6dd-491f-98f9-1a0425304cb2`, selects the probe mode and completes
+  a fixture MCP call. The newly initialized MCP instance is
+  `fe190816-e5a0-41d0-be62-72ec04eb943b`, distinct from the initial TUI instance
+  `fcab2cb8-07fb-4998-9d9b-f28bcc4624fc`. It still reports generic
+  `clientInfo: {name:"kiro",version:"0.0.0"}` and call keys `[name, arguments]`
+  with `meta: null`; preserved chat identity is not supported session-to-MCP
+  association. Evidence: `.tmp/fovea-native-VEArYZ/resume-headless.jsonl` and
+  `.tmp/fovea-native-VEArYZ/mcp.jsonl`. The TUI resume transcript is
+  replay, not new-hook evidence. Resume hook signals, Fabric restoration and
+  clear/compact/profile swaps remain unestablished.
+- **Still unqualified:** H04 intended model input; full H03/H05/H06/H08 contracts;
+  H09 controls, H10 approvals, H11 complete tool inventory and H12 retained
+  generation. These are protocol fixtures, not Fabric execution or automatic
+  integration. All 12 current dispositions are in
+  [parity-matrix.md](parity-matrix.md#native-client-gates) and mirrored in
+  `parity-matrix.json#hostGates` and `qualification.json#gates`.
+
+Here `partial` means a constituent mechanism was witnessed, never an H-gate pass;
+`unqualified` means required contract evidence is absent, including acknowledged
+cancellation/queue behavior for H07. `host-blocked` applies to the observed
+session-association prerequisite, not to TUI hook support generally or H07's
+unverified cancellation concern. The historical table below is not current status.
 
 The managed profile therefore does not register automatic Fovea hooks. The hook
 is silent on stdout by default (exit 3); `--status` explicitly reports diagnostics
@@ -136,19 +182,22 @@ an authoritative lifecycle assertion. **There were no actual native event
 payloads to adapt in this run.** Typed session/MCP/hook/model-input adapters still
 require observed, documented post-authentication events. No RPC is invented.
 
-### Status interpretation and remaining acceptance ledger
+### Historical isolated-run status interpretation and acceptance ledger
 
 - `untested`: not attempted, unsupported by this harness version, or lacking
   sufficient semantic evidence. Missing adapters are harness work, not host blocks.
 - `environment-blocked`: an executed prerequisite failed (auth, spawn, bounds or
   cleanup). Only implemented dependent lifecycle gates inherit the initial chat
   blocker; skipped commands remain untested and name their dependency.
-- `host-blocked`: would require a real native rejection of the capability in a
-  valid environment. **No new native host-blocked result was established.**
+- `host-blocked`: requires observed host behavior in a valid environment, not
+  missing harness instrumentation. **This isolated Linux run established no
+  host blocker.** The authenticated Darwin follow-up above separately observed
+  missing session association. Its Escape-input probe leaves cancellation and
+  queued-input precedence unverified.
 - `observed` on a probe means command exit 0 without limit/cleanup failure, not
   an H-gate pass. An unknown nonzero exit is `failed`, not guessed to be auth.
 
-| Gate | Current headless status | Exact remaining evidence/work |
+| Gate | Historical isolated headless status | Exact remaining evidence/work |
 | --- | --- | --- |
 | H01 | Environment-blocked: `chat-new` / isolated auth unavailable | Resumed turns with independently observed session and MCP instance identities. |
 | H02 | Environment-blocked: same prerequisite | Concurrent distinct session/host mapping and actual ambiguous-routing rejection. |
@@ -163,16 +212,20 @@ require observed, documented post-authentication events. No RPC is invented.
 | H11 | Untested | Authoritative complete model-visible tool inventory, including client-injected tools. |
 | H12 | Untested | Generation update while a session remains active; generation-matched old hooks/engine. |
 
-Native-TUI and direct ACP remain separately **untested**; headless authentication
-failure is not transplanted into their results. Historical elicitation/picker
+Native-TUI and direct ACP were separately **untested by this historical harness**;
+headless authentication failure is not transplanted into their results. The later
+authenticated TUI observations above supersede its untested status only for the
+exercised subsets. Historical elicitation/picker
 findings in the [dated readiness report](../coding-readiness-2026-09-09.md) are not
 new results. No Fovea profile/MCP fixture is installed by these baseline probes,
 so even a successful baseline chat would leave host/hook correlation untested.
 
-The status-only `src/kiro/fovea-hook.ts` remains outside this task. Its own
-`host-blocked` / `native-session-rendezvous-unavailable` status is **not native
-client capability evidence**. The exported harmless marker constructor remains
-unit-test data; markers, fake executable tests and injected runners cannot grant
+The baseline harness does not dispatch `src/kiro/fovea-hook.ts`. Its own
+`host-blocked` / `native-session-rendezvous-unavailable` diagnostic is **not native
+client capability evidence**; the current blocker is based on the native protocol
+artifacts above, independently of that diagnostic. The exported harmless marker
+constructor remains unit-test data; markers, fake executable tests and injected
+runners cannot grant
 qualification. Hook/session dispatch must not be guessed from cwd.
 
 Full build, suite and installer qualification are coordinated by main serially;
