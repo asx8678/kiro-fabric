@@ -93,6 +93,74 @@ describe("sandbox worker lifecycle containment", () => {
     await runtime.close();
   });
 
+  it("cancels independently of a long deadline and awaits owned termination, including close", async () => {
+    const runtime = new QuickJsRuntime();
+    const controller = new AbortController();
+    let returned = false;
+    const execution = runtime.execute("while (true) {}", async () => true, { ...defaults, timeoutMs: 60_000, maxTimeoutMs: 60_000, signal: controller.signal }).then(result => { returned = true; return result; });
+    const owned = current();
+    let terminated!: (code: number) => void;
+    owned.terminate.mockImplementation(() => new Promise<number>(resolve => { terminated = resolve; }));
+    controller.abort();
+    expect(Atomics.load(new Int32Array(run().cancellationBuffer), 0)).toBe(1);
+    await vi.advanceTimersByTimeAsync(1_049);
+    expect(owned.terminate).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(owned.terminate).toHaveBeenCalledTimes(1);
+    expect(returned).toBe(false);
+    let closed = false;
+    const closing = runtime.close().then(() => { closed = true; });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(closed).toBe(false);
+    terminated(1);
+    await closing;
+    await expect(execution).resolves.toMatchObject({ terminationReason: "aborted", effectiveTimeoutMs: 60_000, value: undefined });
+    expect(owned.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed if owned worker termination rejects", async () => {
+    const runtime = new QuickJsRuntime();
+    const controller = new AbortController();
+    const execution = runtime.execute("return 1", async () => true, { ...defaults, signal: controller.signal });
+    current().terminate.mockRejectedValue(new Error("termination failed"));
+    controller.abort();
+    send("result", { result: completed });
+    await expect(execution).resolves.toMatchObject({ terminationReason: "runtime_error", error: "Virtual machine fault: termination failed", value: undefined });
+    await expect(runtime.execute("return 2", async () => true, defaults)).resolves.toMatchObject({ terminationReason: "runtime_error", error: "Sandbox runtime is closed" });
+    await expect(runtime.close()).rejects.toThrow("termination failed");
+    expect(workers).toHaveLength(1);
+    expect(current().terminate).toHaveBeenCalledTimes(1);
+  });
+  it("rejects late successful replies after abort and gives the next execution fresh cancellation state", async () => {
+    const runtime = new QuickJsRuntime();
+    const controller = new AbortController();
+    const execution = runtime.execute("return 1", async () => true, { ...defaults, signal: controller.signal });
+    const first = current();
+    controller.abort();
+    send("result", { result: completed });
+    await expect(execution).resolves.toMatchObject({ terminationReason: "aborted", value: undefined });
+    expect(first.terminate).toHaveBeenCalledTimes(1);
+    const next = runtime.execute("return 2", async () => true, defaults);
+    expect(current()).not.toBe(first);
+    expect(Atomics.load(new Int32Array(run().cancellationBuffer), 0)).toBe(0);
+    send("result", { result: { ...completed, value: 2 } });
+    await expect(next).resolves.toMatchObject({ terminationReason: "completed", value: 2 });
+    await runtime.close();
+  });
+
+  it("does not publish success if cancellation arrives while host cleanup drains", async () => {
+    const runtime = new QuickJsRuntime();
+    const controller = new AbortController();
+    const execution = runtime.execute("return 1", async () => new Promise(() => {}), { ...defaults, signal: controller.signal });
+    send("hostCall", { id: 1, ref: "fabric.call", args: {} });
+    await vi.advanceTimersByTimeAsync(0);
+    send("result", { result: completed });
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(50);
+    await expect(execution).resolves.toMatchObject({ terminationReason: "aborted", value: undefined });
+    expect(current().terminate).toHaveBeenCalledTimes(1);
+    await runtime.close();
+  });
   it("does not dispatch a host call queued in a microtask after a worker fault", async () => {
     const runtime = new QuickJsRuntime();
     const host = vi.fn(async () => true);

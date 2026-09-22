@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { throwIfAborted } from "../async-settlement.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
+import { privateStorageDirectoryGuard, sameStorageFile } from "./storage-identity.js";
 
 const DEFAULT_MAX_NAMESPACE_ENTRIES = 128;
 const DEFAULT_MAX_NAMESPACE_BYTES = 256 * 1024;
@@ -184,10 +185,61 @@ const releaseNamespaceMutationLock = (lockPath: string, identity: MutationLockId
   fs.rmdirSync(lockPath);
 };
 
+/** Serialize every cooperative reclaimer of the same owner before revalidation.
+ * Never reclaim a claim (even for a dead PID): interrupted recovery is ambiguous
+ * evidence requiring operator intervention. Otherwise a delayed reclaimer could
+ * unlink a successor between the identity check and the pathname deletion.
+ * Hash the token so legacy owner strings cannot become filesystem paths. */
+const reclaimNamespaceMutationLock = (lockPath: string, identity: MutationLockIdentity): boolean => {
+  const tokenHash = crypto.createHash("sha256").update(identity.owner!.token!).digest("hex");
+  const claim = path.join(path.dirname(lockPath), `.kiro-fabric-recovery-${tokenHash}.claim`);
+  let descriptor: number;
+  try {
+    descriptor = fs.openSync(claim,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW ?? 0), 0o600);
+  } catch (error) {
+    if (errorCode(error) === "EEXIST") return false;
+    throw error;
+  }
+  let claimed: fs.Stats | undefined;
+  let failed = false;
+  let recoveryError: unknown;
+  try {
+    claimed = fs.fstatSync(descriptor);
+    fs.writeFileSync(descriptor, JSON.stringify({ pid: process.pid, identity }), "utf8");
+    fs.fsyncSync(descriptor);
+    // This claim cannot be superseded by another cooperative reclaimer. A
+    // stale observer that acquires it later must still pass exact revalidation.
+    releaseNamespaceMutationLock(lockPath, identity, true);
+    return true;
+  } catch (error) {
+    failed = true;
+    recoveryError = error;
+    throw error;
+  } finally {
+    const errors: unknown[] = [];
+    try { fs.closeSync(descriptor); } catch (error) { errors.push(error); }
+    try {
+      if (!claimed) throw new KiroMemoryScopeError("Kiro memory recovery claim identity unavailable; preserve evidence for operator recovery");
+      const current = fs.lstatSync(claim);
+      if (!current.isFile() || current.isSymbolicLink() || current.dev !== claimed.dev || current.ino !== claimed.ino) {
+        throw new KiroMemoryScopeError("Refusing to remove a replacement Kiro memory recovery claim");
+      }
+      fs.unlinkSync(claim);
+    } catch (error) { errors.push(error); }
+    if (errors.length) throw new AggregateError(
+      failed ? [recoveryError, ...errors] : errors,
+      "Kiro memory recovery claim cleanup failed; preserve evidence for operator recovery",
+      { cause: failed ? recoveryError : errors[0] },
+    );
+  }
+};
+
 const withNamespaceMutationLock = async <T>(
   namespaceRoot: string,
   state: MutationLockState,
   operation: () => T | Promise<T>,
+  assertScope: () => void,
   signal?: AbortSignal,
   beforeCommit?: () => void,
 ): Promise<T> => {
@@ -196,6 +248,7 @@ const withNamespaceMutationLock = async <T>(
   let identity: MutationLockIdentity | undefined;
   let operationError: unknown;
   while (!identity) {
+    assertScope();
     if (state.pending) {
       const pending = state.pending;
       recoverPendingMutationLock(lockPath, pending);
@@ -203,6 +256,7 @@ const withNamespaceMutationLock = async <T>(
     }
     throwIfAborted(signal);
     beforeCommit?.();
+    assertScope();
     try {
       fs.mkdirSync(lockPath, { mode: 0o700 });
       let stat: fs.Stats;
@@ -221,6 +275,7 @@ const withNamespaceMutationLock = async <T>(
       try {
         const ownerPath = path.join(lockPath, MUTATION_LOCK_OWNER);
         const token = crypto.randomBytes(32).toString("hex");
+        assertScope();
         try {
           ownerDescriptor = fs.openSync(
             ownerPath,
@@ -242,6 +297,7 @@ const withNamespaceMutationLock = async <T>(
         const cleanupIdentity = identity;
         identity = undefined;
         try {
+          assertScope();
           releaseNamespaceMutationLock(lockPath, cleanupIdentity);
           if (ownerDescriptor !== undefined) {
             const descriptor = ownerDescriptor;
@@ -291,13 +347,11 @@ const withNamespaceMutationLock = async <T>(
           await delay(10);
           continue;
         }
-        // Revalidate the exact directory, owner inode and token through the
-        // same helper used for owned cleanup; never unconditionally remove a path.
-        releaseNamespaceMutationLock(lockPath, {
+        assertScope();
+        if (reclaimNamespaceMutationLock(lockPath, {
           directory: { dev: stat.dev, ino: stat.ino },
           owner: { dev: ownerStat.dev, ino: ownerStat.ino, token: owner.token },
-        }, true);
-        continue;
+        })) continue;
       }
       if (performance.now() >= deadline) {
         throw new KiroMemoryScopeError("Timed out waiting for Kiro memory mutation lock");
@@ -310,15 +364,18 @@ const withNamespaceMutationLock = async <T>(
     // and immediately before the mutation is allowed to commit.
     throwIfAborted(signal);
     beforeCommit?.();
+    assertScope();
     const result = await operation();
     throwIfAborted(signal);
     beforeCommit?.();
+    assertScope();
     return result;
   } catch (error) {
     operationError = error;
     throw error;
   } finally {
     try {
+      assertScope();
       releaseNamespaceMutationLock(lockPath, identity);
       state.pending = undefined;
     } catch (cleanup) {
@@ -370,7 +427,7 @@ const readBounded = (descriptor: number, budget: number, overflow: () => Error):
   return buffer.subarray(0, bytes);
 };
 
-const readOwnershipMarker = (filePath: string): unknown => {
+const readOwnershipMarker = (filePath: string): { value: unknown; identity: fs.Stats } => {
   let descriptor: number | undefined;
   try {
     descriptor = fs.openSync(
@@ -389,9 +446,11 @@ const readOwnershipMarker = (filePath: string): unknown => {
         throw new KiroMemoryScopeError(`Kiro memory ownership marker is not private: ${filePath}`);
       }
     }
-    return JSON.parse(readBounded(descriptor, 8 * 1024, () =>
+    const value: unknown = JSON.parse(readBounded(descriptor, 8 * 1024, () =>
       new KiroMemoryScopeError(`Kiro memory ownership marker is invalid: ${filePath}`),
-    ).toString("utf8")) as unknown;
+    ).toString("utf8"));
+    if (!sameStorageFile(fs.fstatSync(descriptor), stat)) throw new KiroMemoryScopeError(`Kiro memory ownership marker changed: ${filePath}`);
+    return { value, identity: stat };
   } catch (error) {
     if (error instanceof KiroMemoryScopeError) throw error;
     throw new KiroMemoryScopeError(
@@ -406,7 +465,7 @@ const ensureOwnedDirectory = (
   memoryRoot: string,
   target: string,
   marker: Record<string, unknown>,
-): void => {
+): fs.Stats => {
   assertNoSymlinkComponents(memoryRoot, target);
   const existing = lstatOrNull(target);
   let created = false;
@@ -472,9 +531,10 @@ const ensureOwnedDirectory = (
     }
   }
   const found = readOwnershipMarker(markerPath);
-  if (JSON.stringify(found) !== JSON.stringify(marker)) {
+  if (JSON.stringify(found.value) !== JSON.stringify(marker)) {
     throw new KiroMemoryScopeError(`Kiro memory directory ownership mismatch: ${target}`);
   }
+  return found.identity;
 };
 
 const assertNoSymlinkComponents = (root: string, target: string): void => {
@@ -622,7 +682,7 @@ const syncDirectoryBestEffort = (directory: string): void => {
   }
 };
 
-const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () => void, afterCommit?: () => void): void => {
+const writeJsonAtomic = (filePath: string, content: string, assertScope: () => void, beforeCommit?: () => void, afterCommit?: () => void): void => {
   const directory = path.dirname(filePath);
   const temporary = path.join(
     directory,
@@ -640,14 +700,17 @@ const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () =>
     fs.closeSync(fd);
   };
   try {
+    assertScope();
     descriptor = fs.openSync(temporary, "wx", 0o600);
     createdStats = fs.fstatSync(descriptor);
     fs.writeFileSync(descriptor, content, "utf8");
     fs.fsyncSync(descriptor);
     close();
     beforeCommit?.();
+    assertScope();
     fs.renameSync(temporary, filePath);
     afterCommit?.();
+    assertScope();
     syncDirectoryBestEffort(directory);
   } catch (error) {
     const errors: unknown[] = [error];
@@ -657,6 +720,7 @@ const writeJsonAtomic = (filePath: string, content: string, beforeCommit?: () =>
     }
     try { close(); } catch (cleanup) { errors.push(cleanup); }
     try {
+      assertScope();
       const current = lstatOrNull(temporary);
       if (createdStats && current?.isFile() && !current.isSymbolicLink() &&
           current.dev === createdStats.dev && current.ino === createdStats.ino) {
@@ -672,13 +736,11 @@ const namespaceBytesError = (namespace: string): Error => new Error(
   `Kiro memory namespace ${JSON.stringify(namespace)} exceeds ${DEFAULT_MAX_NAMESPACE_BYTES} bytes`,
 );
 
-const listEntryFiles = (namespaceRoot: string, namespace: string, maxEntries: number): string[] => {
-  let directory: fs.Dir;
-  try { directory = fs.opendirSync(namespaceRoot); }
-  catch (error) {
-    if (errorCode(error) === "ENOENT") return [];
-    throw error;
-  }
+const listEntryFiles = (namespaceRoot: string, namespace: string, maxEntries: number, assertScope: () => void): string[] => {
+  assertScope();
+  // A bound namespace already exists; disappearance is revocation, not an
+  // empty store. Do not hide a change between the guard and directory open.
+  const directory = fs.opendirSync(namespaceRoot);
   const files: string[] = [];
   try {
     let entry: fs.Dirent | null;
@@ -692,6 +754,7 @@ const listEntryFiles = (namespaceRoot: string, namespace: string, maxEntries: nu
   } finally {
     directory.closeSync();
   }
+  assertScope();
   return files.sort((left, right) => left.localeCompare(right));
 };
 
@@ -699,13 +762,16 @@ function* iterateNamespaceEntries<T extends JsonValue>(
   files: string[],
   namespace: string,
   maxValueChars: number,
+  assertScope: () => void,
   initialBytes = 0,
   skipPath?: string,
 ): Generator<KiroMemoryEntry<T>> {
   let totalBytes = initialBytes;
   for (const file of files) {
     if (file === skipPath) continue;
+    assertScope();
     const entry = readEntry<T>(file, namespace, maxValueChars, DEFAULT_MAX_NAMESPACE_BYTES - totalBytes);
+    assertScope();
     totalBytes += entry.bytes;
     yield entry;
   }
@@ -717,6 +783,7 @@ const assertEntryFits = <T extends JsonValue>(
   maxEntries: number,
   maxValueChars: number,
   files: string[],
+  assertScope: () => void,
 ): void => {
   const entryCount = files.length + (files.includes(targetPath) ? 0 : 1);
   if (next.bytes > DEFAULT_MAX_ENTRY_BYTES) {
@@ -731,7 +798,7 @@ const assertEntryFits = <T extends JsonValue>(
   }
   // The replacement was already validated by set. Budget its new size, so
   // shrinking an entry can still recover an over-byte-quota namespace.
-  for (const _entry of iterateNamespaceEntries<T>(files, next.namespace, maxValueChars, next.bytes, targetPath)) {
+  for (const _entry of iterateNamespaceEntries<T>(files, next.namespace, maxValueChars, assertScope, next.bytes, targetPath)) {
     // Validate without retaining the remaining values.
   }
 };
@@ -754,23 +821,38 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     : DEFAULT_MAX_ENTRY_BYTES;
   const memoryNamespace = normalizeKiroMemoryToken(namespace, "namespace");
   const memoryRoot = canonicalDirectory(root);
+  const failure = (message: string): Error => new KiroMemoryScopeError(message);
+  const rootGuard = privateStorageDirectoryGuard(memoryRoot, failure);
   const scopedRoot = path.join(memoryRoot, MEMORY_DIR);
-  ensureOwnedDirectory(memoryRoot, scopedRoot, {
+  const scopedMarker = ensureOwnedDirectory(memoryRoot, scopedRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
     kind: "memory-root",
     root: memoryRoot,
   });
+  const scopedGuard = privateStorageDirectoryGuard(scopedRoot, failure);
   const namespaceRoot = memoryNamespaceRoot(memoryRoot, memoryNamespace);
-  ensureOwnedDirectory(memoryRoot, namespaceRoot, {
+  const namespaceMarker = ensureOwnedDirectory(memoryRoot, namespaceRoot, {
     format: MEMORY_FORMAT,
     owner: MEMORY_OWNER,
     kind: "memory-namespace",
     root: memoryRoot,
     namespace: memoryNamespace,
   });
+  const namespaceGuard = privateStorageDirectoryGuard(namespaceRoot, failure);
+  const markers = [{ directory: scopedRoot, identity: scopedMarker }, { directory: namespaceRoot, identity: namespaceMarker }];
+  const assertScope = (): void => {
+    rootGuard(); scopedGuard(); namespaceGuard();
+    for (const marker of markers) {
+      if (!sameStorageFile(fs.lstatSync(path.join(marker.directory, OWNERSHIP_MARKER)), marker.identity)) {
+        throw new KiroMemoryScopeError(`Kiro memory ownership marker changed; preserve replacement: ${marker.directory}`);
+      }
+    }
+  };
+  assertScope();
 
   const resolveEntryPath = (key: string): string => {
+    assertScope();
     const normalizedKey = normalizeKiroMemoryToken(key, "key");
     const filePath = entryPath(namespaceRoot, normalizedKey);
     assertNoSymlinkComponents(memoryRoot, filePath);
@@ -788,11 +870,12 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     async get(key: string): Promise<KiroMemoryEntry<T> | null> {
       const filePath = resolveEntryPath(key);
       const stat = lstatOrNull(filePath);
-      if (!stat) return null;
+      if (!stat) { assertScope(); return null; }
       if (!stat.isFile() || stat.isSymbolicLink()) {
         throw new KiroMemoryScopeError(`Kiro memory entry must be a real file: ${filePath}`);
       }
       const entry = readEntry<T>(filePath, memoryNamespace, maxValueChars);
+      assertScope();
       if (entry.namespace !== memoryNamespace) {
         throw new Error(`Kiro memory namespace mismatch for key ${JSON.stringify(entry.key)}`);
       }
@@ -818,7 +901,7 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
             throw new Error(`Kiro memory value exceeds ${maxValueChars} configured characters`);
           }
           const normalizedValue = JSON.parse(encodedValue) as T;
-          const files = listEntryFiles(namespaceRoot, memoryNamespace, maxEntries);
+          const files = listEntryFiles(namespaceRoot, memoryNamespace, maxEntries, assertScope);
           const existing = lstatOrNull(filePath);
           if (existing) {
             if (!existing.isFile() || existing.isSymbolicLink()) {
@@ -848,13 +931,14 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
             updatedAt: entry.updatedAt,
           });
           entry.bytes = utf8Bytes(content);
-          assertEntryFits(entry, filePath, maxEntries, maxValueChars, files);
+          assertEntryFits(entry, filePath, maxEntries, maxValueChars, files, assertScope);
           throwIfAborted(signal);
           beforeCommit?.();
-          writeJsonAtomic(filePath, content, beforeCommit, () => { published = true; });
+          writeJsonAtomic(filePath, content, assertScope, beforeCommit, () => { published = true; });
           beforeCommit?.();
+          assertScope();
           return entry;
-        }, signal, beforeCommit);
+        }, assertScope, signal, beforeCommit);
       } catch (error) {
         if (published) throw new KiroMemoryCommitAcknowledgementError("set", normalizedKey, { cause: error });
         throw error;
@@ -880,12 +964,15 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
             throw new KiroMemoryScopeError("Kiro memory entry changed before deletion");
           }
           beforeCommit?.();
+          assertScope();
           fs.unlinkSync(filePath);
           published = true;
+          assertScope();
           syncDirectoryBestEffort(namespaceRoot);
           beforeCommit?.();
+          assertScope();
           return { key: normalizedKey, deleted: true };
-        }, signal, beforeCommit);
+        }, assertScope, signal, beforeCommit);
       } catch (error) {
         if (published) throw new KiroMemoryCommitAcknowledgementError("delete", normalizedKey, { cause: error });
         throw error;
@@ -894,17 +981,18 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
 
     async list(): Promise<KiroMemoryEntry<T>[]> {
       return [...iterateNamespaceEntries<T>(
-        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries), memoryNamespace, maxValueChars,
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries, assertScope), memoryNamespace, maxValueChars, assertScope,
       )].sort((left, right) => left.key.localeCompare(right.key));
     },
 
     async search(query: string, limit = 8): Promise<KiroMemoryEntry<T>[]> {
+      assertScope();
       const needle = query.trim().toLowerCase();
       if (!needle) return [];
       const capped = Math.max(1, Math.min(Math.floor(limit), maxEntries));
       const scored: Array<{ entry: KiroMemoryEntry<T>; score: number }> = [];
       for (const entry of iterateNamespaceEntries<T>(
-        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries), memoryNamespace, maxValueChars,
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries, assertScope), memoryNamespace, maxValueChars, assertScope,
       )) {
         const haystack = `${entry.key}\n${JSON.stringify(entry.value)}`.toLowerCase();
         const position = haystack.indexOf(needle);
@@ -924,7 +1012,7 @@ export const openKiroMemory = <T extends JsonValue = JsonValue>(
     async index(): Promise<Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">>> {
       const metadata: Array<Pick<KiroMemoryEntry<T>, "key" | "bytes" | "updatedAt">> = [];
       for (const { key, bytes, updatedAt } of iterateNamespaceEntries<T>(
-        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries), memoryNamespace, maxValueChars,
+        listEntryFiles(namespaceRoot, memoryNamespace, maxEntries, assertScope), memoryNamespace, maxValueChars, assertScope,
       )) {
         metadata.push({ key, bytes, updatedAt });
       }

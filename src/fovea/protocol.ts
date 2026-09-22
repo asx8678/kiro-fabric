@@ -13,6 +13,7 @@ export interface FoveaQuery {
 export type FoveaMessage =
   | { version: 1; type: "initialize"; id: string; options: FoveaEngineInitialization }
   | { version: 1; type: "query"; id: string; remainingMs: number; request: FoveaQuery }
+  | { version: 1; type: "retireConversation"; id: string; conversationId: string; conversationEpoch: number }
   | { version: 1; type: "cancel"; id: string }
   | { version: 1; type: "shutdown"; id: string };
 export type FoveaResponse = { version: 1; id: string; ok: true; value: Record<string, unknown> } | { version: 1; id: string; ok: false; error: string };
@@ -27,6 +28,7 @@ export function decodeRequest(raw: unknown): FoveaMessage {
   fabricJsonText(v, FOVEA_REQUEST_CHARS);
   if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Fovea protocol identity mismatch");
   if ((v.type === "cancel" || v.type === "shutdown") && keys(v, ["version", "type", "id"])) return v as unknown as FoveaMessage;
+  if (v.type === "retireConversation" && keys(v, ["version", "type", "id", "conversationId", "conversationEpoch"]) && identifier(v.conversationId) && epoch(v.conversationEpoch)) return v as unknown as FoveaMessage;
   if (v.type === "initialize" && keys(v, ["version", "type", "id", "options"]) && record(v.options)) {
     const o = v.options, p = o.parser;
     if (keys(o, ["parser", "storageRoot", "gitPath"]) && typeof o.storageRoot === "string" && o.storageRoot.length <= 4096 &&

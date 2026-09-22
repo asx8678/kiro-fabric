@@ -170,6 +170,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `src/kiro/mcp-server.ts`
 - `src/kiro/memory-provider.ts`
 - `src/kiro/memory.ts`
+- `src/kiro/storage-identity.ts` — shared private directory lifetime and immutable-file metadata guards; bounded revalidation, not kernel CAS or an OS sandbox.
 - `src/kiro/power/agent-launch-context.ts`
 - `src/kiro/power/approver.ts`
 - `src/kiro/power/artifacts-provider.ts`
@@ -201,6 +202,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `tests/archive.test.ts`
 - `tests/artifact-startup-recovery.test.ts` — shared artifact-root startup tolerates exact concurrent disappearance of residue entries while foreign entries and other failures still reject.
 - `tests/artifacts-state.test.ts`
+- `tests/artifact-storage-identity.test.ts` — preserve replacement files/roots through eviction, shutdown and failed initialization, retaining uncertain ownership/accounting.
 - `tests/compiler-isolation.test.ts`
 - `tests/compiler-ownership.test.ts`
 - `tests/configuration.test.ts`
@@ -213,6 +215,7 @@ Benchmark scripts are development tooling, not installed model capabilities. The
 - `tests/mcp-federation.test.ts`
 - `tests/mcp-pagination.test.ts`
 - `tests/memory-security.test.ts`
+- `tests/memory-storage-identity.test.ts` — reject post-binding hierarchy/marker substitutions before reads or locks, including queued writers and precommit callbacks.
 - `tests/memory-recovery.test.ts`
 - `tests/memory-acknowledgement.test.ts`
 - `tests/mcp-process-lifecycle.test.ts`
@@ -293,6 +296,7 @@ This appended inventory records the later ownership, acknowledgement, prerequisi
 - `tests/bundle-contract.test.ts`
 - `tests/bundle-fixture.ts`
 - `tests/install-manager-cli.test.ts`
+- `tests/install-manager-lifecycle.test.ts` — exact-child signal forwarding, fixed shutdown escalation, embedding cleanup and installed-launcher lifecycle with inert clients only.
 - `tests/install-manager-start.test.ts` — read-only active-generation launch admission, prerequisite/recovery/integrity exit codes, legacy refusal, and workspace/child-exit preservation.
 - `tests/installed-independence.test.ts`
 - `tests/source-bootstrap.test.ts`
@@ -597,4 +601,19 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/outline-structured.test.ts` — structured-outline demotion pins: real-binary behavior plus stub failure classes.
 - `tests/fovea/source-retention.test.ts` — streaming source capture, warm snapshot reuse and retention bounds.
 - `tests/state-durability.test.ts` — state-store durability fault matrix: committed versus acknowledged publication.
+
+## Trusted host sessions and recent boundary hardening
+
+- `src/kiro/host-session-adapter.ts` — trusted in-process session/turn ownership, bounded request routing, exact-turn delivery receipts and retirement; not a native Kiro bridge.
+- `tests/fovea/host-session-adapter.test.ts` — opaque ownership, request/receipt bounds, callback failure/reentrancy and turn revocation.
+- `tests/fovea/mcp-session-adapter.test.ts` — session-local MCP workspaces/runtimes, retirement races and fail-closed approval association.
+- `tests/fovea/session-retirement.test.ts` — synchronous all-root revocation, selective private cleanup, capacity recovery and shared configuration preservation.
+- `tests/fovea/session-retirement-built.test.ts` — admitted-parser built engine/IPC and stdio MCP retirement through a synthetic trusted bridge; not native-client qualification.
+- `tests/fovea/git-impact-boundary.test.ts` — read-only impact analysis, option/output injection refusal and untracked-path enumeration.
+- `scripts/build-complete-candidate.mjs` — isolated clean release-candidate build without tracked-output mutation, installation or signing.
+- `tests/closure-output-isolation.test.ts` — fresh real closure/native output with tracked dist preservation.
+- `tests/complete-build-isolation.test.ts` — isolated exact-byte capture/reuse, corruption/drift rejection and clean source identity.
+- `tests/install-tui.test.ts` — read-only help, confirmation options and private concurrent invocation logs.
+- `tests/memory-lock-recovery.test.ts` — cross-process recovery barriers for lock ownership and quota/publication races.
+- `tests/quickjs-cancellation-service.test.ts` — cancellation through service admission and refusal of late VM success.
 

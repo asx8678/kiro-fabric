@@ -2,8 +2,9 @@ import { vendoredSbomPackages } from "./generate-vendored-sbom.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateBundle, sha256, hashRegular, readRegular, LIMITS } from "./bundle-contract.mjs";
-import { withInstallerArtifactLease } from "./installer-artifacts.mjs";
+import { validateBundle, sha256, canonical, readRegular, LIMITS } from "./bundle-contract.mjs";
+import { parseBundleArchive } from "./bundle-archive.mjs";
+import { cacheFileIdentity, privateDirectory, withInstallerArtifactLease, withInstallerCacheGate } from "./installer-artifacts.mjs";
 import { writeFileAtomic } from "./atomic-file.mjs";
 export async function generateBundleSbom(root) {
   const bundle = await validateBundle(root);
@@ -28,23 +29,48 @@ export async function generateBundleSbom(root) {
  * Archive descriptors name captured bytes; promotion must authenticate snapshots.
  * @param {string} [root] */
 export async function generateBundleSbomOutputs(root = process.cwd()) {
+  return generateBundleSbomOutputsForTest(root, {});
+}
+/** Internal mutation seam; no hook is selectable by CLI/environment.
+ * @param {string} root @param {{beforePublication?: () => Promise<void> | void}} hooks */
+export async function generateBundleSbomOutputsForTest(root, hooks) {
   root = fs.realpathSync(root);
   return withInstallerArtifactLease(root, async () => {
-    const directory = path.join(root, ".tmp");
-    const pointer = JSON.parse((await readRegular(path.join(directory, "complete-bundle.json"), 2 * 1024 * 1024, { mode: 0o600 })).toString("utf8"));
+    const directory = path.join(root, ".tmp"), guard = privateDirectory(directory);
+    const pointerPath = path.join(directory, "complete-bundle.json"), pointerIdentity = cacheFileIdentity(pointerPath);
+    const unchanged = (file, identity) => {
+      guard.check();
+      if (canonical(cacheFileIdentity(file)) !== canonical(identity)) throw Error("Complete-bundle publication changed before SBOM publication");
+    };
+    const pointer = JSON.parse((await readRegular(pointerPath, LIMITS.manifest, { mode: 0o600 })).toString("utf8"));
     const document = await generateBundleSbom(pointer.root), text = JSON.stringify(document, null, 2) + "\n";
     const output = path.join(directory, document.name + ".spdx.json");
-    let archive = null, archiveSidecar = null;
+    let archive = null, archiveSidecar = null, archiveIdentity;
     if (pointer.archive != null) {
       const expected = path.join(directory, document.name + ".tar.gz");
       if (typeof pointer.archive !== "string" || path.resolve(pointer.archive) !== expected) throw Error("Unexpected complete-bundle archive path");
-      const captured = await hashRegular(expected, LIMITS.archive, { mode: 0o600 });
-      archive = { path: expected, size: captured.size, sha256: captured.sha256 };
+      archiveIdentity = cacheFileIdentity(expected);
+      // One descriptor-checked capture supplies BOTH validation and descriptor
+      // hashing. Never reopen the archive pathname to validate different bytes.
+      const captured = await readRegular(expected, LIMITS.archive, { mode: 0o600 });
+      const parsed = parseBundleArchive(captured);
+      const describedDigest = document.packages.find(component => component.SPDXID === "SPDXRef-Fabric").checksums[0].checksumValue;
+      if (parsed.digest !== describedDigest) throw Error("Complete-bundle archive does not match selected SBOM bundle");
+      archive = { path: expected, size: captured.length, sha256: sha256(captured) };
       archiveSidecar = expected + ".spdx.json";
     }
-    writeFileAtomic(output, text);
-    if (archiveSidecar) writeFileAtomic(archiveSidecar, text);
-    return { output, archiveSidecar, archive, sha256: sha256(text), sbom: { size: Buffer.byteLength(text), sha256: sha256(text) }, packages: document.packages.length, files: document.files.length };
+    // Expensive tree/archive validation stays outside the short publication gate.
+    // A builder that commits meanwhile invalidates this captured selection.
+    return withInstallerCacheGate(root, async () => {
+      await hooks.beforePublication?.();
+      unchanged(pointerPath, pointerIdentity);
+      if (archive) unchanged(archive.path, archiveIdentity);
+      // No sidecar write until every check passes. The cooperative builder holds
+      // this same gate for archive replacement AND pointer publication.
+      writeFileAtomic(output, text);
+      if (archiveSidecar) writeFileAtomic(archiveSidecar, text);
+      return { output, archiveSidecar, archive, sha256: sha256(text), sbom: { size: Buffer.byteLength(text), sha256: sha256(text) }, packages: document.packages.length, files: document.files.length };
+    });
   });
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) console.log(JSON.stringify(await generateBundleSbomOutputs()));

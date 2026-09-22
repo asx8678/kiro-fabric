@@ -11,7 +11,7 @@ export const INSTALLER_SUITES = Object.freeze({
     "installer-platform", "installer-probe", "bundle-archive", "release-trust", "release-download", "installer-bootstrap", "source-bootstrap",
     "private-tools", "installer-home", "installer-home-preparation", "installer-configuration-backup", "installer-shell-integration",
     "installer-cli-contract", "installer-presentation", "installer-manager-acceptance", "installer-diagnostics", "installer-profile-publication", "installer-executable-trust", "installer-boundary-regressions",
-    "install-manager-start", "launch-profile", "agent-launch-context", "source-installer-contract", "source-frontend-acceptance",
+    "install-manager-start", "install-manager-lifecycle", "launch-profile", "agent-launch-context", "source-installer-contract", "source-frontend-acceptance",
     "installer-smoke-acceptance", "installer-native-zsh-acceptance", "installer-suite-registration", "installer-ci-cache-acceptance",
     "qualification-failure-acceptance", "release-workflow", "release-capture-boundaries", "managed-installation-lifecycle", "installer-directory-identity",
     "local-process-group", "local-shell", "local-search-work", "local-executable", "local-provider", "bundle-contract", "bundle-streaming",

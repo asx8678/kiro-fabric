@@ -205,6 +205,52 @@ const ask = async (question) => {
   const terminal = createInterface({ input: process.stdin, output: process.stderr });
   try { return (await terminal.question(question)).trim().toLowerCase(); } finally { terminal.close(); }
 };
+// The installed shell execs this manager, but runManager is also an embedding
+// API. Supervise rather than replacing the embedding process with execve.
+const CLIENT_SHUTDOWN_GRACE_MS = 5_000;
+/** @type {NodeJS.Signals[]} */
+const CLIENT_TERMINATION_SIGNALS = ["SIGHUP", "SIGINT", "SIGTERM"];
+function superviseClient(executable, args, options) {
+  return new Promise((resolve, reject) => {
+    // Keep inherited terminal/session behavior. Never signal a process group:
+    // it may contain the calling shell or unrelated jobs. A terminal-wide
+    // signal may also reach the client directly; forwarding cannot distinguish
+    // that from manager-PID-only delivery and does not rely on either behavior.
+    const child = spawn(executable, args, { ...options, stdio: "inherit" });
+    let stoppingSignal, timer;
+    const handlers = new Map();
+    const cleanup = () => {
+      clearTimeout(timer);
+      for (const [signal, handler] of handlers) process.removeListener(signal, handler);
+      child.removeListener("error", onError);
+      child.removeListener("exit", onExit);
+    };
+    const onError = error => {
+      // Spawn failure has no child to reap. A kill failure must not release
+      // supervision of an already running child or cancel the hard deadline.
+      if (child.pid) { process.stderr.write(`Kiro Fabric: client supervision failed: ${display(error.message)}\n`); return; }
+      cleanup(); reject(error);
+    };
+    const onExit = (code, childSignal) => {
+      cleanup();
+      const signal = stoppingSignal ?? childSignal;
+      resolve({ code: signal ? 128 + os.constants.signals[signal] : code ?? 1, signal });
+    };
+    child.on("error", onError);
+    child.once("exit", onExit);
+    for (const signal of CLIENT_TERMINATION_SIGNALS) {
+      const handler = () => {
+        // Repeated signals neither forward duplicates nor postpone escalation.
+        if (stoppingSignal) return;
+        stoppingSignal = signal;
+        timer = setTimeout(() => { child.kill("SIGKILL"); }, CLIENT_SHUTDOWN_GRACE_MS);
+        child.kill(signal);
+      };
+      handlers.set(signal, handler);
+      process.on(signal, handler);
+    }
+  });
+}
 export async function runManager(argv, internal = {}) {
   const emit = internal.present ?? presentManagerResult;
   let options;
@@ -244,7 +290,11 @@ export async function runManager(argv, internal = {}) {
       if (installation.status === "retired") throw new InstallerError(`Fabric is retired; run install before this command. ${installationGuidance(home, installation).guidance}`, 4, "prerequisite");
       if (installation.status !== "active" || !installation.owner) throw new InstallerError("Fabric is not installed; run install before starting using a verified signed release or an explicitly selected source checkout", 4, "prerequisite");
       const kiro = checkKiro(), profile = prepareLaunchProfile(home, installation, options.guidanceMode ?? "standard");
-      return await new Promise((resolve, reject) => { const child = spawn(kiro.executable, ["--v3", "--agent", profile.name], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()), KIRO_FABRIC_RUN_DECLARATION: profile.declaration }, stdio: "inherit" }); child.once("error", reject); child.once("exit", code => resolve(code ?? 1)); });
+      const result = await superviseClient(kiro.executable, ["--v3", "--agent", profile.name], { cwd: process.cwd(), env: { ...process.env, KIRO_HOME: home, KIRO_FABRIC_LAUNCH_WORKSPACE: fs.realpathSync(process.cwd()), KIRO_FABRIC_RUN_DECLARATION: profile.declaration } });
+      // Embedders receive a conventional numeric status and retain control of
+      // their process. Only the standalone entrypoint re-raises the signal.
+      if (result.signal) internal.onStartSignal?.(result.signal);
+      return result.code;
     }
     if (!options.dryRun && spec.confirmation !== "none" && (!process.stdin.isTTY || options.nonInteractive || options.json) && !options.yes) throw new InstallerError("Noninteractive mutation requires --yes and an explicit command", 2, "usage");
     // Recovery goes directly to the lifecycle's conservative offline verifier.
@@ -426,4 +476,10 @@ function presentErrorResult(result, json) {
   }
   return result.exitCode;
 }
-if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) process.exitCode = await runManager(process.argv.slice(2));
+if (process.argv[1] && fs.realpathSync(process.argv[1]) === fs.realpathSync(fileURLToPath(import.meta.url))) {
+  let startSignal;
+  process.exitCode = await runManager(process.argv.slice(2), { onStartSignal: signal => { startSignal = signal; } });
+  // The supervised child has exited and our signal listeners are gone. Preserve
+  // waitpid signal semantics (including client-originated signals) for callers.
+  if (startSignal) process.kill(process.pid, startSignal);
+}

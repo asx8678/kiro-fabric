@@ -120,7 +120,7 @@ if (port) {
       },
     };
     try {
-      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options) });
+      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options, new Int32Array(request.cancellationBuffer)) });
     } catch (error) {
       post({ type: "fatal", message: (error instanceof Error ? error.message : String(error)).slice(0, 4_096) });
     } finally {

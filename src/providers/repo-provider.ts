@@ -1,7 +1,7 @@
 import type { FabricProvider, FabricInvocationContext, FabricActionDescriptor } from "../protocol.js";
 import { schemaValidationMessage } from "../schema-validation.js";
 import type { FoveaBoundClient } from "../fovea/host.js";
-import { REPO_ACTION_DESCRIPTORS } from "./repo-contract.js";
+import { REPO_ACTION_DESCRIPTORS, validImpactBase } from "./repo-contract.js";
 /** This provider borrows a host binding. Closing it cannot close the persistent
  * analysis engine. Approval/validation/audit stay in the existing registry. */
 export class FoveaProvider implements FabricProvider {
@@ -19,6 +19,7 @@ export class FoveaProvider implements FabricProvider {
     if (!descriptor) throw new Error("Unknown repo action");
     const invalid = schemaValidationMessage(descriptor.inputSchema, args);
     if (invalid) throw new Error(`Invalid repo arguments: ${invalid}`);
+    if (actionName === "impact" && args.base !== undefined && !validImpactBase(args.base)) throw new Error("Invalid repo arguments: unsafe impact base revision");
     return this.client.invoke(actionName, args, context);
   }
   async close(): Promise<void> { if (this.#closed) return; this.#closed = true; await this.client.close(); }

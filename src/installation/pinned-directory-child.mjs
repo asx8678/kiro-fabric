@@ -6,7 +6,7 @@ import { pipeline } from 'node:stream/promises';
 /** @typedef {{dev:string,ino:string,mode:number,uid:number,gid:number}} DirectoryIdentity */
 /** @typedef {DirectoryIdentity & {nlink:string,size:string,mtimeNs:string,ctimeNs:string}} EntryIdentity */
 /** @typedef {{fd:number,cwd:string,parent:DirectoryIdentity,check:()=>void}} ParentOptions */
-/** @typedef {ParentOptions & {operation:'mkdir0700'|'writeExclusive'|'rename'|'unlink'|'rmdir',name:string,target?:string,expected?:EntryIdentity,targetExpected?:EntryIdentity,mode?:number,data?:Buffer,maxBytes?:number}} OperationOptions */
+/** @typedef {ParentOptions & {operation:'mkdir0700'|'writeExclusive'|'symlinkExclusive'|'chmodDirectory'|'rename'|'unlink'|'unlinkSymlink'|'rmdir',name:string,target?:string,linkTarget?:string,expected?:EntryIdentity,targetExpected?:EntryIdentity,mode?:number,data?:Buffer,maxBytes?:number}} OperationOptions */
 /** @param {import('node:fs').BigIntStats} stat @returns {DirectoryIdentity} */
 export const pinnedDirectoryIdentity = stat => ({ dev: String(stat.dev), ino: String(stat.ino), mode: Number(stat.mode), uid: Number(stat.uid), gid: Number(stat.gid) });
 /** @param {import('node:fs').BigIntStats} stat @returns {EntryIdentity} */
@@ -20,13 +20,17 @@ function validateRequest(r) {
   const decimal = value => typeof value === 'string' && /^(0|[1-9][0-9]{0,29})$/.test(value);
   const identity = v => v && decimal(v.dev) && decimal(v.ino) && [v.mode, v.uid, v.gid].every(n => Number.isSafeInteger(n) && n >= 0);
   const entry = v => identity(v) && [v.nlink, v.size, v.mtimeNs, v.ctimeNs].every(decimal);
-  if (!r || !['mkdir0700', 'writeExclusive', 'rename', 'unlink', 'rmdir'].includes(r.operation) || !component(r.name) || !identity(r.parent)
+  const operations = ['mkdir0700', 'writeExclusive', 'symlinkExclusive', 'chmodDirectory', 'rename', 'unlink', 'unlinkSymlink', 'rmdir'];
+  const safeMode = Number.isInteger(r?.mode) && r.mode >= 0 && r.mode <= 0o777 && (r.mode & 0o022) === 0;
+  if (!r || !operations.includes(r.operation) || !component(r.name) || !identity(r.parent)
     || !Number.isSafeInteger(r.maxBytes) || r.maxBytes < 0 || r.maxBytes > 192 * 1024 * 1024
     || r.size !== null && (!Number.isSafeInteger(r.size) || r.size < 0 || r.size > r.maxBytes)
-    || ![0o600, 0o700].includes(r.mode)
-    || r.operation !== 'writeExclusive' && r.size !== 0
-    || ['rename', 'unlink', 'rmdir'].includes(r.operation) && !entry(r.expected)
-    || r.operation === 'rename' && (!component(r.target) || r.name === r.target || r.targetExpected != null && !entry(r.targetExpected))) throw Error('Invalid pinned directory request');
+    || !safeMode || r.operation !== 'writeExclusive' && r.size !== 0
+    || ['rename', 'unlink', 'unlinkSymlink', 'rmdir', 'chmodDirectory'].includes(r.operation) && !entry(r.expected)
+    || r.operation === 'rename' && (!component(r.target) || r.name === r.target || r.targetExpected != null && !entry(r.targetExpected))
+    || r.operation !== 'rename' && r.targetExpected != null
+    || r.operation === 'symlinkExclusive' && (typeof r.linkTarget !== 'string' || !r.linkTarget || r.linkTarget.includes('\0') || Buffer.byteLength(r.linkTarget) > 4096)
+    || r.operation !== 'symlinkExclusive' && r.linkTarget != null) throw Error('Invalid pinned directory request');
 }
 
 /** Fixed allowlisted effects shared by the proven Linux alias and the child.
@@ -45,17 +49,39 @@ function pinnedOperation(fs, r, fd, directory, check, read) {
   };
   parent(); // cwd/fd3 identity BEFORE any mkdir/open/write/chmod/unlink/rename.
   const target = directory + '/' + r.name;
-  const captured = (name, expected, directory = false) => {
+  const captured = (name, expected, kind = 'file') => {
     const stat = fs.lstatSync(name, { bigint: true });
-    if ((directory ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1n) || stat.uid !== BigInt(process.getuid())
-      || (stat.mode & 0o077n) !== 0n || !exact(expected, id(stat))) fail();
+    if ((kind === 'directory' ? !stat.isDirectory() : kind === 'symlink' ? !stat.isSymbolicLink() : !stat.isFile() || stat.nlink !== 1n)
+      || stat.uid !== BigInt(process.getuid()) || kind !== 'symlink' && (stat.mode & 0o022n) !== 0n
+      || !(kind === 'directory' ? equal(expected, id(stat)) : exact(expected, id(stat)))) fail();
     return stat;
   };
   if (r.operation !== 'writeExclusive' && read().length) throw Error('Pinned directory input bound');
-  if (r.operation === 'unlink' || r.operation === 'rmdir') {
-    parent(); captured(target, r.expected, r.operation === 'rmdir');
+  if (r.operation === 'unlink' || r.operation === 'unlinkSymlink' || r.operation === 'rmdir') {
+    const kind = r.operation === 'rmdir' ? 'directory' : r.operation === 'unlinkSymlink' ? 'symlink' : 'file';
+    parent(); captured(target, r.expected, kind);
     if (r.operation === 'rmdir') fs.rmdirSync(target); else fs.unlinkSync(target);
     parent(); return null;
+  }
+  if (r.operation === 'chmodDirectory') {
+    parent(); const before = captured(target, r.expected, 'directory');
+    let directoryFd;
+    try {
+      directoryFd = fs.openSync(target, fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+      if (!exact(id(before), id(fs.fstatSync(directoryFd, { bigint: true })))) fail();
+      parent(); captured(target, r.expected, 'directory'); fs.fchmodSync(directoryFd, r.mode);
+      const after = fs.fstatSync(directoryFd, { bigint: true }), named = fs.lstatSync(target, { bigint: true });
+      if (!after.isDirectory() || (after.mode & 0o7777n) !== BigInt(r.mode) || !equal(id(after), id(named))) fail();
+      parent(); return id(after);
+    } finally { if (directoryFd !== undefined) fs.closeSync(directoryFd); }
+  }
+  if (r.operation === 'symlinkExclusive') {
+    parent(); fs.symlinkSync(r.linkTarget, target);
+    const linked = fs.lstatSync(target, { bigint: true });
+    if (!linked.isSymbolicLink() || linked.uid !== BigInt(process.getuid()) || linked.nlink !== 1n || fs.readlinkSync(target) !== r.linkTarget) fail();
+    parent(); const named = fs.lstatSync(target, { bigint: true });
+    if (!exact(id(linked), id(named)) || fs.readlinkSync(target) !== r.linkTarget) fail();
+    return id(named);
   }
   if (r.operation === 'rename') {
     const destination = directory + '/' + r.target;
@@ -130,11 +156,11 @@ function verifier({ fd, cwd, parent, check }) {
 /** @param {OperationOptions} options @param {number|null} size */
 function prepare(options, size) {
   if (typeof process.getuid !== 'function' || !Number.isInteger(options.fd) || options.fd < 0 || typeof options.check !== 'function') throw Error('Invalid pinned directory parent');
-  const request = { operation: options.operation, name: options.name, target: options.target, parent: options.parent, expected: options.expected, targetExpected: options.targetExpected,
+  const request = { operation: options.operation, name: options.name, target: options.target, linkTarget: options.linkTarget, parent: options.parent, expected: options.expected, targetExpected: options.targetExpected,
     mode: options.mode ?? 0o600, maxBytes: options.maxBytes ?? 2 * 1024 * 1024, size };
   validateRequest(request);
   const header = Buffer.from(JSON.stringify(request)), length = Buffer.alloc(4);
-  if (header.length > 4096) throw Error('Pinned directory header bound');
+  if (header.length > 32768) throw Error('Pinned directory header bound');
   length.writeUInt32BE(header.length);
   const verify = verifier(options); verify();
   return { request, header: Buffer.concat([length, header]), verify };
@@ -159,7 +185,7 @@ try {
     return bytes;
   }
   const length = exact(4).readUInt32BE();
-  if (!length || length > 4096) throw Error('Pinned directory header bound');
+  if (!length || length > 32768) throw Error('Pinned directory header bound');
   const request = JSON.parse(exact(length).toString('utf8'));
   (${validateRequest.toString()})(request);
   const chunk = Buffer.alloc(65536); let count = 0;
@@ -189,26 +215,30 @@ function response(output) {
 /** @param {OperationOptions} options @param {any} result */
 function postcondition(options, result) {
   const { operation, cwd, name, target } = options;
-  if (operation === 'unlink' || operation === 'rmdir' || operation === 'rename') {
+  if (operation === 'unlink' || operation === 'unlinkSymlink' || operation === 'rmdir' || operation === 'rename') {
     try {
       const current = fs.lstatSync(cwd + '/' + name, { bigint: true });
       // Unlink releases the name: another owner may create a successor before
       // the child reply arrives. Preserve it, but still reject an unchanged
       // original inode rather than accepting a false removal acknowledgement.
-      if (operation !== 'unlink' || String(current.dev) === options.expected?.dev && String(current.ino) === options.expected?.ino) {
+      if (!['unlink', 'unlinkSymlink'].includes(operation) || String(current.dev) === options.expected?.dev && String(current.ino) === options.expected?.ino) {
         throw Error('Pinned directory removed name changed');
       }
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  if (operation === 'unlink' || operation === 'rmdir') { if (result !== null) throw Error('Invalid pinned directory result'); return null; }
+  if (operation === 'unlink' || operation === 'unlinkSymlink' || operation === 'rmdir') { if (result !== null) throw Error('Invalid pinned directory result'); return null; }
   const stat = fs.lstatSync(cwd + '/' + (operation === 'rename' ? target : name), { bigint: true });
-  if (!sameEntry(result, pinnedEntryIdentity(stat)) || (operation === 'mkdir0700' ? !stat.isDirectory() : !stat.isFile() || stat.nlink !== 1n)) throw Error('Pinned directory result changed');
+  const wrongType = ['mkdir0700', 'chmodDirectory'].includes(operation) ? !stat.isDirectory()
+    : operation === 'symlinkExclusive' ? !stat.isSymbolicLink() || fs.readlinkSync(cwd + '/' + name) !== options.linkTarget
+      : !stat.isFile() || stat.nlink !== 1n;
+  if (!sameEntry(result, pinnedEntryIdentity(stat)) || wrongType) throw Error('Pinned directory result changed');
   return result;
 }
 
 /** Fixed operations under a caller-held parent fd; caller supplies full ancestry
  * check(), retains fd ownership and rechecks returned identities before reuse.
- * Names are single components. Existing destinations are never chmodded/reused.
+ * Names are single components. chmodDirectory is identity-guarded and accepts
+ * only non-group/other-writable modes; all creations are exclusive.
  * rename without targetExpected is no-clobber, regular-file link+unlink; with an
  * expected destination it deliberately replaces that captured name. unlink,
  * rmdir and replacement retain identity prechecks but are NOT kernel CAS: callers

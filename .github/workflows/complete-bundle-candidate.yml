@@ -50,7 +50,7 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          pnpm run agent:bundle
+          node scripts/build-complete-candidate.mjs "$COMMIT"
           bundle=$(node -p 'JSON.parse(require("fs").readFileSync(".tmp/complete-bundle.json","utf8")).root')
           node scripts/prepare-complete-release.mjs "$bundle" "$PWD" "$PWD/.tmp/complete-release-candidate" "$COMMIT"
       - name: Retain exact unsigned candidate bytes and smoke evidence

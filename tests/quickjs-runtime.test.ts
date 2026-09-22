@@ -75,6 +75,55 @@ describe("QuickJS-only guest runtime", () => {
     expect(result.value).toBeUndefined();
   });
 
+  it.each(["finite", "infinite"])("interrupts a synchronous %s guest through shared cancellation", { timeout: 30_000 }, async (mode) => {
+    const runtime = runtimeFixture();
+    const controller = new AbortController();
+    let ready!: () => void;
+    const started = new Promise<void>(resolve => { ready = resolve; });
+    let worker: Worker | undefined;
+    let workerResult: unknown;
+    const originalPost = Worker.prototype.postMessage;
+    const post = vi.spyOn(Worker.prototype, "postMessage").mockImplementation(function (this: Worker, message, ...rest) {
+      if (message.type === "run") {
+        worker = this;
+        this.on("message", reply => { if (reply.type === "result") workerResult = reply.result; });
+      }
+      // Force the CPU cancellation channel to stand alone: a queued abort
+      // message cannot interrupt synchronous guest code anyway.
+      if (message.type !== "abort") originalPost.call(this, message, ...rest);
+    });
+    try {
+      const execution = runtime.execute(
+        `void tools.call({ ref: 'test.ready', args: {} }); ${mode === "finite" ? "const end = Date.now() + 2000; while (Date.now() < end) {} return 'late success';" : "while (true) {}"}`,
+        async () => null,
+        { ...defaults, timeoutMs: 8_000, maxTimeoutMs: 8_000, cleanupGraceMs: 25, signal: controller.signal,
+          minimumTimeoutMsForHostCall: () => { ready(); return undefined; } },
+      );
+      // prepare is posted synchronously immediately before the busy loop. Do
+      // not charge cold worker startup against the cancellation assertion.
+      await Promise.race([started, execution.then(result => { throw new Error(`Guest did not start: ${JSON.stringify(result)}`); })]);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const cancelledAt = performance.now();
+      controller.abort(new Error("explicit cancellation"));
+      const result = await execution;
+      expect(result).toMatchObject({ terminationReason: "aborted", value: undefined, effectiveTimeoutMs: 8_000 });
+      // A real VM reply, not just the host fallback, proves atomic visibility.
+      expect(workerResult).toMatchObject({ terminationReason: "aborted", value: undefined });
+      // Harness-only spawn/retirement budget: keep it 5x the production
+      // cancellation backstop so cold/full-suite CPU load cannot hide the
+      // unchanged 1s production bound.
+      expect(performance.now() - cancelledAt).toBeLessThan(5_000);
+      expect(worker?.threadId).toBe(-1); // owned termination was awaited
+      await expect(runtime.execute("return 'reused capacity'", async () => null, defaults)).resolves.toMatchObject({ terminationReason: "completed", value: "reused capacity" });
+    } finally { post.mockRestore(); await runtime.close(); }
+  });
+
+  it("keeps a synchronous deadline distinct from explicit cancellation", { timeout: 15_000 }, async () => {
+    const controller = new AbortController();
+    const result = await runtimeFixture().execute("while (true) {}", async () => null, { ...defaults, timeoutMs: 75, maxTimeoutMs: 75, signal: controller.signal });
+    expect(result).toMatchObject({ terminationReason: "timed_out", effectiveTimeoutMs: 75, value: undefined });
+    expect(controller.signal.aborted).toBe(false);
+  });
   it("aborts outstanding host calls and does not wait for their natural completion", async () => {
     let hostAborted = false;
     let providerStarted!: () => void;

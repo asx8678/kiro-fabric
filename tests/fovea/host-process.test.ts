@@ -18,6 +18,7 @@ const parser = { path: path.resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5a
 const query = (root: string, operation = 'status', args = {}): FoveaQuery => ({ root, operation, args, rootId: 'root', conversationId: 'conversation', conversationEpoch: 1, authorizationEpoch: 1 });
 function fake(mode: string) {
   const base = temporary(), entrypoint = path.join(base, 'fault.mjs'), pidFile = path.join(base, 'pid'), ready = path.join(base, 'ready');
+  const modeFile = path.join(base, 'mode'); fs.writeFileSync(modeFile, mode);
   // A bounded, inert fault peer: no real parser, no source access, no shell.
   fs.writeFileSync(entrypoint, `import fs from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -26,20 +27,22 @@ const reply = (id, value = {}) => process.send(JSON.stringify({version:1,id,ok:t
 process.on('message', raw => {
  const m = JSON.parse(raw);
  if (m.type === 'initialize') { reply(m.id); return; }
+ const mode = fs.readFileSync(${JSON.stringify(modeFile)}, 'utf8');
+ if (m.type === 'retireConversation') { reply(m.id, {retired: mode !== 'false-retirement'}); return; }
  if (m.type !== 'query') return;
- if (${JSON.stringify(mode)} === 'malformed') process.send('{');
- else if (${JSON.stringify(mode)} === 'oversized') process.send('x'.repeat(1000001));
- else if (${JSON.stringify(mode)} === 'foreign') reply('foreign_id');
- else if (${JSON.stringify(mode)} === 'version') process.send(JSON.stringify({version:2,id:m.id,ok:true,value:{}}));
- else if (${JSON.stringify(mode)} === 'exit') process.exit(7);
- else if (${JSON.stringify(mode)} === 'hang') {
+ if (mode === 'malformed') process.send('{');
+ else if (mode === 'oversized') process.send('x'.repeat(1000001));
+ else if (mode === 'foreign') reply('foreign_id');
+ else if (mode === 'version') process.send(JSON.stringify({version:2,id:m.id,ok:true,value:{}}));
+ else if (mode === 'exit') process.exit(7);
+ else if (mode === 'hang') {
    const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {stdio:'ignore'});
    fs.writeFileSync(${JSON.stringify(ready)}, JSON.stringify({pid: process.pid, descendant: child.pid}));
  } else reply(m.id, {pid:process.pid});
 });
 `);
   const engine = new FoveaEngineProcess({ parser, storageRoot: base, entrypoint }); cleanups.push(() => engine.close());
-  return { base, engine, pidFile, ready };
+  return { base, engine, pidFile, ready, modeFile };
 }
 function gone(pid: number): boolean {
   try { process.kill(pid, 0); return false; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ESRCH') return true; throw error; }
@@ -54,6 +57,37 @@ function notRunning(pid: number): boolean {
 }
 
 describe('supervisor with a tiny fault child', () => {
+  it('requires explicit private retirement confirmation and cleans an unconfirmed peer', async () => {
+    for (const mode of ['healthy', 'false-retirement']) {
+      const f = fake(mode);
+      await f.engine.query(query(f.base), new AbortController().signal, 10_000);
+      if (mode === 'healthy') {
+        await f.engine.retireConversation('conversation', 1);
+        expect(f.engine.active).toBe(true); expect(f.engine.starts).toBe(1);
+      } else {
+        await expect(f.engine.retireConversation('conversation', 1)).rejects.toThrow(/not confirmed/);
+        expect(f.engine.active).toBe(false);
+      }
+    }
+  });
+  it('joins an in-progress worker stop before reporting idle retirement complete', async () => {
+    const f = fake('healthy');
+    await f.engine.query(query(f.base), new AbortController().signal, 10_000);
+    let stopped = false;
+    const stopping = f.engine.restart().then(() => { stopped = true; });
+    try {
+      await f.engine.retireConversation('conversation', 1);
+      expect(stopped).toBe(true);
+      expect(f.engine.active).toBe(false);
+      expect(f.engine.starts).toBe(1);
+    } finally { await stopping; }
+  });
+  it.each(['engine cleanup uncertain', 'Fovea process-group cleanup uncertain'])('retirement preserves the idle %s latch', async reason => {
+    const f = fake('healthy'); f.engine.unavailable = reason;
+    await expect(f.engine.retireConversation('conversation', 1)).rejects.toThrow(reason);
+    expect(f.engine.starts).toBe(0);
+    expect(f.engine.unavailable).toBe(reason);
+  });
   it('reaps an idle owned leader before declaring shutdown settled', async () => {
     for (let i = 0; i < 5; i++) {
       const f = fake('healthy');
@@ -84,6 +118,41 @@ describe('supervisor with a tiny fault child', () => {
     expect(f.engine.active).toBe(false); expect(notRunning(pids.pid)).toBe(true); expect(notRunning(pids.descendant)).toBe(true);
     await f.engine.close(); await expect(f.engine.query(query(f.base), new AbortController().signal, 1000)).rejects.toThrow(/closed/);
   }, 20_000);
+  it('supports repeated healthy reloads without consuming the crash budget', async () => {
+    const f = fake('healthy');
+    for (let i = 0; i < 6; i++) {
+      const value = await f.engine.query(query(f.base), new AbortController().signal, 10_000);
+      await f.engine.restart();
+      expect(gone(Number(value.pid))).toBe(true);
+      expect(f.engine.unavailable).toBeUndefined();
+    }
+    expect(f.engine.starts).toBe(6);
+  }, 30_000);
+  it('explicit reload recovers an exhausted crash budget after confirmed cleanup', async () => {
+    const f = fake('malformed');
+    for (let i = 0; i < 3; i++) await expect(f.engine.query(query(f.base), new AbortController().signal, 10_000)).rejects.toThrow(/malformed/);
+    await expect(f.engine.query(query(f.base), new AbortController().signal, 10_000)).rejects.toThrow(/crash budget/);
+    fs.writeFileSync(f.modeFile, 'healthy');
+    await f.engine.restart();
+    expect(f.engine.unavailable).toBeUndefined();
+    expect(await f.engine.query(query(f.base), new AbortController().signal, 10_000)).toHaveProperty('pid');
+    expect(f.engine.starts).toBe(4);
+  }, 30_000);
+  it.each(['engine cleanup uncertain', 'Fovea process-group cleanup uncertain'])('reload does not clear %s', async reason => {
+    const f = fake('healthy');
+    const value = await f.engine.query(query(f.base), new AbortController().signal, 10_000);
+    f.engine.unavailable = reason;
+    await expect(f.engine.restart()).rejects.toThrow(reason);
+    expect(gone(Number(value.pid))).toBe(true);
+    expect(f.engine.unavailable).toBe(reason);
+    await expect(f.engine.query(query(f.base), new AbortController().signal, 10_000)).rejects.toThrow(reason);
+    expect(f.engine.starts).toBe(1);
+  });
+  it('reload cannot reopen a closed host', async () => {
+    const f = fake('healthy'); await f.engine.close();
+    await expect(f.engine.restart()).rejects.toThrow(/closed/);
+    expect(f.engine.starts).toBe(0);
+  });
   it('does not spawn for pre-aborted work and bounds repeated crashes', async () => {
     const f = fake('malformed');
     await expect(f.engine.query(query(f.base), AbortSignal.abort(new Error('before start')), 1000)).rejects.toThrow('before start');

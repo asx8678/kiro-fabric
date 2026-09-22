@@ -19,6 +19,7 @@ export { ActionRegistry } from "./core/action-registry.js";
 export { LocalCodingProvider } from "./providers/local-provider.js";
 export { FoveaProvider } from "./providers/repo-provider.js";
 export { FoveaHost } from "./fovea/host.js";
+export { KiroHostSessionAdapter, type KiroHostSession, type KiroHostTurn } from "./kiro/host-session-adapter.js";
 export type { FoveaHostOptions, FoveaBoundClient } from "./fovea/host.js";
 export type { RepoNavigationPacket, RepoReadWindow, RepoCoverage, RepoSourceCoverage, RepoSourceCoverageReason, RepoImportCoverage, RepoImportCoverageExample } from "./providers/repo-contract.js";
 export { formatLocalEvidence } from "./providers/local-evidence.js";

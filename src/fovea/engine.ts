@@ -101,6 +101,20 @@ export class FoveaEngine {
     this.tail = run.catch(() => undefined);
     return run;
   }
+  /** Private lifecycle control: no source access, parser initialization or graph
+   * invalidation. Serialized with queries so a late query cannot resurrect state. */
+  retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
+    const run = this.tail.then(() => {
+      if (this.closed) throw new Error('Fovea engine closed');
+      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error('Invalid Fovea retirement owner');
+      for (const map of [this.conversations, this.preparedSync]) for (const key of map.keys()) {
+        const owner = JSON.parse(key) as [string, number, string];
+        if (owner[0] === conversationId && owner[1] === conversationEpoch) map.delete(key);
+      }
+    });
+    this.tail = run.catch(() => undefined);
+    return run;
+  }
   private async initialize(signal: AbortSignal): Promise<void> {
     if (this.parser) return;
     await mkdir(this.options.storageRoot, { recursive: true, mode: 0o700 });

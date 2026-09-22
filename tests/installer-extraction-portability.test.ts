@@ -300,7 +300,15 @@ test('streaming spawn failure closes all child pipes without touching the destin
 test('fixed child operations support guarded metadata publication and nonrecursive removal', () => {
   forceChild(); const root = temp(), parent = hold(root), cwd = process.cwd();
   const run = (options: Omit<Parameters<typeof runPinnedDirectoryOperation>[0], keyof typeof parent>) => runPinnedDirectoryOperation({ ...parent, ...options });
-  run({ operation: 'mkdir0700', name: 'dir' }); expect(stat(path.join(root, 'dir')).mode & 0o7777n).toBe(0o700n);
+  const directory = run({ operation: 'mkdir0700', name: 'dir' })!; expect(stat(path.join(root, 'dir')).mode & 0o7777n).toBe(0o700n);
+  const chmodded = run({ operation: 'chmodDirectory', name: 'dir', expected: directory, mode: 0o750 })!;
+  expect(chmodded).toEqual(snapshot(path.join(root, 'dir'))); expect(stat(path.join(root, 'dir')).mode & 0o7777n).toBe(0o750n);
+  const link = run({ operation: 'symlinkExclusive', name: 'legacy-link', linkTarget: '../legacy target' })!;
+  expect(fs.readlinkSync(path.join(root, 'legacy-link'))).toBe('../legacy target');
+  run({ operation: 'unlinkSymlink', name: 'legacy-link', expected: link });
+  const readable = run({ operation: 'writeExclusive', name: 'readable', data: Buffer.from('public'), mode: 0o644 })!;
+  expect(stat(path.join(root, 'readable')).mode & 0o7777n).toBe(0o644n);
+  run({ operation: 'unlink', name: 'readable', expected: readable });
   const pending = run({ operation: 'writeExclusive', name: 'pending', data: Buffer.from('one'), maxBytes: 3 })!;
   expect(() => run({ operation: 'writeExclusive', name: 'pending', data: Buffer.from('bad') })).toThrow(/EEXIST/);
   const published = run({ operation: 'rename', name: 'pending', target: 'record', expected: pending })!;
@@ -310,7 +318,7 @@ test('fixed child operations support guarded metadata publication and nonrecursi
   expect(fs.readFileSync(path.join(root, 'record'), 'utf8')).toBe('two');
   expect(() => run({ operation: 'unlink', name: 'record', expected: published })).toThrow(/changed/);
   run({ operation: 'unlink', name: 'record', expected: snapshot(path.join(root, 'record')) });
-  run({ operation: 'rmdir', name: 'dir', expected: snapshot(path.join(root, 'dir')) });
+  run({ operation: 'rmdir', name: 'dir', expected: chmodded });
   expect(fs.readdirSync(root)).toEqual([]); expect(process.cwd()).toBe(cwd); expect(fs.fstatSync(parent.fd).isDirectory()).toBe(true);
 });
 
@@ -359,8 +367,17 @@ test('fixed API rejects arbitrary operations, multi-component names, oversized m
   for (const operation of ['callback', 'chmod']) expect(() => runPinnedDirectoryOperation({ ...parent, operation, name: 'file' } as any)).toThrow(/request/);
   for (const name of ['../x', 'a/b', 'a\\b', '.', '..', 'bad\0name']) expect(() => runPinnedDirectoryOperation({ ...parent, operation: 'mkdir0700', name })).toThrow(/request/);
   expect(() => runPinnedDirectoryOperation({ ...parent, operation: 'writeExclusive', name: 'file', data: Buffer.alloc(3), maxBytes: 2 })).toThrow(/request/);
+  expect(() => runPinnedDirectoryOperation({ ...parent, operation: 'writeExclusive', name: 'unsafe', data: Buffer.alloc(0), mode: 0o622 })).toThrow(/request/);
+  expect(() => runPinnedDirectoryOperation({ ...parent, operation: 'symlinkExclusive', name: 'link', linkTarget: '' })).toThrow(/request/);
   expect(spawn).not.toHaveBeenCalled(); expect(fs.readdirSync(root)).toEqual([]);
-  mkdir(path.join(root, 'dir')); fs.writeFileSync(path.join(root, 'dir/keep'), 'keep', { mode: 0o600 }); forceChild();
+  forceChild();
+  for (const [name, linkTarget] of [['long-link', 'x'.repeat(4096)], ['escaped-link', '\u0001'.repeat(4096)]] as const) {
+    let longTargetFailure: unknown;
+    try { runPinnedDirectoryOperation({ ...parent, operation: 'symlinkExclusive', name, linkTarget }); }
+    catch (error) { longTargetFailure = error; }
+    expect(String(longTargetFailure ?? '')).not.toMatch(/request|header bound/);
+  }
+  mkdir(path.join(root, 'dir')); fs.writeFileSync(path.join(root, 'dir/keep'), 'keep', { mode: 0o600 });
   expect(() => runPinnedDirectoryOperation({ ...parent, operation: 'rmdir', name: 'dir', expected: snapshot(path.join(root, 'dir')) })).toThrow(/ENOTEMPTY|not empty/);
   expect(fs.readFileSync(path.join(root, 'dir/keep'), 'utf8')).toBe('keep');
 });

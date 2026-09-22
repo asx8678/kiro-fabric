@@ -34,6 +34,11 @@ The native conversation identity is currently MCP-host-local. Kiro session
 routing, restoration and compaction association are not qualified and must not
 be inferred from cwd, a guest string or a cached directory.
 
+The optional [trusted host session adapter](host-session-adapter.md) provides
+in-process request/turn routing, session retirement and exact-turn delivery
+receipts for embedders that already own a supported association. It does not
+supply that missing native Kiro contract or enable managed automatic hooks.
+
 The supervisor transfers remaining durations, bounds IPC frames and queues,
 propagates cancellation, reaps child process groups and limits crash recovery.
 Graph state stays in the child; strict JSON projection and complete packet

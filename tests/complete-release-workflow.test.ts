@@ -8,6 +8,10 @@ describe('complete-bundle protected workflows', () => {
     for (const t of ['darwin-arm64','darwin-x64','linux-arm64','linux-x64']) expect(candidate).toContain(`target: ${t}`);
     for (const text of ['workflow_dispatch:', 'github.ref_protected == true', 'environment: complete-release-qualification', 'prepare-complete-release.mjs', 'native-smoke.json', 'Missing runners are PENDING']) expect(candidate).toContain(text);
     expect(candidate).not.toContain('secrets.'); expect(candidate).not.toContain('contents: write');
+    expect(candidate).toContain('node scripts/build-complete-candidate.mjs "$COMMIT"');
+    expect(candidate).not.toContain('pnpm run agent:bundle');
+    expect(candidate).not.toContain('pnpm run build');
+    expect(candidate).toContain('.tmp/complete-bundle.json');
   });
   it('verifies signed tag and protected exact commit before checkout/download', () => {
     for (const text of ['.verification.verified', 'test "$commit" = "$EXPECTED"', 'github.ref_protected == true', 'needs.verify.outputs.commit', 'test "$(jq -r \'.head_sha\' <<<"$run")" = "$COMMIT"', 'test "$(jq -r \'.head_branch\' <<<"$run")" = "$DEFAULT_BRANCH"', 'workflow_dispatch', '.conclusion']) expect(promotion).toContain(text);

@@ -144,10 +144,13 @@ const QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
 /** VM-side execution body. It runs inside a dedicated worker thread so a
  * CPU-bound guest cannot block the host event loop, and it reaches the host
  * only through the bridge, tracer and options it is injected with. */
-export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, options: FabricSandboxOptions): Promise<FabricSandboxResult> => {
+export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, options: FabricSandboxOptions, cancellationFlag?: Int32Array): Promise<FabricSandboxResult> => {
+    // Host-owned shared state stays outside the guest heap. Polling must not
+    // dispatch abort listeners reentrantly from the QuickJS interrupt hook.
+    const isCancelled = (): boolean => options.signal?.aborted === true || (cancellationFlag !== undefined && Atomics.load(cancellationFlag, 0) !== 0);
     const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
     const requestedTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
-    if (options.signal?.aborted) return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
+    if (isCancelled()) return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
     const inputLimit = effectiveFabricSourceLimit(options.maxInputBytes ?? options.maxSourceBytes);
     const inputError = fabricSourceLimitError(code, sourceLimit) ?? fabricPayloadsLimitError(options.payloads, inputLimit);
@@ -178,7 +181,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
     const moduleSpan = tracer.enabled ? tracer.span("init", "quickjs.module.acquire", execId, { shared: false, heapCeilingBytes }, parentSpanId) : undefined;
     const module = await createQuickJsModule(heapCeilingBytes);
     moduleSpan?.end();
-    if (options.signal?.aborted) {
+    if (isCancelled()) {
       return { value: undefined, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
     }
     const contextSpan = tracer.enabled ? tracer.span("init", "quickjs.context.create", execId, undefined, parentSpanId) : undefined;
@@ -199,7 +202,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
     // until the execution deadline expires.
     let teardownCutoff: number | undefined;
     runtime.setInterruptHandler(() => {
-      if (options.signal?.aborted) return true;
+      if (isCancelled()) return true;
       if (teardownCutoff !== undefined && performance.now() >= teardownCutoff) return true;
       if (!deadline.expired) return false;
       interrupted = true;
@@ -422,10 +425,10 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
       guestEvalSpan?.end();
       if (evaluation.error) {
         const deadlineExceeded = interrupted || deadline.expired;
-        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
+        const error = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
         evaluation.error.dispose();
         abortHost(new Error(error));
-        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+        return { value: undefined, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       evaluation.value.dispose();
       const main = context.getProp(context.global, "__kiroFabricMain");
@@ -435,7 +438,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
       if (invoked.error) {
         const error = remapGuestErrorText(formatValue(context.dump(invoked.error)), stackMap, guestLineCount);
         invoked.error.dispose();
-        return { value: undefined, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+        return { value: undefined, logs, terminationReason: isCancelled() ? "aborted" : deadline.expired ? "timed_out" : "runtime_error", error: isCancelled() ? "Execution cancelled" : deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       activeHandle = invoked.value;
       const resolution = context.resolvePromise(activeHandle);
@@ -443,7 +446,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
       const deadlineRace = new Promise<never>((_resolve, reject) => { rejectDeadline = reject; schedule(); });
       const cancellation = new Promise<never>((_resolve, reject) => {
         abortListener = () => { const error = new Error("Execution cancelled"); abortHost(error); reject(error); };
-        if (options.signal?.aborted) abortListener();
+        if (isCancelled()) abortListener();
         else options.signal?.addEventListener("abort", abortListener, { once: true });
       });
       const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, undefined, parentSpanId) : undefined;
@@ -453,14 +456,14 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
       runSpan?.end();
       if (settled.error) {
         const deadlineExceeded = timedOut || interrupted || deadline.expired;
-        const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
+        const error = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
         const failureHandle = context.getProp(settled.error, "failure");
         let failure: FabricFailureMetadata | undefined;
         try { failure = issuedFailures.get(JSON.stringify(context.dump(failureHandle))); }
         finally { failureHandle.dispose(); }
         settled.error.dispose();
         abortHost(new Error(error));
-        return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...(failure ? { failure } : {}), effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+        return { value: undefined, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...(failure ? { failure } : {}), effectiveTimeoutMs: deadline.effectiveTimeoutMs };
       }
       const serialized = context.getString(settled.value);
       settled.value.dispose();
@@ -468,13 +471,14 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
       // Nested ceilings apply to individual host calls, not the composed final result.
       // The execution service separately enforces the configured artifact/output ceiling.
       assertFabricJsonBudget(value, MAX_FABRIC_JSON_CHARS);
+      if (isCancelled()) throw new Error("Execution cancelled");
       deadline.throwIfExpired();
       return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } catch (error) {
       const deadlineExceeded = timedOut || interrupted || deadline.expired;
-      const message = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
+      const message = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
       abortHost(new Error(message));
-      return { value: undefined, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      return { value: undefined, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     } finally {
       if (tracer.enabled) {
         // Snapshot VM heap state while the runtime is still alive. Numeric
@@ -548,7 +552,7 @@ interface SandboxWorkerOptions {
 }
 
 export type SandboxWorkerRequest = { executionId: string } & (
-  | { type: "run"; code: string; options: SandboxWorkerOptions }
+  | { type: "run"; code: string; options: SandboxWorkerOptions; cancellationBuffer: SharedArrayBuffer }
   | {
       type: "hostResult";
       id: number;
@@ -595,6 +599,7 @@ const sandboxWorkerUrl = (): URL => import.meta.url.endsWith(".ts")
 interface SandboxWorkerSlot {
   worker: Worker;
   busy: boolean;
+  termination?: Promise<void>;
   idleTimer: NodeJS.Timeout | undefined;
   handler: ((message: SandboxWorkerMessage) => void) | undefined;
   fault: ((message: string) => void) | undefined;
@@ -628,6 +633,7 @@ const sandboxCancelledResult = (effectiveTimeoutMs: number): FabricSandboxResult
  * overrun or an abort that outlived its grace. */
 export class QuickJsRuntime {
   readonly #slots = new Set<SandboxWorkerSlot>();
+  readonly #terminations = new Set<Promise<void>>();
   #idle: SandboxWorkerSlot | undefined;
   #closed = false;
 
@@ -658,8 +664,13 @@ export class QuickJsRuntime {
   }
 
   #terminate(slot: SandboxWorkerSlot): Promise<void> {
+    if (slot.termination) return slot.termination;
     this.#drop(slot);
-    return slot.worker.terminate().catch(() => undefined).then(() => undefined);
+    const termination = slot.worker.terminate().then(() => undefined);
+    slot.termination = termination;
+    this.#terminations.add(termination);
+    void termination.then(() => this.#terminations.delete(termination), () => { this.#closed = true; /* retain failed termination for close; never admit more work */ });
+    return termination;
   }
 
   #acquire(): SandboxWorkerSlot {
@@ -742,9 +753,14 @@ export class QuickJsRuntime {
     const spans = new Map<number, ReturnType<FabricTracer["span"]>>();
     let settled = false;
     let backstop: NodeJS.Timeout | undefined;
+    let cancellationBackstop: NodeJS.Timeout | undefined;
+    const cancellation = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+    let cancelUnresponsive: (() => void) | undefined;
 
     const onAbort = (): void => {
       if (settled) return;
+      Atomics.store(cancellation, 0, 1);
+      cancellationBackstop ??= setTimeout(() => cancelUnresponsive?.(), cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS);
       const reason = options.signal?.reason instanceof Error ? options.signal.reason : new Error("Execution cancelled");
       if (!controller.signal.aborted) controller.abort(reason);
       try {
@@ -756,6 +772,7 @@ export class QuickJsRuntime {
       return await new Promise<FabricSandboxResult>((resolve, reject) => {
         const detach = (): void => {
           if (backstop) clearTimeout(backstop);
+          if (cancellationBackstop) clearTimeout(cancellationBackstop);
           options.signal?.removeEventListener("abort", onAbort);
           slot.handler = undefined;
           slot.fault = undefined;
@@ -767,12 +784,21 @@ export class QuickJsRuntime {
           settled = true;
           detach();
           if (!controller.signal.aborted) controller.abort(error ?? new Error(result?.error ?? "Execution finished"));
-          if (terminate) void this.#terminate(slot);
-          void settleWithin(hostCalls, cleanupGraceMs).then(() => {
+          // Cancellation never returns capacity while its owned thread is alive.
+          terminate ||= options.signal?.aborted === true;
+          const termination = terminate ? this.#terminate(slot) : Promise.resolve();
+          void Promise.all([termination, settleWithin(hostCalls, cleanupGraceMs)]).then(async () => {
+            if (!terminate && options.signal?.aborted) {
+              terminate = true;
+              await this.#terminate(slot);
+            }
             if (!terminate) this.#release(slot);
-            if (error) reject(error); else resolve(result!);
-          });
+            // The signal may have changed while bounded host cleanup was draining.
+            if (options.signal?.aborted) resolve({ ...result, ...sandboxCancelledResult(result?.effectiveTimeoutMs ?? mirror?.effectiveTimeoutMs ?? requestedTimeoutMs), logs: result?.logs ?? [] });
+            else if (error) reject(error); else resolve(result!);
+          }).catch(reject);
         };
+        cancelUnresponsive = () => finish(sandboxCancelledResult(mirror?.effectiveTimeoutMs ?? requestedTimeoutMs), undefined, true);
         const fault = (message: string): void => finish(undefined, new Error(message), true);
         const scheduleBackstop = (): void => {
           if (backstop) clearTimeout(backstop);
@@ -874,6 +900,7 @@ export class QuickJsRuntime {
           type: "run",
           executionId,
           code,
+          cancellationBuffer: cancellation.buffer as SharedArrayBuffer,
           options: {
             timeoutMs: options.timeoutMs,
             maxTimeoutMs: options.maxTimeoutMs,
@@ -895,7 +922,7 @@ export class QuickJsRuntime {
         catch (error) { fault(error instanceof Error ? error.message : String(error)); }
       });
     } catch (error) {
-      void this.#terminate(slot);
+      await this.#terminate(slot);
       throw error;
     }
   }
@@ -906,9 +933,10 @@ export class QuickJsRuntime {
     this.#closed = true;
     const slots = [...this.#slots];
     this.#idle = undefined;
-    return Promise.all(slots.map((slot) => {
+    for (const slot of slots) {
       slot.fault?.("Sandbox runtime is closed");
-      return this.#terminate(slot);
-    })).then(() => undefined);
+      void this.#terminate(slot);
+    }
+    return Promise.all([...this.#terminations]).then(() => undefined);
   }
 }

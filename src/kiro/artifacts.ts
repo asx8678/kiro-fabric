@@ -1,10 +1,11 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { privateStorageDirectoryGuard, sameStorageFile } from "./storage-identity.js";
 
 const ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 const MAX_ARTIFACT_RESIDUE_AGE_MS = 86_400_000;
-interface StoredArtifact { content: string; lastReadAt: number; file?: string }
+interface StoredArtifact { content: string; lastReadAt: number; file?: string; identity?: fs.Stats }
 export interface KiroArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
 export interface KiroArtifactStore {
   write(content: string): string;
@@ -29,6 +30,7 @@ class ArtifactStore implements KiroArtifactStore {
   readonly #entries = new Map<string, StoredArtifact>();
   readonly #now: () => number;
   readonly #root?: string;
+  readonly #checkRoot?: () => void;
   readonly #maxArtifacts: number;
   readonly #maxArtifactChars: number;
   readonly #maxTotalChars: number;
@@ -53,6 +55,8 @@ class ArtifactStore implements KiroArtifactStore {
       }
       fs.chmodSync(options.root, 0o700);
       const canonicalRoot = fs.realpathSync(options.root);
+      this.#root = canonicalRoot;
+      this.#checkRoot = privateStorageDirectoryGuard(canonicalRoot, message => new KiroArtifactStoreError(message));
       for (const entry of fs.readdirSync(canonicalRoot, { withFileTypes: true })) {
         const target = path.join(canonicalRoot, entry.name);
         // Reject foreign entries even if they disappear after enumeration.
@@ -72,16 +76,31 @@ class ArtifactStore implements KiroArtifactStore {
         // private root. Reclaim only residue older than the product-wide
         // maximum lifetime; this process never imports it into its own quota.
         if (this.#now() - targetStats.mtimeMs > MAX_ARTIFACT_RESIDUE_AGE_MS) {
-          try { fs.rmSync(target); }
+          try { this.#removeFile(target, targetStats); }
           catch (error) {
             if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           }
         }
       }
-      this.#root = canonicalRoot;
+      this.#checkRoot();
     }
   }
-  #open(): void { if (this.#closed) throw new KiroArtifactStoreError("artifact store is closed"); }
+  #open(): void {
+    if (this.#closed) throw new KiroArtifactStoreError("artifact store is closed");
+    this.#checkRoot?.();
+  }
+  #assertFile(file: string, identity: fs.Stats, allowMissing = false): boolean {
+    this.#checkRoot?.();
+    let current: fs.Stats;
+    try { current = fs.lstatSync(file); }
+    catch (error) { if (allowMissing && (error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    if (!sameStorageFile(current, identity)) throw new KiroArtifactStoreError(`artifact identity changed; preserve replacement: ${file}`);
+    this.#checkRoot?.();
+    return true;
+  }
+  #removeFile(file: string, identity: fs.Stats): void {
+    if (this.#assertFile(file, identity, true)) fs.rmSync(file, { force: true });
+  }
   write(content: string): string {
     this.#open();
     if (typeof content !== "string" || content.length > this.#maxArtifactChars) throw new KiroArtifactStoreError("artifact exceeds configured bounds");
@@ -95,21 +114,40 @@ class ArtifactStore implements KiroArtifactStore {
     while (this.#entries.has(id) || (this.#root !== undefined && fs.existsSync(path.join(this.#root, id))));
     const now = this.#now();
     const file = this.#root ? path.join(this.#root, id) : undefined;
+    let identity: fs.Stats | undefined;
     if (file) {
-      const descriptor = fs.openSync(file, "wx", 0o600);
+      this.#checkRoot?.();
+      // An exclusive-create failure never grants cleanup ownership.
+      let descriptor: number | undefined = fs.openSync(file, "wx", 0o600);
+      const close = (): void => {
+        if (descriptor === undefined) return;
+        const fd = descriptor; descriptor = undefined;
+        fs.closeSync(fd); // Never retry an uncertain close on a reused descriptor.
+      };
       try {
-        try {
-          fs.writeFileSync(descriptor, content);
-          fs.fchmodSync(descriptor, 0o600);
-          fs.fsyncSync(descriptor);
-        } finally { fs.closeSync(descriptor); }
+        identity = fs.fstatSync(descriptor);
+        fs.writeFileSync(descriptor, content);
+        fs.fchmodSync(descriptor, 0o600);
+        fs.fsyncSync(descriptor);
+        identity = fs.fstatSync(descriptor);
+        close();
+        this.#assertFile(file, identity);
       } catch (error) {
-        try { fs.rmSync(file, { force: true }); }
-        catch (cleanup) { throw new AggregateError([error, cleanup], "artifact write and cleanup failed"); }
+        const errors: unknown[] = [error];
+        if (descriptor !== undefined) {
+          // Capture partial-write metadata only through the definitely-owned fd.
+          try { identity = fs.fstatSync(descriptor); } catch (failure) { errors.push(failure); }
+        }
+        try { close(); } catch (failure) { errors.push(failure); }
+        try {
+          if (!identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
+          this.#removeFile(file, identity);
+        } catch (cleanup) { errors.push(cleanup); }
+        if (errors.length > 1) throw new AggregateError(errors, "artifact write and cleanup failed", { cause: error });
         throw error;
       }
     }
-    this.#entries.set(id, { content, lastReadAt: now, ...(file ? { file } : {}) });
+    this.#entries.set(id, { content, lastReadAt: now, ...(file && identity ? { file, identity } : {}) });
     this.#totalChars += content.length;
     return id;
   }
@@ -135,6 +173,7 @@ class ArtifactStore implements KiroArtifactStore {
   sweep(maxAgeMs = this.#ttlMs, maxEntries = this.#maxArtifacts): void {
     this.#open();
     const now = this.#now();
+    this.#checkRoot?.();
     for (const [id, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id);
     while (this.#entries.size > maxEntries) this.#remove(this.#oldest());
   }
@@ -147,7 +186,10 @@ class ArtifactStore implements KiroArtifactStore {
     const entry = this.#entries.get(id);
     if (!entry) return;
     // Keep ownership and quota until deletion succeeds so sweep/close can retry.
-    if (entry.file) fs.rmSync(entry.file, { force: true });
+    if (entry.file) {
+      if (!entry.identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
+      this.#removeFile(entry.file, entry.identity);
+    }
     this.#entries.delete(id);
     this.#totalChars -= entry.content.length;
   }

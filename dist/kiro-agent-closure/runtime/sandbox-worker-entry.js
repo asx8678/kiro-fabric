@@ -10,7 +10,7 @@ import {
   LocalShellExitError,
   ProbeRunExitError,
   runQuickJsSandbox
-} from "../chunks/chunk-OSJV455M.js";
+} from "../chunks/chunk-KGASOZF7.js";
 import "../chunks/chunk-XJTFSUKV.js";
 import {
   FabricRepairError
@@ -92,7 +92,7 @@ if (port) {
       }
     };
     try {
-      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options) });
+      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options, new Int32Array(request.cancellationBuffer)) });
     } catch (error) {
       post({ type: "fatal", message: (error instanceof Error ? error.message : String(error)).slice(0, 4096) });
     } finally {

@@ -191,7 +191,7 @@ const legacyProbe = async (root: string, prefix: string): Promise<GitProbe | und
 export const uncommittedFiles = async (root: string): Promise<string[]> => {
   const prefix = await gitPrefix(root);
   if (prefix === undefined) return [];
-  const out = await gitOut(root, ["status", "--porcelain", "-z", "--no-renames", "--", "."]);
+  const out = await gitOut(root, ["status", "--porcelain", "-z", "--untracked-files=all", "--no-renames", "--", "."]);
   if (!out) return [];
   return out
     .split("\0")
@@ -200,12 +200,22 @@ export const uncommittedFiles = async (root: string): Promise<string[]> => {
     .filter((path): path is string => !!path);
 };
 
+// A trailing `--` protects pathspecs, not revisions before it. Resolve an
+// untrusted base with rev-parse's option terminator, then give diff only an OID.
+const impactRange = async (root: string, base: string): Promise<string> => {
+  if (!base || base.length > 256 || base.startsWith("-") || /[\u0000-\u001f\u007f]/u.test(base)) throw new Error("Invalid impact base revision");
+  const commit = (await gitOut(root, ["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`], { maxBuffer: 1024 }))?.trim();
+  if (!commit || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(commit)) throw new Error("Impact base must resolve to one commit");
+  return `${commit}...HEAD`;
+};
+
 export const prFiles = async (root: string, base: string): Promise<string[]> => {
+  const range = await impactRange(root, base);
   const prefix = await gitPrefix(root);
   if (prefix === undefined) return [];
-  const out = await gitOut(root, ["diff", "--name-only", `${base}...HEAD`, "--", "."]);
+  const out = await gitOut(root, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", range, "--", "."]);
   return out
-    ? out.split("\n").map((s) => gitRelativePath(s.trim(), prefix)).filter((s): s is string => !!s)
+    ? out.split("\0").map((s) => gitRelativePath(s, prefix)).filter((s): s is string => !!s)
     : [];
 };
 
@@ -453,9 +463,9 @@ export const diffHunks = async (
   root: string,
   base?: string,
 ): Promise<Map<string, FileDiffHunks> | undefined> => {
+  const range = base === undefined ? "HEAD" : await impactRange(root, base);
   const prefix = await gitPrefix(root);
   if (prefix === undefined) return undefined;
-  const range = base ? `${base}...HEAD` : "HEAD";
   const out = await gitOut(root, [
     "-c", "core.quotePath=false",
     "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames",

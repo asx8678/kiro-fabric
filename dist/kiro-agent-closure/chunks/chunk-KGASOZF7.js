@@ -10267,10 +10267,11 @@ var jsonHandle = (context, jsonObject, jsonParse, value, maxChars) => {
   }
 };
 var QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
-var runQuickJsSandbox = async (code, hostCall, options) => {
+var runQuickJsSandbox = async (code, hostCall, options, cancellationFlag) => {
+  const isCancelled = () => options.signal?.aborted === true || cancellationFlag !== void 0 && Atomics.load(cancellationFlag, 0) !== 0;
   const maximum = Math.max(1, Math.floor(options.maxTimeoutMs));
   const requestedTimeoutMs = Math.min(maximum, Math.max(1, Math.floor(options.timeoutMs)));
-  if (options.signal?.aborted) return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
+  if (isCancelled()) return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
   const sourceLimit = effectiveFabricSourceLimit(options.maxSourceBytes);
   const inputLimit = effectiveFabricSourceLimit(options.maxInputBytes ?? options.maxSourceBytes);
   const inputError = fabricSourceLimitError(code, sourceLimit) ?? fabricPayloadsLimitError(options.payloads, inputLimit);
@@ -10293,7 +10294,7 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
   const moduleSpan = tracer.enabled ? tracer.span("init", "quickjs.module.acquire", execId, { shared: false, heapCeilingBytes }, parentSpanId) : void 0;
   const module = await createQuickJsModule(heapCeilingBytes);
   moduleSpan?.end();
-  if (options.signal?.aborted) {
+  if (isCancelled()) {
     return { value: void 0, logs: [], terminationReason: "aborted", error: "Execution cancelled", effectiveTimeoutMs: requestedTimeoutMs };
   }
   const contextSpan = tracer.enabled ? tracer.span("init", "quickjs.context.create", execId, void 0, parentSpanId) : void 0;
@@ -10310,7 +10311,7 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
   let closing = false;
   let teardownCutoff;
   runtime.setInterruptHandler(() => {
-    if (options.signal?.aborted) return true;
+    if (isCancelled()) return true;
     if (teardownCutoff !== void 0 && performance3.now() >= teardownCutoff) return true;
     if (!deadline.expired) return false;
     interrupted = true;
@@ -10533,10 +10534,10 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
     guestEvalSpan?.end();
     if (evaluation.error) {
       const deadlineExceeded = interrupted || deadline.expired;
-      const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
+      const error = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatValue(context.dump(evaluation.error)), stackMap, guestLineCount);
       evaluation.error.dispose();
       abortHost(new Error(error));
-      return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      return { value: void 0, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     }
     evaluation.value.dispose();
     const main = context.getProp(context.global, "__kiroFabricMain");
@@ -10546,7 +10547,7 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
     if (invoked.error) {
       const error = remapGuestErrorText(formatValue(context.dump(invoked.error)), stackMap, guestLineCount);
       invoked.error.dispose();
-      return { value: void 0, logs, terminationReason: deadline.expired ? "timed_out" : "runtime_error", error: deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      return { value: void 0, logs, terminationReason: isCancelled() ? "aborted" : deadline.expired ? "timed_out" : "runtime_error", error: isCancelled() ? "Execution cancelled" : deadline.expired ? timeoutMessage() : error, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     }
     activeHandle = invoked.value;
     const resolution = context.resolvePromise(activeHandle);
@@ -10561,7 +10562,7 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
         abortHost(error);
         reject(error);
       };
-      if (options.signal?.aborted) abortListener();
+      if (isCancelled()) abortListener();
       else options.signal?.addEventListener("abort", abortListener, { once: true });
     });
     const runSpan = tracer.enabled ? tracer.span("eval", "quickjs.run", execId, void 0, parentSpanId) : void 0;
@@ -10571,7 +10572,7 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
     runSpan?.end();
     if (settled.error) {
       const deadlineExceeded = timedOut || interrupted || deadline.expired;
-      const error = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
+      const error = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : remapGuestErrorText(formatGuestFailure(context.dump(settled.error)), stackMap, guestLineCount);
       const failureHandle = context.getProp(settled.error, "failure");
       let failure;
       try {
@@ -10581,19 +10582,20 @@ var runQuickJsSandbox = async (code, hostCall, options) => {
       }
       settled.error.dispose();
       abortHost(new Error(error));
-      return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...failure ? { failure } : {}, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+      return { value: void 0, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded || failure?.code === "timeout" ? "timed_out" : "runtime_error", error, ...failure ? { failure } : {}, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
     }
     const serialized = context.getString(settled.value);
     settled.value.dispose();
     const value = JSON.parse(serialized);
     assertFabricJsonBudget(value, MAX_FABRIC_JSON_CHARS);
+    if (isCancelled()) throw new Error("Execution cancelled");
     deadline.throwIfExpired();
     return { value, logs, terminationReason: "completed", effectiveTimeoutMs: deadline.effectiveTimeoutMs };
   } catch (error) {
     const deadlineExceeded = timedOut || interrupted || deadline.expired;
-    const message = options.signal?.aborted ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
+    const message = isCancelled() ? "Execution cancelled" : deadlineExceeded ? timeoutMessage() : error instanceof Error ? error.message : String(error);
     abortHost(new Error(message));
-    return { value: void 0, logs, terminationReason: options.signal?.aborted ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
+    return { value: void 0, logs, terminationReason: isCancelled() ? "aborted" : deadlineExceeded ? "timed_out" : "runtime_error", error: message, effectiveTimeoutMs: deadline.effectiveTimeoutMs };
   } finally {
     if (tracer.enabled) {
       try {
@@ -10662,6 +10664,7 @@ var sandboxCancelledResult = (effectiveTimeoutMs) => ({
 });
 var QuickJsRuntime = class {
   #slots = /* @__PURE__ */ new Set();
+  #terminations = /* @__PURE__ */ new Set();
   #idle;
   #closed = false;
   #spawn() {
@@ -10691,8 +10694,15 @@ var QuickJsRuntime = class {
     this.#slots.delete(slot);
   }
   #terminate(slot) {
+    if (slot.termination) return slot.termination;
     this.#drop(slot);
-    return slot.worker.terminate().catch(() => void 0).then(() => void 0);
+    const termination = slot.worker.terminate().then(() => void 0);
+    slot.termination = termination;
+    this.#terminations.add(termination);
+    void termination.then(() => this.#terminations.delete(termination), () => {
+      this.#closed = true;
+    });
+    return termination;
   }
   #acquire() {
     const idle = this.#idle;
@@ -10766,8 +10776,13 @@ var QuickJsRuntime = class {
     const spans = /* @__PURE__ */ new Map();
     let settled = false;
     let backstop;
+    let cancellationBackstop;
+    const cancellation = new Int32Array(new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT));
+    let cancelUnresponsive;
     const onAbort = () => {
       if (settled) return;
+      Atomics.store(cancellation, 0, 1);
+      cancellationBackstop ??= setTimeout(() => cancelUnresponsive?.(), cleanupGraceMs + SANDBOX_WORKER_BACKSTOP_MS);
       const reason = options.signal?.reason instanceof Error ? options.signal.reason : new Error("Execution cancelled");
       if (!controller.signal.aborted) controller.abort(reason);
       try {
@@ -10780,6 +10795,7 @@ var QuickJsRuntime = class {
       return await new Promise((resolve, reject) => {
         const detach = () => {
           if (backstop) clearTimeout(backstop);
+          if (cancellationBackstop) clearTimeout(cancellationBackstop);
           options.signal?.removeEventListener("abort", onAbort);
           slot.handler = void 0;
           slot.fault = void 0;
@@ -10789,13 +10805,20 @@ var QuickJsRuntime = class {
           settled = true;
           detach();
           if (!controller.signal.aborted) controller.abort(error ?? new Error(result?.error ?? "Execution finished"));
-          if (terminate) void this.#terminate(slot);
-          void settleWithin(hostCalls, cleanupGraceMs).then(() => {
+          terminate ||= options.signal?.aborted === true;
+          const termination = terminate ? this.#terminate(slot) : Promise.resolve();
+          void Promise.all([termination, settleWithin(hostCalls, cleanupGraceMs)]).then(async () => {
+            if (!terminate && options.signal?.aborted) {
+              terminate = true;
+              await this.#terminate(slot);
+            }
             if (!terminate) this.#release(slot);
-            if (error) reject(error);
+            if (options.signal?.aborted) resolve({ ...result, ...sandboxCancelledResult(result?.effectiveTimeoutMs ?? mirror?.effectiveTimeoutMs ?? requestedTimeoutMs), logs: result?.logs ?? [] });
+            else if (error) reject(error);
             else resolve(result);
-          });
+          }).catch(reject);
         };
+        cancelUnresponsive = () => finish(sandboxCancelledResult(mirror?.effectiveTimeoutMs ?? requestedTimeoutMs), void 0, true);
         const fault = (message) => finish(void 0, new Error(message), true);
         const scheduleBackstop = () => {
           if (backstop) clearTimeout(backstop);
@@ -10888,6 +10911,7 @@ var QuickJsRuntime = class {
             type: "run",
             executionId,
             code,
+            cancellationBuffer: cancellation.buffer,
             options: {
               timeoutMs: options.timeoutMs,
               maxTimeoutMs: options.maxTimeoutMs,
@@ -10911,7 +10935,7 @@ var QuickJsRuntime = class {
         }
       });
     } catch (error) {
-      void this.#terminate(slot);
+      await this.#terminate(slot);
       throw error;
     }
   }
@@ -10921,10 +10945,11 @@ var QuickJsRuntime = class {
     this.#closed = true;
     const slots = [...this.#slots];
     this.#idle = void 0;
-    return Promise.all(slots.map((slot) => {
+    for (const slot of slots) {
       slot.fault?.("Sandbox runtime is closed");
-      return this.#terminate(slot);
-    })).then(() => void 0);
+      void this.#terminate(slot);
+    }
+    return Promise.all([...this.#terminations]).then(() => void 0);
   }
 };
 

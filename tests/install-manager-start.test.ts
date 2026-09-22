@@ -137,7 +137,7 @@ describe("start installation admission", () => {
     expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("active");
   });
 
-  it.each([0, 23])("launches only an active verified generation and forwards client exit %s", async exitCode => {
+  it.each([0, 23, 130, 143, 255])("launches only an active verified generation and forwards client exit %s", async exitCode => {
     const f = setup(); await f.install();
     expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("active");
     const before = snapshot(f.kiroHome), result = f.run(exitCode);

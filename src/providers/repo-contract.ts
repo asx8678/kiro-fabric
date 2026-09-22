@@ -51,6 +51,8 @@ const object = (properties: Record<string, unknown>, required: string[] = []): R
 const array = (items: Record<string, unknown>, maxItems: number): Record<string, unknown> => ({ type: "array", items, maxItems });
 const base = (): Record<string, Record<string, unknown>> => ({ rootId: string(100) });
 const budget = (): Record<string, unknown> => integer(256, 16000);
+export const validImpactBase = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= 256 && !value.startsWith("-") && !/[\u0000-\u001f\u007f]/u.test(value);
 const focus = (): Record<string, Record<string, unknown>> => ({ ...base(), query: string(1000), path: string(), language: string(80), kind: choices(["function", "method", "class", "interface", "type", "field", "decl", "file", "anchor"]), fresh: boolean(), maxTokens: budget(), focusId: string(100) });
 const readWindow = (): Record<string, unknown> => object({ path: string(4096), offset: integer(1, 2_000_000), limit: integer(1, 2000), expectedSha256: { type: "string", minLength: 64, maxLength: 64 } }, ["path", "offset", "limit"]);
 // Keep every object closed and every collection/scalar bounded. Do not use
@@ -107,7 +109,7 @@ export const REPO_ACTION_DESCRIPTORS: FabricActionDescriptor[] = [
   descriptor("settings", "Inspect separate fovea.v1 configuration, revisions and settingSupport. sync.ackClean is stored but ineffective: native clean notifications are unsupported.", object(base())),
   descriptor("configure", "Approved session/project/global Fovea settings update. Use settings.revision for session, revisions.project/global for persistent layers; strict versioned config, no executable or extra-root authority. Returns settingSupport; stored sync.ackClean does not enable native notifications.", object({ ...base(), scope: choices(["session", "project", "global"]), expectedRevision: string(64), config: { type: "object" } }, ["scope", "expectedRevision", "config"]), true),
   descriptor("reset", "Reset this conversation/root navigation and retained results, not the host lifetime or source files.", object(base()), true),
-  descriptor("reload", "Reload configuration and restart the same-generation engine. New code requires product update and a new session.", object(base()), true),
+  descriptor("reload", "Reload configuration and restart the same-generation engine PROCESS-WIDE: invalidates all engine navigation and retained results, not a session reset. New code requires product update and a new session.", object(base()), true),
   descriptor("sync", "Explicit authorized reconciliation; returns prepared context, never claims it was delivered. No automatic agent restart.", object(base())),
 ];
 export const REPO_GUEST_DECLARATIONS = `

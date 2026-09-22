@@ -508,8 +508,10 @@ export class FabricExecutionService {
     // a misleading complete prefix or late facts after this execution returns.
     if (activeProviderCalls > 0) observations?.gap();
     executeSpan?.end({ termination: result.terminationReason, effectiveTimeoutMs: result.effectiveTimeoutMs });
-    let status = statusFor(result.terminationReason);
-    let outputError = result.error;
+    // Cancellation can arrive while local effect settlement retains the lease,
+    // after the VM has already returned. Never publish that late value as success.
+    let status = result.terminationReason === "completed" && options.signal?.aborted ? "aborted" as const : statusFor(result.terminationReason);
+    let outputError = status === "aborted" && result.terminationReason === "completed" ? "Execution cancelled" : result.error;
     if (status === "succeeded") {
       try {
         assertFabricJsonBudget(result.value, this.config.artifacts.maxArtifactChars);

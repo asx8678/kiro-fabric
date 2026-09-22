@@ -55,7 +55,7 @@ export async function runSourceInstaller(args) {
         for (const command of [["install", "--frozen-lockfile"], ["run", "build"]]) {
           if (!json) process.stderr.write(`Source build: pnpm ${command.join(" ")}${options.verbose ? " (streaming live output)" : ""}\n`);
           if (options.verbose) {
-            const streamed = spawnSync("pnpm", command, { cwd: root, timeout: 600000, stdio: ["ignore", "inherit", "inherit"] });
+            const streamed = spawnSync("pnpm", command, { cwd: root, timeout: 600000, stdio: ["ignore", json ? 2 : "inherit", "inherit"] });
             if (streamed.error || streamed.status !== 0) throw new InstallerError(`Source build failed: ${String(streamed.error?.message ?? `exit ${streamed.status ?? "unknown"}`)}; full output streamed above (--verbose)`, 4, "source-build-failed");
           } else {
             const result = spawnSync("pnpm", command, { cwd: root, encoding: "utf8", timeout: 600000, maxBuffer: 4 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });

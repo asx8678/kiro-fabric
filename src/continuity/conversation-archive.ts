@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isProxy } from "node:util/types";
 import { StateProvider } from "../providers/state-provider.js";
 import { continuityBoundedId, continuityBoundedKey } from "./validation.js";
 import type { FabricInvocationContext } from "../protocol.js";
@@ -43,7 +44,7 @@ interface AdmittedPayload { value: unknown; text: string }
  * normalized value together with its exact serialized text. Only JSON
  * primitives, dense arrays and plain objects (Object.prototype or a null
  * prototype) with enumerable own data properties are accepted. Buffers and
- * typed arrays, dates, maps, sets, custom prototypes, accessors, custom
+ * typed arrays, dates, maps, sets, proxies, custom prototypes, accessors, custom
  * `toJSON`, functions, symbols, undefined, bigints, non-finite numbers and
  * cycles are rejected before anything is published, and getters are never
  * invoked. Traversal is bounded by a node budget before serialization, so an
@@ -57,6 +58,14 @@ const admitPayload = (value: unknown, maxEventBytes: number): AdmittedPayload =>
   // The budget stays above the depth limit so a depth violation is always
   // reported as such; wide structures exhaust the traversal budget instead.
   const nodeBudget = Math.max(ARCHIVE_JSON_DEPTH + 2, Math.ceil(maxEventBytes / 2));
+  // Descriptors are produced by reflection, never read through caller getters.
+  // The same rule applies to object properties (including toJSON) and indices.
+  const dataValue = (descriptor: PropertyDescriptor | undefined): unknown => {
+    if (!descriptor || !Object.hasOwn(descriptor, "value") || !descriptor.enumerable || descriptor.value === undefined) {
+      throw new Error("continuity archive payload is not bounded JSON");
+    }
+    return descriptor.value;
+  };
   const admit = (input: unknown, depth: number, ancestors: WeakSet<object>): unknown => {
     if (depth > ARCHIVE_JSON_DEPTH) throw new Error("continuity archive payload exceeds JSON depth bounds");
     if (++nodes > nodeBudget) throw new Error("continuity archive payload exceeds node bounds");
@@ -69,20 +78,27 @@ const admitPayload = (value: unknown, maxEventBytes: number): AdmittedPayload =>
         return input;
       case "object": {
         if (input === null) return null;
-        if (ArrayBuffer.isView(input) || input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+        // Reject proxies before even prototype/descriptor inspection: those
+        // operations can otherwise execute caller-controlled traps.
+        if (isProxy(input) || ArrayBuffer.isView(input) || input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
           throw new Error("continuity archive payload is not bounded JSON");
         }
         if (Object.getOwnPropertySymbols(input).length > 0) throw new Error("continuity archive payload is not bounded JSON");
-        if (typeof (input as { toJSON?: unknown }).toJSON === "function") throw new Error("continuity archive payload is not bounded JSON");
         if (ancestors.has(input)) throw new Error("continuity archive payload contains a cycle");
         const prototype = Object.getPrototypeOf(input);
         if (Array.isArray(input)) {
           if (prototype !== Array.prototype) throw new Error("continuity archive payload is not bounded JSON");
+          // Array length is an own data property; proxies were rejected above.
+          // Bound reflection before allocating descriptors for a wide array.
+          if (input.length > nodeBudget - nodes) throw new Error("continuity archive payload exceeds node bounds");
+          const descriptors = Object.getOwnPropertyDescriptors(input);
+          // Only dense indexed values plus the intrinsic length are JSON data;
+          // do not silently discard extra (including non-enumerable) properties.
+          if (Object.keys(descriptors).length !== input.length + 1) throw new Error("continuity archive payload is not bounded JSON");
           ancestors.add(input);
           const copy: unknown[] = [];
           for (let index = 0; index < input.length; index++) {
-            if (input[index] === undefined) throw new Error("continuity archive payload is not bounded JSON");
-            copy.push(admit(input[index], depth + 1, ancestors));
+            copy.push(admit(dataValue(descriptors[String(index)]), depth + 1, ancestors));
           }
           ancestors.delete(input);
           return copy;
@@ -91,10 +107,7 @@ const admitPayload = (value: unknown, maxEventBytes: number): AdmittedPayload =>
         ancestors.add(input);
         const copy: Record<string, unknown> = Object.create(null);
         for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(input))) {
-          if (descriptor.get !== undefined || descriptor.set !== undefined || !descriptor.enumerable || descriptor.value === undefined) {
-            throw new Error("continuity archive payload is not bounded JSON");
-          }
-          copy[key] = admit(descriptor.value, depth + 1, ancestors);
+          copy[key] = admit(dataValue(descriptor), depth + 1, ancestors);
         }
         ancestors.delete(input);
         return copy;

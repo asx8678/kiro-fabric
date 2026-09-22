@@ -13,6 +13,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
 import { installerSafety as s } from "./install-agent-user.mjs";
+import { captureDirectoryAncestry } from "../src/installation/filesystem-boundary.mjs";
+import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation } from "./pinned-directory-child.mjs";
 
 const MAX_ENTRIES = 20000;
 const MAX_FILE_BYTES = 64 * 1024 * 1024;
@@ -32,6 +34,8 @@ const MANAGED_CONTROLS = ["agents/kiro-fabric.json"];
 // Reserved source/build directories, not a general Kiro-home ignore list.
 // Only safe, real directories at the exact explicit checkout-home root qualify.
 const SOURCE_ARTIFACT_DIRECTORIES = new Set([".git", ".tmp", "dist", "node_modules"]);
+const PINNED_DIRECTORY_FLAGS = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK;
+const samePinnedIdentity = (left, right) => left && right && ["dev", "ino", "mode", "uid", "gid"].every(key => left[key] === right[key]);
 
 const backupPaths = (kiroHome) => ({
   root: path.join(kiroHome, "kiro-fabric", "backups"),
@@ -241,11 +245,12 @@ function boundedEntries(directory, budget) {
 const sameEvidence = (left, right) => ["dev", "ino", "uid", "gid", "mode", "nlink", "size", "mtimeMs", "ctimeMs"]
   .every(key => left[key] === right[key]);
 
-// A timestamp is not ownership. Require a complete, same-home manifest and
-// exact tree closure, safe ownership, original snapshot modes and content.
+// A timestamp is not ownership. Require a complete manifest and exact tree
+// closure, safe ownership, original snapshot modes and content. Retention
+// supplies kiroHome to additionally require same-home identity.
 // Skipped hardlinks/special files must remain absent; recorded symlinks are
 // compared as links and are never followed. Any doubt preserves the whole tree.
-function inspectRetainedBackup(directory, kiroHome, budget) {
+function inspectConfigurationBackup(directory, kiroHome, budget) {
   s.assertNoUnsafeSymlinkComponents(directory);
   s.assertSafeDirectory(directory, { private: true });
   const snapshot = new Map([[directory, fs.lstatSync(directory)]]);
@@ -254,7 +259,8 @@ function inspectRetainedBackup(directory, kiroHome, budget) {
   if ((stats.mode & 0o7777) !== 0o600) throw new Error("modified backup manifest mode");
   snapshot.set(manifestPath, stats);
   const manifest = JSON.parse(bytes.toString());
-  if (manifest.schemaVersion !== 1 || manifest.kiroHome !== kiroHome ||
+  if (!manifest || manifest.schemaVersion !== 1 || typeof manifest.kiroHome !== "string" || !path.isAbsolute(manifest.kiroHome) ||
+      (kiroHome !== undefined && manifest.kiroHome !== kiroHome) ||
       typeof manifest.time !== "string" || !Number.isFinite(Date.parse(manifest.time)) ||
       !(manifest.command === null || typeof manifest.command === "string") ||
       !(manifest.sourceRoot === undefined || manifest.sourceRoot === null ||
@@ -269,7 +275,7 @@ function inspectRetainedBackup(directory, kiroHome, budget) {
     for (const record of records) {
       const relative = record?.path;
       if (typeof relative !== "string" || relative.split("/").some(part => !part || part === "." || part === "..") ||
-          relative.includes("\\") || relative.split("/").length > MAX_DEPTH + 1 || relative === MANIFEST ||
+          relative.includes("\\") || relative.includes("\0") || relative.split("/").length > MAX_DEPTH + 1 || relative === MANIFEST ||
           relative === "kiro-fabric" || relative.startsWith("kiro-fabric/") || expected.has(relative) || skipped.has(relative)) throw new Error("invalid backup path");
       assertContainedRelative(relative, directory);
       if (kind === "skipped") {
@@ -278,11 +284,18 @@ function inspectRetainedBackup(directory, kiroHome, budget) {
       } else {
         if (kind === "files" && (!Number.isSafeInteger(record.size) || record.size < 0 || record.size > MAX_FILE_BYTES ||
             !/^[a-f0-9]{64}$/.test(record.sha256))) throw new Error("invalid backup file");
-        if (kind === "symlinks" && typeof record.target !== "string") throw new Error("invalid backup symlink");
+        if (MANAGED_CONTROLS.includes(relative) && kind !== "files") throw new Error("invalid managed backup entry");
+        if (kind === "symlinks" && (typeof record.target !== "string" || !record.target || record.target.includes("\0"))) throw new Error("invalid backup symlink");
         if (kind !== "symlinks" && (!Number.isInteger(record.mode) || record.mode < 0 || record.mode > 0o777 || (record.mode & 0o022))) throw new Error("invalid backup mode");
         expected.set(relative, { kind, record });
       }
     }
+  }
+  // Every non-root parent must be a recorded directory, including parents of
+  // skipped evidence. Otherwise a manifest can invent paths through a link.
+  for (const relative of [...expected.keys(), ...skipped]) {
+    const parent = path.posix.dirname(relative);
+    if (parent !== "." && expected.get(parent)?.kind !== "directories") throw new Error("missing backup parent directory");
   }
   const visit = (target, relative, depth) => {
     if (depth > MAX_DEPTH) throw new Error("backup retention depth exceeded");
@@ -315,7 +328,11 @@ function inspectRetainedBackup(directory, kiroHome, budget) {
     s.assertNoUnsafeSymlinkComponents(path.dirname(target));
     if (!sameEvidence(before, fs.lstatSync(target))) throw new Error("backup changed during retention");
   }
-  return snapshot;
+  return { snapshot, manifest };
+}
+
+function inspectRetainedBackup(directory, kiroHome, budget) {
+  return inspectConfigurationBackup(directory, kiroHome, budget).snapshot;
 }
 
 function retainBoundedBackups(root, fresh, kiroHome) {
@@ -379,108 +396,128 @@ export function listConfigurationBackups(kiroHome) {
  * @param {string} kiroHome destination Kiro home
  */
 export function restoreConfigurationBackup(backupPath, kiroHome) {
-  const manifestFile = path.join(backupPath, MANIFEST);
-  const raw = fs.readFileSync(manifestFile);
-  const manifest = JSON.parse(raw.toString());
-  if (manifest.schemaVersion !== 1) throw new Error("configuration backup identity mismatch");
-  s.assertSafeDirectory(backupPath, { private: true });
+  assertCanonicalBackupPath(backupPath, "backup path");
+  assertCanonicalBackupPath(kiroHome, "Kiro home");
   s.assertSafeDirectory(kiroHome, { private: true });
   if (!s.lstat(path.join(kiroHome, "kiro-fabric"))) throw new Error("restore requires an installed (or previously backed up) kiro-fabric tree at the destination");
-  // Manifest-controlled strings are containment-checked: a tampered or
-  // hand-written manifest can never write outside the destination home.
-  for (const relativePath of manifest.directories.map(directory => directory.path)) assertContainedRelative(relativePath, kiroHome);
-  for (const relativePath of [...manifest.files.map(file => file.path), ...manifest.symlinks.map(link => link.path)]) assertContainedRelative(relativePath, kiroHome);
-  const expected = new Map(manifest.files.map(file => [file.path, file]));
-  const visit = (directory, relative) => {
-    for (const entry of fs.readdirSync(directory, { withFileTypes: true }).sort(entrySort)) {
-      if (entry.name === MANIFEST && !relative) continue;
-      const relativePath = relative ? `${relative}/${entry.name}` : entry.name;
-      const source = path.join(directory, entry.name);
-      if (entry.isDirectory()) visit(source, relativePath);
-      else if (entry.isSymbolicLink()) {
-        if (!manifest.symlinks.some(link => link.path === relativePath && link.target === fs.readlinkSync(source))) throw new Error(`unrecorded symlink in backup: ${relativePath}`);
-      } else {
-        s.assertSafeFile(source, `backup file ${relativePath}`);
-        const bytes = fs.readFileSync(source);
-        const record = expected.get(relativePath);
-        if (!record || bytes.length !== record.size || s.hash(bytes) !== record.sha256) throw new Error(`modified backup file: ${relativePath}`);
-      }
-    }
-  };
-  visit(backupPath, "");
+  // Restore may target a different home. Retention additionally requires the
+  // original home identity; both paths require the same exact bounded tree.
+  // Do not apply retention's smaller housekeeping byte cap to valid backups.
+  const { manifest } = inspectConfigurationBackup(backupPath, undefined, {
+    entries: MAX_ENTRIES + 1, bytes: MAX_ENTRIES * (MAX_FILE_BYTES + 1) + MAX_MANIFEST_BYTES + 1,
+  });
   // Managed controls are restored by the installer itself; rewriting a stale
   // profile over a retired/absent installation fails ownership verification.
   const managedSkipped = manifest.files.filter(file => MANAGED_CONTROLS.includes(file.path));
   const restoredFiles = manifest.files.filter(file => !MANAGED_CONTROLS.includes(file.path));
+  const directories = [...manifest.directories].sort((a, b) => a.path.split("/").length - b.path.split("/").length);
+  const directoryPaths = new Set(directories.map(directory => directory.path));
+  const directoryModes = new Map(directories.map(directory => [directory.path, directory.mode]));
+  const rootGuard = captureDirectoryAncestry(kiroHome);
+  const rootIdentity = pinnedDirectoryIdentity(fs.lstatSync(kiroHome, { bigint: true }));
+  const parents = new Map([[kiroHome, rootIdentity]]);
+
+  // Keep the no-effects preflight, but do not trust it as the mutation guard.
+  // Existing directories are user data: their exact recorded mode must already
+  // match. Restore never silently chmods a preexisting container.
+  for (const entry of [...directories, ...restoredFiles, ...manifest.symlinks]) {
+    const target = assertContainedRelative(entry.path, kiroHome);
+    s.assertNoUnsafeSymlinkComponents(path.dirname(target));
+    const existing = s.lstat(target);
+    if (directoryPaths.has(entry.path)) {
+      if (existing) {
+        s.assertSafeDirectory(target);
+        if ((existing.mode & 0o777) !== entry.mode) throw new Error(`restore directory mode mismatch: ${entry.path}`);
+        parents.set(target, pinnedDirectoryIdentity(fs.lstatSync(target, { bigint: true })));
+      }
+    } else if (existing) throw new Error(`restore target already exists: ${entry.path}`);
+  }
+
+  /** Run one fixed operation through a descriptor whose identity is rechecked
+   * before, during and after the effect. Pathname checks are diagnostics only. */
+  function inParent(directory, action) {
+    const expected = parents.get(directory);
+    if (!expected) throw new Error(`unknown restore parent: ${path.relative(kiroHome, directory)}`);
+    const guard = captureDirectoryAncestry(directory);
+    const check = () => {
+      rootGuard.check(); guard.check();
+      if (!samePinnedIdentity(expected, pinnedDirectoryIdentity(fs.lstatSync(directory, { bigint: true })))) {
+        throw new Error("Restore parent changed; preserve evidence");
+      }
+    };
+    check();
+    const descriptor = fs.openSync(directory, PINNED_DIRECTORY_FLAGS);
+    try {
+      if (!samePinnedIdentity(expected, pinnedDirectoryIdentity(fs.fstatSync(descriptor, { bigint: true })))) {
+        throw new Error("Restore parent descriptor changed; preserve evidence");
+      }
+      return action({ fd: descriptor, cwd: directory, parent: expected, check });
+    } finally { fs.closeSync(descriptor); }
+  }
+
+  /** @type {{parent:string,name:string,kind:'directory'|'file'|'symlink',identity:ReturnType<typeof pinnedEntryIdentity>}[]} */
   const written = [];
   try {
-    for (const directory of manifest.directories) {
-      const destinationDirectory = path.join(kiroHome, directory.path);
-      const existing = s.lstat(destinationDirectory);
-      // Directories are reusable containers: an existing parent (e.g. agents/
-      // surviving while its files were lost) is fine, a foreign non-directory
-      // is not. Only newly created directories unwind on failure.
-      if (existing) {
-        if (existing.isSymbolicLink() || !existing.isDirectory()) throw new Error(`restore target exists and is not a directory: ${directory.path}`);
-        continue;
-      }
-      // Creation modes are masked by the process umask, so apply the exact
-      // recorded mode afterwards instead of trusting mkdirSync.
-      const directoryMode = directory.mode & 0o777 || 0o700;
-      fs.mkdirSync(destinationDirectory, { mode: directoryMode });
-      // Track the new directory before chmod: an untracked creation cannot be
-      // unwound, so a chmod failure would strand an empty directory and block a
-      // later retry with "already exists".
-      written.push(destinationDirectory);
-      fs.chmodSync(destinationDirectory, directoryMode);
+    for (const directory of directories) {
+      const destination = path.join(kiroHome, directory.path);
+      if (parents.has(destination)) continue;
+      const parent = path.dirname(destination), name = path.basename(destination);
+      const identity = inParent(parent, context => runPinnedDirectoryOperation({ ...context, operation: "mkdir0700", name }));
+      if (!identity) throw new Error(`restore directory identity missing: ${directory.path}`);
+      const record = { parent, name, kind: /** @type {const} */ ("directory"), identity };
+      written.push(record);
+      // Keep newly owned parents private and writable until every descendant is
+      // published. Exact recorded modes (including read-only 0500 trees) are
+      // applied deepest-first only after all child creation has finished.
+      parents.set(destination, pinnedDirectoryIdentity(identity));
     }
+    // Repeat collision checks after parent creation. Each exclusive operation
+    // remains authoritative if a name appears after this diagnostic pass.
     for (const relativePath of [...restoredFiles.map(file => file.path), ...manifest.symlinks.map(link => link.path)]) {
       if (s.lstat(path.join(kiroHome, relativePath))) throw new Error(`restore target already exists: ${relativePath}`);
     }
     for (const file of restoredFiles) {
-      const source = fs.readFileSync(path.join(backupPath, file.path));
-      const destination = path.join(kiroHome, file.path);
-      // Restore the exact recorded original mode so Kiro can rewrite its own
-      // settings/tokens after recovery (0600 stays 0600, not read-only 0400).
-      // Creation is exclusive and the mode is applied to the owned descriptor,
-      // so a restrictive umask cannot silently strip recorded permissions.
-      const fileMode = file.mode & 0o777 || 0o600;
-      const descriptor = fs.openSync(destination, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, fileMode);
-      // Track immediately after the exclusive create. A failure while writing or
-      // applying the mode must remove the owned file; otherwise the destination
-      // keeps a partial settings file and every retry fails as "already exists"
-      // without reporting that cleanup was incomplete.
-      written.push(destination);
-      try { fs.writeFileSync(descriptor, source); fs.fchmodSync(descriptor, fileMode); } finally { fs.closeSync(descriptor); }
+      const { bytes: source } = readConfigurationFile(path.join(backupPath, file.path), file.path);
+      if (source.length !== file.size || s.hash(source) !== file.sha256) throw new Error(`modified backup file: ${file.path}`);
+      const destination = path.join(kiroHome, file.path), parent = path.dirname(destination), name = path.basename(destination);
+      const identity = inParent(parent, context => runPinnedDirectoryOperation({
+        ...context, operation: "writeExclusive", name, mode: file.mode, maxBytes: MAX_FILE_BYTES, data: source,
+      }));
+      if (!identity) throw new Error(`restore file identity missing: ${file.path}`);
+      written.push({ parent, name, kind: "file", identity });
     }
     for (const link of manifest.symlinks) {
-      fs.symlinkSync(link.target, path.join(kiroHome, link.path));
-      written.push(path.join(kiroHome, link.path));
+      const destination = path.join(kiroHome, link.path), parent = path.dirname(destination), name = path.basename(destination);
+      const identity = inParent(parent, context => runPinnedDirectoryOperation({
+        ...context, operation: "symlinkExclusive", name, linkTarget: link.target,
+      }));
+      if (!identity) throw new Error(`restore symlink identity missing: ${link.path}`);
+      written.push({ parent, name, kind: "symlink", identity });
+    }
+    for (const record of written.filter(record => record.kind === "directory").reverse()) {
+      const destination = path.join(record.parent, record.name);
+      const relative = path.relative(kiroHome, destination).split(path.sep).join("/");
+      const mode = directoryModes.get(relative);
+      if (mode === undefined || mode === 0o700) continue;
+      const identity = inParent(record.parent, context => runPinnedDirectoryOperation({
+        ...context, operation: "chmodDirectory", name: record.name, expected: record.identity, mode,
+      }));
+      if (!identity) throw new Error(`restore directory chmod identity missing: ${relative}`);
+      record.identity = identity; parents.set(destination, pinnedDirectoryIdentity(identity));
     }
   } catch (error) {
-    // Restore is all-or-nothing: unwind what this attempt created. Cleanup
-    // failures are collected instead of swallowed so a partially restored
-    // destination is reported rather than masking the primary failure.
-    const cleanup = [];
-    for (const target of written.reverse()) {
-      const stats = s.lstat(target);
-      if (!stats) continue;
-      try {
-        if (stats.isDirectory()) fs.rmdirSync(target);
-        else fs.unlinkSync(target);
-      } catch (failure) {
-        // Non-empty parents are expected while unwinding children first.
-        if (stats.isDirectory() && ["ENOTEMPTY", "EEXIST", "ENOENT"].includes(failure?.code)) continue;
-        cleanup.push(failure);
-      }
-    }
-    if (cleanup.length) {
-      throw new AggregateError([error, ...cleanup],
-        `Restore failed and cleanup was incomplete: ${cleanup.length} target(s) were not removed; inspect the destination before retrying.`,
-        { cause: error });
-    }
-    throw error;
+    // POSIX/Node has no compare-and-unlink primitive. Deleting a pathname after
+    // checking its inode could remove a concurrent successor, so failed restores
+    // deliberately preserve every published entry as recovery evidence. The
+    // first operation can take effect before its helper returns an identity.
+    const detail = error instanceof Error ? error.message : String(error);
+    const progress = written.length === 0 ? "during the first publication" :
+      `after publishing ${written.length} entr${written.length === 1 ? "y" : "ies"}`;
+    throw new AggregateError([error],
+      `Restore failed (${detail}) ${progress}; partial entries may have been preserved and must be inspected before retrying.`,
+      { cause: error });
   }
+  rootGuard.check();
   return { restored: restoredFiles.length, directories: manifest.directories.length, symlinks: manifest.symlinks.length, managedSkipped: managedSkipped.map(file => file.path) };
 }
 

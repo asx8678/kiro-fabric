@@ -1,6 +1,7 @@
 /** Fixed operations under a caller-held parent fd; caller supplies full ancestry
  * check(), retains fd ownership and rechecks returned identities before reuse.
- * Names are single components. Existing destinations are never chmodded/reused.
+ * Names are single components. chmodDirectory is identity-guarded and accepts
+ * only non-group/other-writable modes; all creations are exclusive.
  * rename without targetExpected is no-clobber, regular-file link+unlink; with an
  * expected destination it deliberately replaces that captured name. unlink,
  * rmdir and replacement retain identity prechecks but are NOT kernel CAS: callers
@@ -40,9 +41,10 @@ export type ParentOptions = {
     check: () => void;
 };
 export type OperationOptions = ParentOptions & {
-    operation: "mkdir0700" | "writeExclusive" | "rename" | "unlink" | "rmdir";
+    operation: "mkdir0700" | "writeExclusive" | "symlinkExclusive" | "chmodDirectory" | "rename" | "unlink" | "unlinkSymlink" | "rmdir";
     name: string;
     target?: string;
+    linkTarget?: string;
     expected?: EntryIdentity;
     targetExpected?: EntryIdentity;
     mode?: number;

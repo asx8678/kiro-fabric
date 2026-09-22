@@ -136,6 +136,61 @@ describe("bounded plain-JSON payload admission", () => {
     expect((await archive.head("conv-1", "workspace-key-1", context)).events).toBe(1);
   });
 
+  it.each(["object toJSON", "array toJSON", "array index", "nested array index"])("rejects %s accessors without invoking them or changing prior events", async kind => {
+    const root = archiveRoot(), archive = new ContinuityConversationArchive(root);
+    await archive.append("conv-1", "key", [event("e1", { preserved: true })], 0, context);
+    const before = await archive.head("conv-1", "key", context);
+    let calls = 0;
+    const input = kind === "object toJSON" ? {} : [];
+    const property = kind.endsWith("toJSON") ? "toJSON" : "0";
+    Object.defineProperty(input, property, { enumerable: true, get() { calls++; return "accessor value"; } });
+    const payload = kind === "nested array index" ? { nested: input } : input;
+    const failure = await archive.append("conv-1", "key", [event("e2", payload)], before.revision, context).catch(error => error);
+    expect(calls).toBe(0);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("bounded JSON");
+    expect(await new ContinuityConversationArchive(root).head("conv-1", "key", context)).toEqual(before);
+  });
+
+  it.each(["sparse", "non-enumerable index", "extra data", "extra accessor", "setter index"])("rejects %s arrays without silently dropping properties", async kind => {
+    const archive = new ContinuityConversationArchive(archiveRoot());
+    await archive.append("conv-1", "key", [event("e1", "preserved")], 0, context);
+    const before = await archive.head("conv-1", "key", context);
+    const payload = [1];
+    let calls = 0;
+    if (kind === "sparse") payload.length = 2;
+    if (kind === "non-enumerable index") Object.defineProperty(payload, "0", { enumerable: false });
+    if (kind === "extra data") Object.defineProperty(payload, "extra", { value: 2, enumerable: true });
+    if (kind === "extra accessor") Object.defineProperty(payload, "extra", { get() { calls++; return 2; }, enumerable: true });
+    if (kind === "setter index") Object.defineProperty(payload, "0", { set(_value: unknown) { calls++; }, enumerable: true });
+    await expect(archive.append("conv-1", "key", [event("e2", payload)], before.revision, context)).rejects.toThrow("bounded JSON");
+    expect(calls).toBe(0);
+    expect(await archive.head("conv-1", "key", context)).toEqual(before);
+  });
+
+  it.each([{}, [1]])("rejects proxies before reflection can invoke user callbacks: %j", async target => {
+    const archive = new ContinuityConversationArchive(archiveRoot());
+    let calls = 0;
+    const payload = new Proxy(target, {
+      getPrototypeOf(value) { calls++; return Reflect.getPrototypeOf(value); },
+      ownKeys(value) { calls++; return Reflect.ownKeys(value); },
+      get(value, key, receiver) { calls++; return Reflect.get(value, key, receiver); },
+    });
+    const failure = await archive.append("conv-1", "key", [event("e1", payload)], 0, context).catch(error => error);
+    expect(calls).toBe(0);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure.message).toContain("bounded JSON");
+    expect((await archive.head("conv-1", "key", context)).events).toBe(0);
+  });
+
+  it("round-trips dense frozen arrays and a non-callable toJSON data property", async () => {
+    const root = archiveRoot(), archive = new ContinuityConversationArchive(root);
+    const payload = Object.freeze([null, false, 1, "text", Object.freeze({ toJSON: "data", nested: Object.freeze([2]) })]);
+    await archive.append("conv-1", "key", [event("e1", payload)], 0, context);
+    const page = await new ContinuityConversationArchive(root).events("conv-1", "key", context);
+    expect(page.events[0]!.payload).toEqual(payload);
+  });
+
   it("rejects cycles but accepts acyclic shared references", async () => {
     const archive = new ContinuityConversationArchive(archiveRoot());
     const cyclic: Record<string, unknown> = { name: "cycle" };

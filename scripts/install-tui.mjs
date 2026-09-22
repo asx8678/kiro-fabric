@@ -100,7 +100,7 @@ const TUI = {
       const argument = raw[index];
       if (argument === "--verbose" || argument === "-v") flags.verbose = true;
       else if (argument === "--dry-run") flags.dryRun = true;
-      else if (argument === "--yes") flags.yes = true;
+      else if (argument === "--yes" || argument === "-y") flags.yes = true;
       else if (argument === "--no-color") flags.noColor = true;
       else if (argument === "--help" || argument === "-h") flags.help = true;
       else if (argument === "--no-shell-integration") flags.noShellIntegration = true;
@@ -166,9 +166,40 @@ process.umask(0o077); // mirror the installer's private-by-default hygiene for o
 paint = buildPaint(process.stderr.isTTY && process.stdout.isTTY && !process.env.NO_COLOR && !flags.noColor);
 const spinner = new Spinner();
 
-const LOG_PATH = path.join(os.tmpdir() ?? "/tmp", "fabric-fovea-install.log");
-const log = { fd: fs.openSync(LOG_PATH, "a"), write(chunk) { fs.writeSync(this.fd, chunk); }, close() { try { fs.closeSync(this.fd); } catch {} } };
+/** A new private directory per invocation prevents shared-temp collisions.
+ * Never reopen the predictable legacy log or repair an untrusted entry. Keep
+ * failed setup evidence, but do not write until type, ownership, permissions
+ * and the descriptor/path identities have all been verified. */
+function createPrivateLog() {
+  const directory = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "fabric-fovea-install-"));
+  const same = (left, right) => left.dev === right.dev && left.ino === right.ino;
+  const privateMode = (stat, mode) => process.platform === "win32" ||
+    (stat.uid === process.getuid?.() && (stat.mode & 0o7777) === mode);
+  const initial = fs.lstatSync(directory);
+  if (!initial.isDirectory() || initial.isSymbolicLink() || !privateMode(initial, 0o700)) throw new Error("Unsafe TUI log directory");
+  const file = path.join(directory, "installer.log");
+  const fd = fs.openSync(file, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY |
+    (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0), 0o600);
+  try {
+    const opened = fs.fstatSync(fd), named = fs.lstatSync(file), current = fs.lstatSync(directory);
+    if (!current.isDirectory() || current.isSymbolicLink() || !same(initial, current) || !privateMode(current, 0o700) ||
+        !opened.isFile() || !named.isFile() || named.isSymbolicLink() || !same(opened, named) ||
+        opened.nlink !== 1 || named.nlink !== 1 || !privateMode(opened, 0o600) || !privateMode(named, 0o600)) {
+      throw new Error("Unsafe TUI log file or directory identity");
+    }
+  } catch (error) { fs.closeSync(fd); throw error; }
+  let closed = false;
+  return {
+    path: file,
+    write(chunk) { fs.writeSync(fd, chunk); },
+    close() { if (closed) return; closed = true; try { fs.closeSync(fd); } catch {} },
+  };
+}
+const log = createPrivateLog();
+const LOG_PATH = log.path;
 const say = text => { process.stderr.write(`${text}\n`); log.write(`${text}\n`); };
+// Print the full path before preflight/consent can exit, without panel clipping.
+say(paint.dim(`Installation log: ${LOG_PATH}`));
 
 // ── Preflight (advisory display; enforcement stays in the installer) ───────
 

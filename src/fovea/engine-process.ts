@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 import { decodeResponse, encodeFrame, type FoveaEngineInitialization, type FoveaMessage, type FoveaQuery } from "./protocol.js";
 import { localProcessGroupAlive } from "../providers/local-process-group.js";
 
+const CRASH_BUDGET_UNAVAILABLE = "Fovea crash budget exceeded; same-generation reload required";
+
 interface Pending { resolve(value: Record<string, unknown>): void; reject(error: Error): void }
 export interface FoveaEngineProcessOptions extends FoveaEngineInitialization { entrypoint?: string }
 /** One lazily started child per owning host. Requests are serialized by the host,
@@ -15,7 +17,7 @@ export class FoveaEngineProcess {
   #start: Promise<void> | undefined;
   #stopping: Promise<void> | undefined;
   #closed = false;
-  #restarts: number[] = [];
+  #failures: number[] = [];
   generation = 0;
   starts = 0;
   unavailable: string | undefined;
@@ -44,19 +46,43 @@ export class FoveaEngineProcess {
       if (cancelled) await this.#terminate(cancelled);
     }
   }
-  async restart(): Promise<void> { await this.#terminate(new Error("Fovea engine restart")); }
+  /** Host scheduler only. Retiring an idle owner must never start a parser. */
+  async retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
+    if (this.#closed) throw new Error("Fovea host closed");
+    // Losing the child reference does not prove its process group is gone.
+    // Join an in-progress stop and preserve its failure latch before declaring
+    // idle retirement complete. Crash-budget exhaustion alone has no live state.
+    if (this.#stopping) await this.#stopping;
+    if (this.#closed) throw new Error("Fovea host closed");
+    if (this.unavailable && this.unavailable !== CRASH_BUDGET_UNAVAILABLE) throw new Error(this.unavailable);
+    if (!this.active) return;
+    const id = `retire_${randomBytes(16).toString("hex")}`;
+    const timer = setTimeout(() => { void this.#terminate(new Error("Fovea retirement timed out")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 2_000);
+    try {
+      const response = await this.#request({ version: 1, type: "retireConversation", id, conversationId, conversationEpoch });
+      if (response.retired !== true) throw new Error("Fovea retirement not confirmed");
+    } catch (error) { await this.#terminate(new Error("Fovea retirement failed")); throw error; }
+    finally { clearTimeout(timer); }
+  }
+  async restart(): Promise<void> {
+    if (this.#closed) throw new Error("Fovea host closed");
+    await this.#terminate(new Error("Fovea engine restart"));
+    // Explicit recovery clears crash exhaustion only after confirmed cleanup.
+    // Uncertain cleanup and other unavailability must remain latched.
+    if (this.unavailable && this.unavailable !== CRASH_BUDGET_UNAVAILABLE) throw new Error(this.unavailable);
+    this.#failures = []; this.unavailable = undefined;
+  }
   async close(): Promise<void> { this.#closed = true; await this.#terminate(new Error("Fovea host shutdown")); }
   async #ensure(): Promise<void> {
     if (this.#closed || this.unavailable) throw new Error(this.unavailable ?? "Fovea host closed");
     if (this.#stopping) await this.#stopping;
     if (this.#start) return this.#start;
-    this.#start = this.#spawn().catch(async error => { await this.#terminate(new Error("Fovea initialization failed")); throw error; });
+    this.#start = this.#spawn().catch(async error => { await this.#terminate(new Error("Fovea initialization failed"), true); throw error; });
     return this.#start;
   }
   async #spawn(): Promise<void> {
-    const now = Date.now(); this.#restarts = this.#restarts.filter(t => now - t < 60_000);
-    if (this.#restarts.length >= 3) { this.unavailable = "Fovea crash budget exceeded; same-generation reload required"; throw new Error(this.unavailable); }
-    this.#restarts.push(now);
+    const now = Date.now(); this.#failures = this.#failures.filter(t => now - t < 60_000);
+    if (this.#failures.length >= 3) { this.unavailable = CRASH_BUDGET_UNAVAILABLE; throw new Error(this.unavailable); }
     const entrypoint = this.options.entrypoint ?? fileURLToPath(new URL("./engine-entry.js", import.meta.url));
     const stat = fs.lstatSync(entrypoint);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || fs.realpathSync(entrypoint) !== entrypoint) throw new Error("Fovea engine entrypoint identity invalid");
@@ -65,31 +91,34 @@ export class FoveaEngineProcess {
     child.on("message", raw => {
       try {
         const response = decodeResponse(raw), pending = this.#pending.get(response.id);
-        if (!pending) { void this.#terminate(new Error("Fovea unsolicited/replayed response")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); return; }
+        if (!pending) { void this.#terminate(new Error("Fovea unsolicited/replayed response"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); return; }
         this.#pending.delete(response.id);
         if (response.ok) pending.resolve(response.value); else pending.reject(new Error(response.error));
-      } catch { void this.#terminate(new Error("Fovea malformed response")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }
+      } catch { void this.#terminate(new Error("Fovea malformed response"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }
     });
-    child.once("error", () => { void this.#terminate(new Error("Fovea engine process failed")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
-    child.once("exit", () => { void this.#terminate(new Error("Fovea engine exited")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
+    child.once("error", () => { void this.#terminate(new Error("Fovea engine process failed"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
+    child.once("exit", () => { void this.#terminate(new Error("Fovea engine exited"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
     const id = `init_${randomBytes(8).toString("hex")}`;
-    const timeout = setTimeout(() => { void this.#terminate(new Error("Fovea initialization timed out")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 5_000);
+    const timeout = setTimeout(() => { void this.#terminate(new Error("Fovea initialization timed out"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 5_000);
     const { parser, storageRoot, gitPath } = this.options;
     try { await this.#request({ version: 1, type: "initialize", id, options: { parser: { ...parser }, storageRoot, ...(gitPath ? { gitPath } : {}) } }); }
     finally { clearTimeout(timeout); }
   }
   #send(message: FoveaMessage): void {
-    if (!this.#child?.connected) throw new Error("Fovea engine disconnected");
+    const child = this.#child;
+    if (!child?.connected) throw new Error("Fovea engine disconnected");
     const encoded = encodeFrame(message);
-    this.#child.send(encoded, error => { if (error) { void this.#terminate(new Error("Fovea engine send failed")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); } });
+    child.send(encoded, error => { if (error && this.#child === child) { void this.#terminate(new Error("Fovea engine send failed"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); } });
   }
   #request(message: FoveaMessage): Promise<Record<string, unknown>> {
     if (this.#pending.size >= 4) return Promise.reject(new Error("Fovea IPC backpressure"));
     return new Promise((resolve, reject) => { this.#pending.set(message.id, { resolve, reject }); try { this.#send(message); } catch (error) { this.#pending.delete(message.id); reject(error); } });
   }
-  #terminate(reason: Error): Promise<void> {
+  #terminate(reason: Error, unexpected = false): Promise<void> {
     if (this.#stopping) return this.#stopping;
     const child = this.#child;
+    // Count each failing generation once, not every healthy start/reload.
+    if (unexpected && (child || this.#start)) this.#failures.push(Date.now());
     this.#child = undefined; this.#start = undefined;
     // Old exit/error events must never terminate a replacement child.
     child?.removeAllListeners("message"); child?.removeAllListeners("exit");

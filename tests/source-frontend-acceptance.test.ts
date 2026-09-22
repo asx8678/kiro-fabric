@@ -9,7 +9,7 @@ import { expect, it } from "vitest";
 import { acceptanceBundle } from "./installer-acceptance-fixture.js";
 import { inspectCompleteInstallation } from "../scripts/managed-installation.mjs";
 
-it.each(["success", "empty-search"] as const)("fresh source frontend reaches backup and real activation with realistic private-node artifact (%s)", async behavior => {
+it.each([{ behavior: "success", verbose: false }, { behavior: "empty-search", verbose: false }, { behavior: "success", verbose: true }] as const)("fresh source frontend reaches backup and real activation with realistic private-node artifact (%j)", async ({ behavior, verbose }) => {
   const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "source-frontend-acceptance-"))); fs.chmodSync(root, 0o700);
   try {
     const home = path.join(root, "home"), source = path.join(home, ".kiro"), bin = path.join(root, "bin"), log = path.join(root, "developer-commands");
@@ -21,7 +21,7 @@ it.each(["success", "empty-search"] as const)("fresh source frontend reaches bac
     // the packageManager pin from <checkout>/package.json before any build command.
     fs.writeFileSync(path.join(source, "package.json"), JSON.stringify({ packageManager: "pnpm@11.20.0" }), { mode: 0o600 });
     fs.writeFileSync(path.join(bin, "kiro-cli"), '#!/bin/sh\nif [ "$1" = --version ]; then printf "kiro-cli 2.21.1\\n"; else printf "%s\\n" --path; fi\n', { mode: 0o700 });
-    fs.writeFileSync(path.join(bin, "pnpm"), `#!/bin/sh\ncase "$*" in\n --version) printf '11.20.0\\n' ;;\n 'install --frozen-lockfile'|'run build') printf '%s\\n' "$*" >> '${log}' ;;\n *) exit 91 ;;\nesac\n`, { mode: 0o700 });
+    fs.writeFileSync(path.join(bin, "pnpm"), `#!/bin/sh\ncase "$*" in\n --version) printf '11.20.0\\n' ;;\n 'install --frozen-lockfile'|'run build') printf '%s\\n' "$*" >> '${log}'; printf 'build stdout\\n'; printf 'build stderr\\n' >&2 ;;\n *) exit 91 ;;\nesac\n`, { mode: 0o700 });
     const entry = path.join(source, "scripts/source-install.mjs");
     // Small local fixture compile only. Replace expensive packaging, not source
     // frontend, manager, backup, smoke transport, activation or result formatting.
@@ -36,8 +36,9 @@ export const buildCompleteBundle = async options => { if(options.archive !== fal
     } }] });
     // esbuild uses the ambient umask; this generated file is backed up as configuration.
     fs.chmodSync(entry, 0o600);
-    const result = spawnSync(process.execPath, [entry, "--source", "--yes", "--non-interactive", "--json", "--no-shell-integration"], { cwd: root, env: { HOME: home, KIRO_HOME: source, PATH: bin, TMPDIR: root, SHELL: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 60000 });
-    expect(result.error).toBeUndefined(); expect(result.stderr).toBe(""); expect(result.stdout.trim().split("\n")).toHaveLength(1);
+    const result = spawnSync(process.execPath, [entry, "--source", "--yes", "--non-interactive", "--json", ...(verbose ? ["--verbose"] : []), "--no-shell-integration"], { cwd: root, env: { HOME: home, KIRO_HOME: source, PATH: bin, TMPDIR: root, SHELL: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 60000 });
+    expect(result.error).toBeUndefined();
+    expect(result.stderr).toBe(verbose ? "build stdout\nbuild stderr\nbuild stdout\nbuild stderr\n" : ""); expect(result.stdout.trim().split("\n")).toHaveLength(1);
     const output = JSON.parse(result.stdout); expect(output.exitCode).toBe(result.status);
     expect(fs.readFileSync(log, "utf8")).toBe("install --frozen-lockfile\nrun build\n");
     expect(output.configurationBackup, JSON.stringify(output)).toMatchObject({ sourceRoot: source, excludes: expect.arrayContaining([".tmp", "node_modules"]) });

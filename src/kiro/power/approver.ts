@@ -11,6 +11,8 @@ import { fabricJsonText } from "../../runtime/json-budget.js";
 
 export interface KiroPowerElicitationAdapter {
   supported(): boolean;
+  /** Multiplexed hosts must separately qualify intended-chat form routing. */
+  sessionAssociated?(): boolean;
   request(options: {
     title: string;
     message: string;
@@ -22,6 +24,7 @@ export interface KiroPowerElicitationAdapter {
 /** Static diagnostics, never raw client errors. Only a matching observed error
  * establishes a missing handler; capabilities alone do not prove UI readiness. */
 const APPROVAL_FAILURE_GUIDANCE: Record<KiroApprovalFailureReason, string> = {
+  unassociated_session: "Approval form routing is not bound to the intended host session. A supported session-bound approval bridge is required; do not weaken approval policy.",
   unsupported: "This client has not advertised MCP form elicitation. Use a compatible client; do not weaken approval policy.",
   missing_handler: "This client reported no handler for _kiro/mcp/elicitation. Use a client with working approval forms; do not weaken approval policy.",
   request_failed: "The approval request failed; no explicit approval was obtained.",
@@ -46,7 +49,7 @@ const fabricApprovalIdentity = (action: ResolvedFabricAction, args: Record<strin
   };
 };
 
-export type KiroApprovalFailureReason = "unsupported" | "missing_handler" | "request_failed" | "declined" | "cancelled" | "not_approved" | "review_too_large";
+export type KiroApprovalFailureReason = "unassociated_session" | "unsupported" | "missing_handler" | "request_failed" | "declined" | "cancelled" | "not_approved" | "review_too_large";
 export type KiroApprovalResult = { approved: true } | { approved: false; reason: KiroApprovalFailureReason };
 
 /** Classify only the matching client error; never retain its text, data or cause. */
@@ -80,6 +83,7 @@ export class KiroPowerApprover {
     try {
       if (request.signal?.aborted) return { approved: false, reason: "cancelled" };
       if (!this.adapter.supported()) return { approved: false, reason: "unsupported" };
+      if (this.adapter.sessionAssociated?.() === false) return { approved: false, reason: "unassociated_session" };
       const header = `Risk: ${bounded(request.risk, 64)}\nAction: ${bounded(`${request.provider}.${request.action}`, 256)}\n`;
       const review = request.reviewable
         ? request.summary.replace(/[\u0000-\u0008\u000b-\u001f\u007f]/gu, (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`)

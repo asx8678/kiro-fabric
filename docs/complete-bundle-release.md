@@ -11,7 +11,18 @@ unconditional stub.
 ## Commands and immutable phases
 
 1. On each real native host, at the same clean reviewed commit, run
-   `pnpm run agent:bundle`, then `pnpm run release:complete:prepare BUNDLE CHECKOUT NEW_OUTPUT COMMIT`.
+   `node scripts/build-complete-candidate.mjs COMMIT`, then
+   `pnpm run release:complete:prepare BUNDLE CHECKOUT NEW_OUTPUT COMMIT` (take BUNDLE
+   from `.tmp/complete-bundle.json`). The candidate builder checks the exact clean
+   commit before any writes and again after closure/bundle capture. It builds into
+   a fresh `.tmp/candidate-build-*/closure`, including host-native Fovea bytes;
+   tracked `dist/` and generated guidance are never rewritten. Stale guidance fails
+   rather than being silently regenerated. Output and failure evidence are retained.
+   The low-level compatible options are `build-kiro-closure.mjs --outdir NEW_DIRECTORY`
+   (existing destinations are refused) and `build-complete-bundle.mjs --closure DIRECTORY`.
+   Closure inventories, source input digests and exact manifest bytes remain checked
+   at copy, reuse and publication boundaries. These options do not waive clean-source
+   release gates. `pnpm run agent:bundle` remains a development build, not this path.
    The preparer rejects dirty/untracked checkouts, stale source digest/commit,
    legacy bundles and wrong native host. It captures a new schema-2 bundle with
    release provenance **before** any qualification. The original development

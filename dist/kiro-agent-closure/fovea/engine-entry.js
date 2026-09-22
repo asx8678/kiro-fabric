@@ -17,7 +17,7 @@ import {
   sourceLimit,
   sourcePlatform,
   validateProvenanceJournal
-} from "../chunks/chunk-YI22F3B2.js";
+} from "../chunks/chunk-MFCZZWZZ.js";
 import "../chunks/chunk-OLJUXTSO.js";
 import "../chunks/chunk-WZ4PGM3F.js";
 import "../chunks/chunk-AE4E2KSU.js";
@@ -309,15 +309,22 @@ var legacyProbe = async (root, prefix) => {
 var uncommittedFiles = async (root) => {
   const prefix = await gitPrefix(root);
   if (prefix === void 0) return [];
-  const out = await gitOut(root, ["status", "--porcelain", "-z", "--no-renames", "--", "."]);
+  const out = await gitOut(root, ["status", "--porcelain", "-z", "--untracked-files=all", "--no-renames", "--", "."]);
   if (!out) return [];
   return out.split("\0").filter(Boolean).map((entry) => gitRelativePath(entry.slice(3), prefix)).filter((path) => !!path);
 };
+var impactRange = async (root, base) => {
+  if (!base || base.length > 256 || base.startsWith("-") || /[\u0000-\u001f\u007f]/u.test(base)) throw new Error("Invalid impact base revision");
+  const commit = (await gitOut(root, ["rev-parse", "--verify", "--end-of-options", `${base}^{commit}`], { maxBuffer: 1024 }))?.trim();
+  if (!commit || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(commit)) throw new Error("Impact base must resolve to one commit");
+  return `${commit}...HEAD`;
+};
 var prFiles = async (root, base) => {
+  const range = await impactRange(root, base);
   const prefix = await gitPrefix(root);
   if (prefix === void 0) return [];
-  const out = await gitOut(root, ["diff", "--name-only", `${base}...HEAD`, "--", "."]);
-  return out ? out.split("\n").map((s) => gitRelativePath(s.trim(), prefix)).filter((s) => !!s) : [];
+  const out = await gitOut(root, ["diff", "--name-only", "-z", "--no-ext-diff", "--no-textconv", range, "--", "."]);
+  return out ? out.split("\0").map((s) => gitRelativePath(s, prefix)).filter((s) => !!s) : [];
 };
 var MAX_DIFF_HUNKS_PER_FILE = 200;
 var DIFF_MAX_BUFFER = 32 * 1024 * 1024;
@@ -497,9 +504,9 @@ var parseZeroContextDiff = (patch, prefix = "", maxHunksPerFile = MAX_DIFF_HUNKS
   return result;
 };
 var diffHunks = async (root, base) => {
+  const range = base === void 0 ? "HEAD" : await impactRange(root, base);
   const prefix = await gitPrefix(root);
   if (prefix === void 0) return void 0;
-  const range = base ? `${base}...HEAD` : "HEAD";
   const out = await gitOut(root, [
     "-c",
     "core.quotePath=false",
@@ -7365,6 +7372,20 @@ var FoveaEngine = class {
     this.tail = run2.catch(() => void 0);
     return run2;
   }
+  /** Private lifecycle control: no source access, parser initialization or graph
+   * invalidation. Serialized with queries so a late query cannot resurrect state. */
+  retireConversation(conversationId, conversationEpoch) {
+    const run2 = this.tail.then(() => {
+      if (this.closed) throw new Error("Fovea engine closed");
+      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Fovea retirement owner");
+      for (const map of [this.conversations, this.preparedSync]) for (const key of map.keys()) {
+        const owner = JSON.parse(key);
+        if (owner[0] === conversationId && owner[1] === conversationEpoch) map.delete(key);
+      }
+    });
+    this.tail = run2.catch(() => void 0);
+    return run2;
+  }
   async initialize(signal) {
     if (this.parser) return;
     await mkdir2(this.options.storageRoot, { recursive: true, mode: 448 });
@@ -7817,6 +7838,16 @@ process.on("message", (raw) => {
       return;
     }
     if (!engine) throw new Error("Fovea not initialized");
+    if (message.type === "retireConversation") {
+      current = { id: message.id, controller: new AbortController() };
+      try {
+        await engine.retireConversation(message.conversationId, message.conversationEpoch);
+        send({ version: 1, id: message.id, ok: true, value: { retired: true } });
+      } finally {
+        current = void 0;
+      }
+      return;
+    }
     const controller = new AbortController();
     current = { id: message.id, controller };
     const timer = setTimeout(() => controller.abort(new Error("Fovea worker deadline expired")), message.remainingMs);

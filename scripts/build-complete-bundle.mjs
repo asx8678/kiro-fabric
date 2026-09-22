@@ -8,7 +8,7 @@ import { canonical, createBundleManifest, validateBundle, sha256, checkToolPins,
 import { writeBundleArchive } from "./bundle-archive.mjs";
 import { detectInstallerPlatform, assertUnprivilegedInstaller } from "./installer-platform.mjs";
 import { captureBuildInputs, validateBuildInputProvenance, verifyBuildClosure, verifyClosureIntegrity, verifyBuildCapture, verifyCapturedInputs } from "./build-inputs.mjs";
-import { artifactRecords, artifactKind, cacheDirectory, exists, privateDirectory, publishCacheJson, readCacheJson, recordInstallerArtifact, withInstallerArtifactLease } from "./installer-artifacts.mjs";
+import { artifactRecords, artifactKind, cacheDirectory, exists, privateDirectory, publishCacheJson, readCacheJson, recordInstallerArtifact, withInstallerArtifactLease, withInstallerCacheGate } from "./installer-artifacts.mjs";
 
 const mappings = [["skills/fabric-exec", "resources/skills/fabric-exec"], ["resources/steering/fabric.md", "resources/steering/fabric.md"]];
 const defaultRoot = () => path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,10 +37,10 @@ async function compileManager(root, outfile) {
   fs.chmodSync(outfile, 0o600);
 }
 const dependencies = { provenance: sourceProvenance, compileManager, acquireTools: acquirePrivateTools };
-function contextFor(root, target, initialBuild, deps) {
+function contextFor(root, target, initialBuild, deps, closure = path.join(root, "dist/kiro-agent-closure")) {
   target ??= detectInstallerPlatform().target;
   if (!["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].includes(target)) throw new Error("Unsupported bundle target");
-  const nativeMetadata = path.join(root, 'dist/kiro-agent-closure/fovea/source-platform.json');
+  const nativeMetadata = path.join(closure, 'fovea/source-platform.json');
   if (fs.existsSync(nativeMetadata)) {
     const native = JSON.parse(fs.readFileSync(nativeMetadata, 'utf8'));
     if (native.platform !== 'darwin' || native.schemaVersion !== 1 || native.abiVersion !== 1 ||
@@ -48,10 +48,10 @@ function contextFor(root, target, initialBuild, deps) {
   }
   const provenance = deps.provenance(root), rawToolchain = fs.readFileSync(path.join(root, "build-toolchain.json"));
   const pins = JSON.parse(rawToolchain.toString("utf8")).targets[target]; checkToolPins(pins, undefined, target);
-  const identity = { schema: 1, inputs: initialBuild.buildInputs.digest, closure: sha256(fs.readFileSync(path.join(root, "dist/kiro-agent-closure/closure-manifest.json"))), toolchain: sha256(rawToolchain), target,
+  const identity = { schema: 1, inputs: initialBuild.buildInputs.digest, closure: sha256(fs.readFileSync(path.join(closure, "closure-manifest.json"))), toolchain: sha256(rawToolchain), target,
     host: { node: process.version, platform: process.platform, arch: process.arch }, provenance };
   if (provenance.sourceDigest !== identity.inputs) throw new Error("Source changed during bundle lookup");
-  return { root, target, initialBuild, provenance, pins, identity, deps };
+  return { root, closure, target, initialBuild, provenance, pins, identity, deps };
 }
 const equal = (a, b) => canonical(a) === canonical(b);
 /** Validate the pointer even on a miss: corruption cannot disappear behind rebuild. */
@@ -73,8 +73,8 @@ function verifySelected(context, verified) {
   verifyCapturedInputs(verified.root, initialBuild, mappings);
 }
 function verifyBoundary(context) {
-  verifyBuildCapture(context.root, path.join(context.root, "dist/kiro-agent-closure"), context.initialBuild);
-  if (sha256(fs.readFileSync(path.join(context.root, "dist/kiro-agent-closure/closure-manifest.json"))) !== context.identity.closure) throw new Error("Closure manifest changed during capture");
+  verifyBuildCapture(context.root, context.closure, context.initialBuild);
+  if (sha256(fs.readFileSync(path.join(context.closure, "closure-manifest.json"))) !== context.identity.closure) throw new Error("Closure manifest changed during capture");
   if (!equal(context.deps.provenance(context.root), context.provenance)) throw new Error("Source changed during bundle capture");
 }
 async function lookup(context, parent, active) {
@@ -100,34 +100,44 @@ async function publish(context, parent, selected, archiveRequested, reused) {
   const verified = await validateBundle(selected.root);
   if (verified.digest !== selected.digest) throw new Error("Selected bundle changed before publication");
   verifySelected(context, verified); verifyBoundary(context);
-  let archive = null;
-  if (archiveRequested) {
-    archive = path.join(parent, `kiro-fabric-${context.target}.tar.gz`);
-    const pending = path.join(parent, `.archive-${randomBytes(16).toString("hex")}.tar.gz`);
-    let pendingIdentity;
-    try {
+  const archive = archiveRequested ? path.join(parent, `kiro-fabric-${context.target}.tar.gz`) : null;
+  const pending = archiveRequested ? path.join(parent, `.archive-${randomBytes(16).toString("hex")}.tar.gz`) : null;
+  let pendingIdentity;
+  try {
+    // Keep expensive capture outside the short shared publication gate.
+    if (pending) {
       await writeBundleArchive(verified.root, pending);
       pendingIdentity = fs.lstatSync(pending);
+    }
+    const result = resultFor(context, verified, archive, reused);
+    await withInstallerCacheGate(context.root, async () => {
       verifyBoundary(context); // source drift must refuse BEFORE archive publication
-      if (exists(archive)) { const s = fs.lstatSync(archive); if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1 || s.uid !== process.getuid?.()) throw new Error("Unsafe previous development archive"); }
-      fs.renameSync(pending, archive);
-    } finally {
-      // The writer cleans failed captures itself. Do not erase replaced/unsafe
-      // pending-file evidence it deliberately preserved. After success, clean
-      // only the same private inode if the checkout publication check failed.
-      if (pendingIdentity && exists(pending)) {
+      if (archive) {
         const now = fs.lstatSync(pending);
-        if (now.isFile() && now.nlink === 1 && now.dev === pendingIdentity.dev && now.ino === pendingIdentity.ino && now.mode === pendingIdentity.mode && now.uid === pendingIdentity.uid && now.size === pendingIdentity.size && now.mtimeMs === pendingIdentity.mtimeMs && now.ctimeMs === pendingIdentity.ctimeMs) fs.unlinkSync(pending);
+        if (!now.isFile() || ["dev", "ino", "mode", "uid", "gid", "nlink", "size", "mtimeMs", "ctimeMs"].some(key => now[key] !== pendingIdentity[key])) throw new Error("Pending development archive changed before publication");
+        if (exists(archive)) { const s = fs.lstatSync(archive); if (!s.isFile() || s.isSymbolicLink() || s.nlink !== 1 || s.uid !== process.getuid?.()) throw new Error("Unsafe previous development archive"); }
+        fs.renameSync(pending, archive);
       }
+      // SBOM consumers use this gate too: no observer can commit sidecars from
+      // the old pointer while the new archive is being selected. A crash leaves
+      // the gate as evidence; an already interrupted mismatched pair is rejected
+      // independently by the consumer's captured-byte validation.
+      await recordInstallerArtifact(parent, { schema: 1, kind: "bundle", generation: path.basename(verified.root), digest: verified.digest, identity: context.identity });
+      await publishCacheJson(path.join(parent, "complete-bundle.json"), result);
+    });
+    const published = await validateBundle(result.root);
+    if (published.digest !== verified.digest) throw new Error("Published complete bundle changed");
+    verifyBoundary(context);
+    return result;
+  } finally {
+    // The writer cleans failed captures itself. Do not erase replaced/unsafe
+    // pending-file evidence it deliberately preserved. After success, clean
+    // only the same private inode if the checkout publication check failed.
+    if (pendingIdentity && exists(pending)) {
+      const now = fs.lstatSync(pending);
+      if (now.isFile() && now.nlink === 1 && now.dev === pendingIdentity.dev && now.ino === pendingIdentity.ino && now.mode === pendingIdentity.mode && now.uid === pendingIdentity.uid && now.size === pendingIdentity.size && now.mtimeMs === pendingIdentity.mtimeMs && now.ctimeMs === pendingIdentity.ctimeMs) fs.unlinkSync(pending);
     }
   }
-  const result = resultFor(context, verified, archive, reused);
-  await recordInstallerArtifact(parent, { schema: 1, kind: "bundle", generation: path.basename(verified.root), digest: verified.digest, identity: context.identity });
-  await publishCacheJson(path.join(parent, "complete-bundle.json"), result);
-  const published = await validateBundle(result.root);
-  if (published.digest !== verified.digest) throw new Error("Published complete bundle changed");
-  verifyBoundary(context);
-  return result;
 }
 /** Source frontend fast path, BEFORE pnpm install/build. Built-in-only; never
  * downloads, compiles, copies, archives or creates a generation. Requires an
@@ -167,8 +177,9 @@ export async function buildCompleteBundle(options = {}) {
 export async function buildCompleteBundleForTest(options, deps) {
   assertUnprivilegedInstaller();
   const root = fs.realpathSync(options.root ?? defaultRoot());
-  const initialBuild = verifyBuildClosure(root); // fail BEFORE creating .tmp/acquiring
-  const context = contextFor(root, options.target, initialBuild, deps);
+  const closure = path.resolve(root, options.closure ?? "dist/kiro-agent-closure");
+  const initialBuild = verifyBuildClosure(root, closure); // fail BEFORE creating .tmp/acquiring
+  const context = contextFor(root, options.target, initialBuild, deps, closure);
   return withInstallerArtifactLease(root, async () => {
     const parent = cacheDirectory(root, true), active = await validateActiveCompleteBundle(parent);
     const reused = await lookup(context, parent, active);
@@ -188,7 +199,7 @@ export async function buildCompleteBundleForTest(options, deps) {
     const staging = path.join(parent, `.complete-bundle-${randomBytes(16).toString("hex")}`);
     fs.mkdirSync(staging, { mode: 0o700 });
     try {
-      copyClosure(path.join(root, "dist/kiro-agent-closure"), path.join(staging, "app"));
+      copyClosure(context.closure, path.join(staging, "app"));
       for (const tool of Object.keys(pins)) for (const member of pins[tool].members) {
         const file = path.join(staging, member.path);
         fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -219,6 +230,11 @@ export async function buildCompleteBundleForTest(options, deps) {
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const args = process.argv.slice(2);
-  if (args.length && !(args.length === 2 && args[0] === "--target")) throw new Error("Usage: build-complete-bundle.mjs [--target TARGET]");
-  console.log(JSON.stringify(await buildCompleteBundle(args.length ? { target: args[1] } : {})));
+  const options = {};
+  for (let i = 0; i < args.length; i += 2) {
+    const key = { '--target': 'target', '--closure': 'closure' }[args[i]];
+    if (!key || !args[i + 1] || Object.hasOwn(options, key)) throw new Error('Usage: build-complete-bundle.mjs [--target TARGET] [--closure DIRECTORY]');
+    options[key] = args[i + 1];
+  }
+  console.log(JSON.stringify(await buildCompleteBundle(options)));
 }

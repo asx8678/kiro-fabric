@@ -31,6 +31,7 @@ function decodeRequest(raw) {
   fabricJsonText(v, FOVEA_REQUEST_CHARS);
   if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Fovea protocol identity mismatch");
   if ((v.type === "cancel" || v.type === "shutdown") && keys(v, ["version", "type", "id"])) return v;
+  if (v.type === "retireConversation" && keys(v, ["version", "type", "id", "conversationId", "conversationEpoch"]) && identifier(v.conversationId) && epoch(v.conversationEpoch)) return v;
   if (v.type === "initialize" && keys(v, ["version", "type", "id", "options"]) && record(v.options)) {
     const o = v.options, p = o.parser;
     if (keys(o, ["parser", "storageRoot", "gitPath"]) && typeof o.storageRoot === "string" && o.storageRoot.length <= 4096 && (o.gitPath === void 0 || typeof o.gitPath === "string" && o.gitPath.length <= 4096) && record(p) && keys(p, ["path", "sha256", "version", "generationRoot"]) && typeof p.path === "string" && p.path.length <= 4096 && typeof p.sha256 === "string" && /^[a-f0-9]{64}$/u.test(p.sha256) && typeof p.version === "string" && p.version.length <= 100 && (p.generationRoot === void 0 || typeof p.generationRoot === "string" && p.generationRoot.length <= 4096)) return v;

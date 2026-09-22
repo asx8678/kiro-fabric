@@ -24,6 +24,14 @@ process.on("message", raw => {
       send({ version: 1, id: message.id, ok: true, value: { initialized: true, ipcVersion: 1 } }); return;
     }
     if (!engine) throw new Error("Fovea not initialized");
+    if (message.type === "retireConversation") {
+      current = { id: message.id, controller: new AbortController() };
+      try {
+        await engine.retireConversation(message.conversationId, message.conversationEpoch);
+        send({ version: 1, id: message.id, ok: true, value: { retired: true } });
+      } finally { current = undefined; }
+      return;
+    }
     const controller = new AbortController(); current = { id: message.id, controller };
     const timer = setTimeout(() => controller.abort(new Error("Fovea worker deadline expired")), message.remainingMs);
     try {

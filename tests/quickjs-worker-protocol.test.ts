@@ -16,7 +16,7 @@ await import("../src/runtime/sandbox-worker-entry.js");
 const result: FabricSandboxResult = { value: true, logs: [], terminationReason: "completed", effectiveTimeoutMs: 100 };
 const executions: Array<{ host: FabricHostCall; options: FabricSandboxOptions; finish: (result: FabricSandboxResult) => void }> = [];
 const send = (request: SandboxWorkerRequest) => mock.port.emit("message", request);
-const start = (executionId: string) => send({ type: "run", executionId, code: "return true", options: { timeoutMs: 100, maxTimeoutMs: 4_000, memoryLimitBytes: 32 * 1024 * 1024, tracerEnabled: true } });
+const start = (executionId: string) => send({ type: "run", executionId, code: "return true", cancellationBuffer: new SharedArrayBuffer(4), options: { timeoutMs: 100, maxTimeoutMs: 4_000, memoryLimitBytes: 32 * 1024 * 1024, tracerEnabled: true } });
 const messages = () => mock.port.postMessage.mock.calls.map(call => call[0] as SandboxWorkerMessage);
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 beforeEach(() => {

@@ -4,7 +4,7 @@ import fs from "node:fs";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawnSync } from "node:child_process";
+import childProcess, { execFileSync, spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { build } from "esbuild";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -28,6 +28,7 @@ const temporary = (): string => {
   return root;
 };
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
 });
 
@@ -43,6 +44,25 @@ const seedConfiguration = (kiroHome: string): void => {
   // Managed tree must be excluded from the configuration backup.
   fs.mkdirSync(path.join(kiroHome, "kiro-fabric", "runtime"), { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(kiroHome, "kiro-fabric", "runtime", "payload"), "managed", { mode: 0o600 });
+};
+
+type PinnedCall = { executable: string; args: string[]; options: SpawnSyncOptionsWithStringEncoding & { input: Buffer; cwd: string } };
+const nativePinnedSpawn = childProcess.spawnSync;
+const pinnedRequest = (call: PinnedCall): Record<string, unknown> => JSON.parse(call.options.input.subarray(4, 4 + call.options.input.readUInt32BE()).toString());
+const injectPinned = (call: PinnedCall, source: string): void => { call.args[2] = source + "\n" + call.args[2]; };
+const forcePinnedChildren = (): void => {
+  const original = fs.statSync;
+  vi.spyOn(fs, "statSync").mockImplementation(((...args: Parameters<typeof fs.statSync>) => {
+    if (String(args[0]).startsWith("/proc/self/fd/") && String(args[0]).endsWith("/.")) throw Object.assign(new Error("fixture: use fd3 child"), { code: "ENOTDIR" });
+    return original(...args);
+  }) as typeof fs.statSync);
+};
+const interceptPinnedChildren = (action: (call: PinnedCall) => void): void => {
+  vi.spyOn(childProcess, "spawnSync").mockImplementation(((executable, args, options) => {
+    const call = { executable, args: [...(args ?? [])], options: { ...options } } as PinnedCall;
+    action(call);
+    return nativePinnedSpawn(call.executable, call.args, call.options) as SpawnSyncReturns<string>;
+  }) as typeof childProcess.spawnSync);
 };
 
 const treeDigest = (root: string, skipManaged = false): string => {
@@ -117,6 +137,101 @@ describe("configuration backup", () => {
     fs.mkdirSync(path.join(clean, "kiro-fabric"), { mode: 0o700 });
     expect(() => restoreConfigurationBackup(backup.path, clean)).toThrow(/modified backup/);
     expect(fs.existsSync(path.join(clean, "settings"))).toBe(false);
+  });
+
+  it.each(["missing file", "missing link", "missing directory", "extra file", "extra directory", "extra link", "omitted parent", "duplicate", "cross-type duplicate", "wrong type", "bad array", "bad size", "bad mode", "bad target", "alias", "managed tree", "skipped parent", "entry bound", "depth bound", "manifest bound"])("rejects malformed restore inventory before effects: %s", kind => {
+    const home = temporary(), destination = temporary();
+    seedConfiguration(home);
+    fs.mkdirSync(path.join(home, "empty"), { mode: 0o700 });
+    const backup = backupOf(home, "install"), manifestPath = path.join(backup.path, "backup-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    if (kind === "missing file") fs.unlinkSync(path.join(backup.path, "executable.sh"));
+    if (kind === "missing link") fs.unlinkSync(path.join(backup.path, "current-settings"));
+    if (kind === "missing directory") fs.rmdirSync(path.join(backup.path, "empty"));
+    if (kind === "extra file") fs.writeFileSync(path.join(backup.path, "extra"), "x", { mode: 0o600 });
+    if (kind === "extra directory") fs.mkdirSync(path.join(backup.path, "extra"), { mode: 0o700 });
+    if (kind === "extra link") fs.symlinkSync("missing", path.join(backup.path, "extra"));
+    if (kind === "omitted parent") manifest.directories = manifest.directories.filter((entry: { path: string }) => entry.path !== "settings");
+    if (kind === "duplicate") manifest.files.push(manifest.files[0]);
+    if (kind === "cross-type duplicate") manifest.symlinks.push({ path: manifest.files[0].path, target: "x" });
+    if (kind === "wrong type") { fs.unlinkSync(path.join(backup.path, "current-settings")); fs.mkdirSync(path.join(backup.path, "current-settings"), { mode: 0o700 }); }
+    if (kind === "bad array") manifest.files = {};
+    if (kind === "bad size") manifest.files[0].size = -1;
+    if (kind === "bad mode") manifest.directories[0].mode = "700";
+    if (kind === "bad target") manifest.symlinks[0].target = null;
+    if (kind === "alias") manifest.files[0].path = "settings/../executable.sh";
+    if (kind === "managed tree") manifest.directories.push({ path: "kiro-fabric", mode: 0o700 });
+    if (kind === "skipped parent") manifest.skipped.push({ path: "absent/skip", reason: "hardlinked" });
+    if (kind === "entry bound") manifest.symlinks = Array.from({ length: 20001 }, (_, i) => ({ path: `link-${i}`, target: "x" }));
+    if (kind === "depth bound") manifest.symlinks.push({ path: Array(35).fill("deep").join("/"), target: "x" });
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    if (kind === "manifest bound") fs.truncateSync(manifestPath, 4 * 1024 * 1024 + 1);
+    const before = treeDigest(destination);
+    const mkdir = vi.spyOn(fs, "mkdirSync"), chmod = vi.spyOn(fs, "chmodSync"), write = vi.spyOn(fs, "writeFileSync"), link = vi.spyOn(fs, "symlinkSync");
+    expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow();
+    expect(mkdir).not.toHaveBeenCalled(); expect(chmod).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled(); expect(link).not.toHaveBeenCalled();
+    expect(treeDigest(destination)).toBe(before);
+  });
+
+  it.each([false, true])("rejects outward destination parent before any effects (synthetic=%s)", synthetic => {
+    const home = temporary(), destination = temporary(), outside = temporary();
+    fs.mkdirSync(path.join(home, "pivot"), { mode: 0o700 });
+    fs.mkdirSync(path.join(home, "aaa-first"), { mode: 0o700 });
+    fs.symlinkSync("synthetic-target", path.join(home, "pivot/restored-link"));
+    const backup = backupOf(home, "install");
+    if (synthetic) {
+      fs.writeFileSync(path.join(backup.path, "backup-manifest.json"), JSON.stringify({ schemaVersion: 1, files: [], directories: [], symlinks: [{ path: "pivot/restored-link", target: "synthetic-target" }] }));
+      fs.unlinkSync(path.join(backup.path, "pivot/restored-link"));
+      fs.rmdirSync(path.join(backup.path, "pivot"));
+    }
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    fs.symlinkSync(outside, path.join(destination, "pivot"));
+    const before = treeDigest(destination), external = treeDigest(outside);
+    const mkdir = vi.spyOn(fs, "mkdirSync"), link = vi.spyOn(fs, "symlinkSync");
+    expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow();
+    expect(mkdir).not.toHaveBeenCalled(); expect(link).not.toHaveBeenCalled();
+    expect(treeDigest(destination)).toBe(before); expect(treeDigest(outside)).toBe(external);
+    expect(fs.lstatSync(path.join(destination, "pivot")).isSymbolicLink()).toBe(true);
+  });
+
+  it.each(["file parent", "link parent", "skipped present", "manifest symlink", "manifest hardlink", "oversized file", "destination collision"])("fails closed on restore evidence or destination hazard: %s", kind => {
+    const home = temporary(), destination = temporary(), outside = temporary();
+    seedConfiguration(home);
+    const backup = backupOf(home, "install"), manifestPath = path.join(backup.path, "backup-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    if (kind === "file parent" || kind === "link parent") manifest.symlinks.push({ path: `${kind === "file parent" ? "executable.sh" : "current-settings"}/child`, target: "x" });
+    if (kind === "skipped present") { manifest.skipped.push({ path: "skip", reason: "hardlinked" }); fs.writeFileSync(path.join(backup.path, "skip"), "x", { mode: 0o600 }); }
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    if (kind === "manifest symlink") { fs.renameSync(manifestPath, path.join(outside, "manifest")); fs.symlinkSync(path.join(outside, "manifest"), manifestPath); }
+    if (kind === "manifest hardlink") fs.linkSync(manifestPath, path.join(outside, "manifest"));
+    if (kind === "oversized file") { const file = path.join(backup.path, "executable.sh"); fs.chmodSync(file, 0o600); fs.truncateSync(file, 65 * 1024 * 1024); }
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    if (kind === "destination collision") fs.writeFileSync(path.join(destination, "executable.sh"), "keep", { mode: 0o600 });
+    const before = treeDigest(destination), external = treeDigest(outside);
+    const mkdir = vi.spyOn(fs, "mkdirSync"), chmod = vi.spyOn(fs, "chmodSync"), write = vi.spyOn(fs, "writeFileSync"), link = vi.spyOn(fs, "symlinkSync");
+    expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow();
+    expect(mkdir).not.toHaveBeenCalled(); expect(chmod).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled(); expect(link).not.toHaveBeenCalled();
+    expect(treeDigest(destination)).toBe(before); expect(treeDigest(outside)).toBe(external);
+  });
+
+  it("restores intact legacy v1 metadata with unordered parents, empty directories and verbatim outward links", () => {
+    const home = temporary(), destination = temporary(), outside = temporary();
+    seedConfiguration(home);
+    fs.mkdirSync(path.join(home, "nested/empty"), { recursive: true, mode: 0o700 });
+    fs.symlinkSync(outside, path.join(home, "outward"));
+    const backup = backupOf(home, "install"), manifestPath = path.join(backup.path, "backup-manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    delete manifest.sourceRoot;
+    manifest.directories.reverse();
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    expect(restoreConfigurationBackup(backup.path, destination)).toMatchObject({ restored: 3, symlinks: 2 });
+    expect(fs.readdirSync(path.join(destination, "nested/empty"))).toEqual([]);
+    expect(fs.readlinkSync(path.join(destination, "outward"))).toBe(outside);
+    expect(fs.readdirSync(outside)).toEqual([]);
   });
 
   it("fails closed on oversized files and foreign link components without partial backups", () => {
@@ -594,97 +709,104 @@ describe("configuration backup", () => {
   it("preserves exact recorded modes under umask 077 without chmodding preexisting directories", () => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
-    fs.chmodSync(path.join(kiroHome, "settings"), 0o750);
+    fs.chmodSync(path.join(kiroHome, "settings"), 0o500);
     fs.chmodSync(path.join(kiroHome, "settings", "global.json"), 0o644);
     fs.chmodSync(path.join(kiroHome, "executable.sh"), 0o755);
     fs.chmodSync(path.join(kiroHome, "agents"), 0o750);
     const backup = backupOf(kiroHome, "install");
+    // The backup has captured the read-only mode; restore fixture traversal for teardown.
+    fs.chmodSync(path.join(kiroHome, "settings"), 0o700);
     const destination = temporary();
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    fs.mkdirSync(path.join(destination, "agents"), { mode: 0o711 });
-    fs.chmodSync(path.join(destination, "agents"), 0o711);
+    fs.mkdirSync(path.join(destination, "agents"), { mode: 0o750 });
+    fs.chmodSync(path.join(destination, "agents"), 0o750);
     const previousUmask = process.umask(0o077);
     try {
       restoreConfigurationBackup(backup.path, destination);
     } finally {
       process.umask(previousUmask);
     }
-    expect(fs.statSync(path.join(destination, "settings")).mode & 0o777).toBe(0o750);
-    expect(fs.statSync(path.join(destination, "settings", "global.json")).mode & 0o777).toBe(0o644);
-    expect(fs.statSync(path.join(destination, "executable.sh")).mode & 0o777).toBe(0o755);
-    expect(fs.statSync(path.join(destination, "agents")).mode & 0o777).toBe(0o711);
+    try {
+      expect(fs.statSync(path.join(destination, "settings")).mode & 0o777).toBe(0o500);
+      expect(fs.statSync(path.join(destination, "settings", "global.json")).mode & 0o777).toBe(0o644);
+      expect(fs.statSync(path.join(destination, "executable.sh")).mode & 0o777).toBe(0o755);
+      expect(fs.statSync(path.join(destination, "agents")).mode & 0o777).toBe(0o750);
+    } finally {
+      fs.chmodSync(path.join(destination, "settings"), 0o700);
+    }
   });
 
-  it("reports incomplete cleanup without masking the primary restore failure", () => {
+  it("rejects preexisting directory mode drift before pinned effects", () => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
-    const backup = backupOf(kiroHome, "install");
-    const destination = temporary();
+    fs.chmodSync(path.join(kiroHome, "agents"), 0o750);
+    const backup = backupOf(kiroHome, "install"), destination = temporary();
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    const stranded = path.join(destination, "settings", "global.json");
-    const originalSymlink = fs.symlinkSync;
-    vi.spyOn(fs, "symlinkSync").mockImplementation(((...args: Parameters<typeof fs.symlinkSync>) => {
-      if (args[1] === path.join(destination, "current-settings")) throw new Error("injected restore failure");
-      return originalSymlink(...args);
-    }) as typeof fs.symlinkSync);
-    const originalUnlink = fs.unlinkSync;
-    vi.spyOn(fs, "unlinkSync").mockImplementation(((...args: Parameters<typeof fs.unlinkSync>) => {
-      if (args[0] === stranded) throw new Error("injected cleanup failure");
-      return originalUnlink(...args);
-    }) as typeof fs.unlinkSync);
+    fs.mkdirSync(path.join(destination, "agents"), { mode: 0o711 });
+    fs.chmodSync(path.join(destination, "agents"), 0o711);
+    const spawn = vi.spyOn(childProcess, "spawnSync");
+    expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow(/directory mode mismatch: agents/);
+    expect(fs.statSync(path.join(destination, "agents")).mode & 0o777).toBe(0o711);
+    expect(spawn).not.toHaveBeenCalled();
+  });
 
+  it.each([
+    { phase: "mkdir", operation: "mkdir0700", name: "child", method: "mkdirSync", parent: "pivot" },
+    { phase: "directory chmod", operation: "chmodDirectory", name: "child", method: "fchmodSync", parent: "pivot" },
+    { phase: "file", operation: "writeExclusive", name: "global.json", method: "openSync", parent: "settings" },
+    { phase: "symlink", operation: "symlinkExclusive", name: "legacy", method: "symlinkSync", parent: "links" },
+  ] as const)("pins the checked parent across an outward swap immediately before $phase", scenario => {
+    const kiroHome = temporary(), destination = temporary(), outside = temporary();
+    seedConfiguration(kiroHome);
+    fs.mkdirSync(path.join(kiroHome, "pivot", "child"), { recursive: true, mode: 0o700 });
+    fs.chmodSync(path.join(kiroHome, "pivot", "child"), 0o750);
+    fs.mkdirSync(path.join(kiroHome, "links"), { mode: 0o700 });
+    fs.symlinkSync("../settings/global.json", path.join(kiroHome, "links", "legacy"));
+    fs.symlinkSync("../settings/global.json", path.join(kiroHome, "links", "zz-failure"));
+    fs.mkdirSync(path.join(kiroHome, "nested", "empty"), { recursive: true, mode: 0o700 });
+    const backup = backupOf(kiroHome, "install");
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    if (["pivot", "settings", "links"].includes(scenario.parent)) fs.mkdirSync(path.join(destination, scenario.parent), { mode: 0o700 });
+    fs.writeFileSync(path.join(outside, "marker"), "outside unchanged", { mode: 0o600 });
+    const outsideBefore = treeDigest(outside), checkedParent = path.join(destination, scenario.parent), evidence = checkedParent + "-evidence";
+    forcePinnedChildren();
+    let raced = false;
+    interceptPinnedChildren(call => {
+      const request = pinnedRequest(call);
+      if (!raced && request.operation === scenario.operation && request.name === scenario.name && call.options.cwd === checkedParent) {
+        raced = true;
+        injectPinned(call, `(() => { const fs = require('node:fs'), effect = fs.${scenario.method}; let once = false; fs.${scenario.method} = (...args) => { if (!once) { once = true; fs.${scenario.method} = effect; fs.renameSync(${JSON.stringify(checkedParent)}, ${JSON.stringify(evidence)}); fs.symlinkSync(${JSON.stringify(outside)}, ${JSON.stringify(checkedParent)}); } return effect(...args); }; })();`);
+      }
+    });
     let failure: unknown;
     try { restoreConfigurationBackup(backup.path, destination); } catch (error) { failure = error; }
-    expect(failure).toBeInstanceOf(AggregateError);
-    expect(failure).toMatchObject({ cause: expect.objectContaining({ message: "injected restore failure" }) });
-    expect((failure as Error).message).toContain("cleanup was incomplete");
-    expect(fs.existsSync(stranded)).toBe(true);
-    expect(fs.existsSync(path.join(destination, "executable.sh"))).toBe(false);
-    expect(fs.existsSync(path.join(destination, "agents", "foreign.json"))).toBe(false);
+    expect(failure).toBeInstanceOf(Error);
+    expect(raced).toBe(true);
+    expect(treeDigest(outside)).toBe(outsideBefore);
+    expect(fs.readFileSync(path.join(outside, "marker"), "utf8")).toBe("outside unchanged");
+    expect(fs.lstatSync(checkedParent).isSymbolicLink()).toBe(true);
+    expect(fs.lstatSync(evidence).isDirectory()).toBe(true);
   });
 
-  it("unwinds its own creations when a directory mode or file content write fails", () => {
+  it("preserves published evidence and never compare-then-deletes after a later pinned failure", () => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
-    const backup = backupOf(kiroHome, "install");
-    for (const scenario of ["directory-chmod", "file-write", "file-fchmod"] as const) {
-      const destination = temporary();
-      fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-      const targetDirectory = path.join(destination, "settings");
-      const targetFile = path.join(targetDirectory, "global.json");
-      const originalOpen = fs.openSync, originalChmod = fs.chmodSync, originalFchmod = fs.fchmodSync, originalWrite = fs.writeFileSync;
-      let ownedDescriptor: number | undefined;
-      vi.spyOn(fs, "openSync").mockImplementation(((...args: Parameters<typeof fs.openSync>) => {
-        const descriptor = originalOpen(...args) as number;
-        if (args[0] === targetFile) ownedDescriptor = descriptor;
-        return descriptor;
-      }) as typeof fs.openSync);
-      vi.spyOn(fs, "chmodSync").mockImplementation(((...args: Parameters<typeof fs.chmodSync>) => {
-        if (scenario === "directory-chmod" && args[0] === targetDirectory) throw Object.assign(new Error("injected chmod failure"), { code: "EIO" });
-        return originalChmod(...args);
-      }) as typeof fs.chmodSync);
-      vi.spyOn(fs, "fchmodSync").mockImplementation(((...args: Parameters<typeof fs.fchmodSync>) => {
-        if (scenario === "file-fchmod" && args[0] === ownedDescriptor) throw Object.assign(new Error("injected fchmod failure"), { code: "EIO" });
-        return originalFchmod(...args);
-      }) as typeof fs.fchmodSync);
-      vi.spyOn(fs, "writeFileSync").mockImplementation(((target: unknown, data: unknown, options?: unknown) => {
-        if (scenario === "file-write" && target === ownedDescriptor && ownedDescriptor !== undefined) {
-          fs.writeSync(ownedDescriptor, "{");
-          throw Object.assign(new Error("injected write failure"), { code: "ENOSPC" });
-        }
-        return (originalWrite as (...rest: unknown[]) => unknown)(target, data, options);
-      }) as typeof fs.writeFileSync);
-      try {
-        expect(() => restoreConfigurationBackup(backup.path, destination), scenario).toThrow(/injected/u);
-        // Nothing this attempt created may survive: a stranded directory or a
-        // partial settings file would block the retry as "already exists".
-        expect(fs.existsSync(targetFile), scenario).toBe(false);
-        expect(fs.existsSync(targetDirectory), scenario).toBe(false);
-        vi.restoreAllMocks();
-        expect(() => restoreConfigurationBackup(backup.path, destination), scenario).not.toThrow();
-        expect(fs.readFileSync(targetFile, "utf8"), scenario).toBe('{"theme":"dark"}\n');
-      } finally { vi.restoreAllMocks(); }
-    }
+    const backup = backupOf(kiroHome, "install"), destination = temporary();
+    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    forcePinnedChildren();
+    const operations: string[] = [];
+    interceptPinnedChildren(call => {
+      const request = pinnedRequest(call);
+      if (typeof request.operation === "string") operations.push(request.operation);
+      if (request.operation === "symlinkExclusive" && request.name === "current-settings") {
+        injectPinned(call, `require('node:fs').symlinkSync = () => { throw Error('injected restore failure'); };`);
+      }
+    });
+    expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow(/partial entries may have been preserved/);
+    expect(fs.readFileSync(path.join(destination, "settings", "global.json"), "utf8")).toBe('{"theme":"dark"}\n');
+    expect(operations).not.toContain("unlink");
+    expect(operations).not.toContain("unlinkSymlink");
+    expect(operations).not.toContain("rmdir");
   });
 
   it("exposes list and restore through the module CLI", () => {

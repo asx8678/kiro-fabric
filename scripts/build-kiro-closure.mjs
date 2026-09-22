@@ -14,7 +14,15 @@ import { renderAgentGuidance } from "./generate-agent-guidance.mjs";
 const root = path.resolve(".");
 const buildInputs = captureBuildInputs(root);
 if (fs.readFileSync(path.join(root, "src/kiro/generated-guidance.ts"), "utf8") !== renderAgentGuidance(root)) throw new Error("Bundled guidance is stale; run pnpm run build");
-const outdir = path.join(root, "dist", "kiro-agent-closure");
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--outdir' || !args[1])) throw Error('Usage: build-kiro-closure.mjs [--outdir NEW_DIRECTORY]');
+const outdir = args.length ? path.resolve(args[1]) : path.join(root, "dist", "kiro-agent-closure");
+// A fresh explicit output cannot overwrite tracked closure/native bytes. Resolve
+// its parent before creation so symlink aliases cannot redirect the build.
+if (args.length) {
+  const parent = fs.realpathSync(path.dirname(outdir));
+  if (parent !== path.dirname(outdir)) throw Error('Closure output parent must be canonical');
+}
 const product = JSON.parse(fs.readFileSync(path.join(root, "agent-product.json"), "utf8"));
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 if (product.entrypoint !== "src/kiro/mcp-entry.ts") throw new Error("Agent product entrypoint drifted");
@@ -26,7 +34,10 @@ for (const allowed of allowedDirect) {
   if (!Object.hasOwn(pkg.dependencies ?? {}, allowed)) throw new Error(`Agent manifest allows an unused direct dependency: ${allowed}`);
 }
 
-fs.rmSync(outdir, { recursive: true, force: true });
+// Explicit outputs are fresh and retained, including on failure. Never erase a
+// caller-selected directory. The legacy local build keeps its default behavior.
+if (!args.length) fs.rmSync(outdir, { recursive: true, force: true });
+else fs.mkdirSync(outdir, { mode: 0o700 });
 const external = [...new Set(builtinModules.flatMap((name) => [name, name.startsWith("node:") ? name.slice(5) : `node:${name}`]))];
 // jsonc-parser advertises a legacy UMD `main` before its ESM `module`. The UMD
 // entry contains runtime-relative CommonJS requires that cannot be relocated
@@ -144,6 +155,7 @@ const kiroProviderFiles = new Set([
   "src/kiro/mcp-provider.ts",
   "src/kiro/memory-provider.ts",
   "src/kiro/memory.ts",
+  "src/kiro/storage-identity.ts",
   "src/kiro/power/artifacts-provider.ts",
 ]);
 const classify = (file) => file.startsWith("src/providers/") || kiroProviderFiles.has(file)
@@ -152,13 +164,20 @@ const classify = (file) => file.startsWith("src/providers/") || kiroProviderFile
     ? "agent-runtime"
     : "checked-execution-kernel";
 const byClass = Object.groupBy(sourceInputs, classify);
-const evidenceDirectory = path.join(root, ".tmp");
+// Explicit closure outputs retain generation-local evidence beside that
+// closure. Candidate builds may run concurrently; they must never overwrite
+// the checkout-global development witness or each other's evidence.
+const evidencePath = args.length
+  ? path.join(path.dirname(outdir), `${path.basename(outdir)}-agent-reachability.json`)
+  : path.join(root, ".tmp", "agent-reachability.json");
+const evidenceDirectory = path.dirname(evidencePath);
 fs.mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
 const evidenceStats = fs.lstatSync(evidenceDirectory);
-if (!evidenceStats.isDirectory() || evidenceStats.isSymbolicLink()) throw new Error(".tmp must be a regular checkout-local directory");
-if (process.platform !== "win32" && typeof process.getuid === "function" && evidenceStats.uid !== process.getuid()) throw new Error(".tmp must be owned by the current user");
-fs.chmodSync(evidenceDirectory, 0o700);
-fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSON.stringify({
+if (!evidenceStats.isDirectory() || evidenceStats.isSymbolicLink()) throw new Error("Reachability evidence parent must be a regular directory");
+if (process.platform !== "win32" && typeof process.getuid === "function" && evidenceStats.uid !== process.getuid()) throw new Error("Reachability evidence parent must be owned by the current user");
+if (process.platform !== "win32" && (evidenceStats.mode & 0o077)) throw new Error("Reachability evidence parent must be private");
+if (!args.length) fs.chmodSync(evidenceDirectory, 0o700);
+fs.writeFileSync(evidencePath, `${JSON.stringify({
   schemaVersion: 1,
   entrypoints: [product.entrypoint, ...Object.values(product.runtimeAssets)],
   sourceInputs,
@@ -181,7 +200,7 @@ fs.writeFileSync(path.join(evidenceDirectory, "agent-reachability.json"), `${JSO
     "scripts/package-identity.mjs",
     "scripts/release-candidate-report.mjs",
   ],
-}, null, 2)}\n`);
+}, null, 2)}\n`, { flag: args.length ? "wx" : "w", mode: 0o600 });
 
 const files = [];
 const walk = (directory) => {

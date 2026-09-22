@@ -43,7 +43,8 @@ export class FoveaHost {
   readonly #scheduler = new FoveaScheduler();
   readonly #outbox = new FoveaOutbox();
   readonly #calls = new FoveaCallContexts();
-  readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string> }>();
+  readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string>; leases: Set<FoveaLease> }>();
+  readonly #retirements = new Map<string, Promise<void>>();
   readonly #process: FoveaEngineProcess | undefined;
   readonly #observed = new Map<string, { paths: Set<string>; dirty: boolean; gap: boolean; operations: number }>();
   readonly #journal: Promise<FoveaProvenanceJournal | undefined>;
@@ -68,25 +69,57 @@ export class FoveaHost {
   bind(authority: FoveaBindingAuthority): FoveaBoundClient {
     this.#lifetime.signal.throwIfAborted();
     const lease = this.#leases.issue(authority);
-    try { this.#conversation(lease); }
+    try { this.#conversation(lease).leases.add(lease); }
     catch (error) { this.#leases.revoke(lease); throw error; }
     const observer: FoveaObserver = { observe: event => this.#observe(lease, event), gap: () => { if (lease.signal.aborted || this.#lifetime.signal.aborted) return; const state = this.#observation(lease); state.gap = true; state.dirty = true; } };
-    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#leases.revoke(lease); this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId); this.#observed.delete(lease.rootId); this.#preparations.delete(lease.rootId); } };
+    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#release(lease); } };
   }
-  #conversation(lease: FoveaLease): { configuration: FoveaConfiguration; trustedRules: Map<string, string> } {
+  #release(lease: FoveaLease): void {
+    this.#leases.revoke(lease);
+    this.#results.revoke(lease.rootId, lease.authorizationEpoch);
+    this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId);
+    this.#observed.delete(lease.rootId); this.#preparations.delete(lease.rootId);
+    this.#conversations.get(JSON.stringify([lease.conversationId, lease.conversationEpoch]))?.leases.delete(lease);
+  }
+  /** Trusted lifecycle only, never repo.*. Revocation is synchronous; completion
+   * joins selective engine cleanup across ALL roots, even closed/replaced bindings.
+   * Unlike binding.close/reset this forgets session settings and adopted trust.
+   * The caller owns lifecycle authority and must not regrant a retired epoch. */
+  retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
+    if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Fovea retirement owner");
+    this.#lifetime.signal.throwIfAborted();
+    const key = JSON.stringify([conversationId, conversationEpoch]);
+    const pending = this.#retirements.get(key);
+    if (pending) return pending;
+    const controls = this.#conversations.get(key);
+    if (!controls) return Promise.resolve();
+    for (const lease of [...controls.leases]) this.#release(lease);
+    controls.trustedRules.clear();
+    // Keep the capacity reservation until cleanup settles; do not admit an
+    // unlimited backlog or allow same-owner rebinding during retirement.
+    const task = this.#scheduler.run(this.#lifetime.signal, async () => {
+      await this.#process?.retireConversation(conversationId, conversationEpoch);
+      this.#conversations.delete(key);
+    }, true).then(() => { this.#retirements.delete(key); });
+    // Failed cleanup stays latched: no same-owner regrant or silent eviction.
+    this.#retirements.set(key, task);
+    return task;
+  }
+  #conversation(lease: FoveaLease): { configuration: FoveaConfiguration; trustedRules: Map<string, string>; leases: Set<FoveaLease> } {
     const key = JSON.stringify([lease.conversationId, lease.conversationEpoch]);
+    if (this.#retirements.has(key)) throw new Error("Fovea conversation retirement pending");
     let state = this.#conversations.get(key);
     if (!state) {
       // Retain controls across workspace-provider replacement, never inherit
       // them into another conversation/epoch or evict a live owner's choices.
       if (this.#conversations.size >= 128) throw new Error("Fovea conversation control capacity reached");
-      state = { configuration: new FoveaConfiguration(this.options.configFile), trustedRules: new Map() };
+      state = { configuration: new FoveaConfiguration(this.options.configFile), trustedRules: new Map(), leases: new Set() };
       this.#conversations.set(key, state);
     }
     return state;
   }
   async close(): Promise<void> {
-    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); this.#calls.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); })();
+    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); this.#calls.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); this.#retirements.clear(); })();
     return this.#closeTask;
   }
   #observation(lease: FoveaLease): { paths: Set<string>; dirty: boolean; gap: boolean; operations: number } {
@@ -179,9 +212,10 @@ export class FoveaHost {
           authorizationEpoch: lease.authorizationEpoch, operation: "impact", args: parameters,
         }, signal, budget);
       });
+      this.#check(lease, {}, context);
       this.#calls.analyzed(lease.rootId, this.#process.generation);
     } catch {
-      this.#calls.failed(lease.rootId);
+      if (!lease.signal.aborted && !this.#lifetime.signal.aborted) this.#calls.failed(lease.rootId);
       throw new Error("Fovea call context unavailable");
     }
     this.#check(lease, {}, context);
@@ -215,13 +249,14 @@ export class FoveaHost {
   #check(lease: FoveaLease, args: Record<string, unknown>, context: FabricInvocationContext): void { this.#lifetime.signal.throwIfAborted(); context.signal?.throwIfAborted(); context.deadline?.throwIfExpired(); this.#leases.check(lease, args.rootId); }
   async #invoke(lease: FoveaLease, operation: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
     this.#check(lease, args, context);
+    if (operation === "retireConversation") throw new Error("Private Fovea host operation");
     for (const key of ["commitPreparationId", "nativeProvenance", "trustedRulesSha256"]) if (key in args) throw new Error("Private Fovea host argument");
     await this.#journalTail;
     this.#check(lease, args, context);
     const controls = this.#conversation(lease), configuration = controls.configuration;
     if (operation === "status") {
       const state = this.#observed.get(lease.rootId), config = configuration.read(lease.worktreeId);
-      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "MCP-host-local; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
+      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
     }
     if (operation === "adoptRules") {
       if (typeof args.expectedSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedSha256)) throw new Error("Rule adoption requires exact local.read SHA-256");
@@ -247,7 +282,7 @@ export class FoveaHost {
       this.#check(lease, args, context);
       if (operation === "reload") {
         await this.#process!.restart(); configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay(); this.#calls.clear();
-        return { schemaVersion: 1, restarted: true, codeTransition: "same generation only; update and restart session for new code" };
+        return { schemaVersion: 1, restarted: true, scope: "process-wide", invalidates: "all engine navigation and retained results; not a session reset", codeTransition: "same generation only; update and restart session for new code" };
       }
       const { rootId: _rootId, ...parameters } = args;
       const config = configuration.read(lease.worktreeId).config;

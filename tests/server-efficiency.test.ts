@@ -14,6 +14,7 @@ const harness = vi.hoisted(() => ({
   runtimeCreates: 0,
   prepareRuntime: undefined as undefined | (() => Promise<any>),
   runtimeCloses: 0,
+  retirements: [] as Array<{ conversationId: string; conversationEpoch: number }>,
   temporarilyUnavailable: false,
 }));
 
@@ -53,6 +54,10 @@ vi.mock("../src/kiro/canonical-path.js", async (importOriginal) => ({
 vi.mock("../src/fovea/host.js", () => ({ FoveaHost: class {
   hostInstanceId = "fovea-test-owner";
   async close() {}
+  async retireConversation(conversationId: string, conversationEpoch: number) {
+    // No analysis leases can exist in this unbound projection fixture.
+    harness.retirements.push({ conversationId, conversationEpoch });
+  }
   bind() { throw new Error("Unbound projection fixture must not create an analysis lease"); }
 } }));
 vi.mock("../src/kiro/power/data-paths.js", async (importOriginal) => ({
@@ -109,6 +114,7 @@ beforeEach(() => {
   harness.executeResult = baseResult("ok"); harness.artifactError = undefined; harness.artifactWrites.length = 0;
   harness.prepareMutation = undefined; harness.commits.length = 0; harness.identity = "<unbound>";
   harness.runtimeCreates = 0; harness.prepareRuntime = undefined; harness.runtimeCloses = 0; harness.temporarilyUnavailable = false;
+  harness.retirements.length = 0;
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -122,6 +128,9 @@ describe("outer-host catalog authorization and synchronous revocation", () => {
     expect(b).toMatchObject({workspace:"/data",device:"1",inode:"1",authorizationEpoch:"1"});
     expect(a.clientSession).not.toBe(b.clientSession);
     await Promise.all([first.server.close(),second.server.close()]);
+    expect(harness.retirements).toHaveLength(2);
+    expect(new Set(harness.retirements.map(owner => owner.conversationId)).size).toBe(2);
+    expect(harness.retirements.every(owner => owner.conversationEpoch === 0)).toBe(true);
   });
   it.each(["close","workspace-switch","workspace-unavailable"])("revokes catalogs before draining a held execution on %s", async cause => {
     const f=await create(), entered=deferred<void>(), held=deferred<any>();
