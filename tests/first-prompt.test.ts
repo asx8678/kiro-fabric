@@ -79,7 +79,7 @@ function put(f: ReturnType<typeof fixture>, file: string, source = "fixture\n") 
 
 describe("first submitted prompt context", () => {
   it("keeps the first hook bounded and delimited", () => {
-    expect(Buffer.byteLength(FIRST_PROMPT_GUIDANCE)).toBeLessThan(400);
+    expect(Buffer.byteLength(FIRST_PROMPT_GUIDANCE)).toBeLessThanOrEqual(1000);
     expect(FIRST_PROMPT_GUIDANCE).toMatch(/^<fabric_initial_investigation>\n[\s\S]*\n<\/fabric_initial_investigation>$/);
   });
 

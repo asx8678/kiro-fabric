@@ -590,6 +590,7 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `src/kiro/fovea-call-context.ts` — native fovea call-context capture, propagation and joining.
 - `scripts/continuity-acp-probe.mjs` — offline ACP probe driver against the pinned wire fixture.
 - `scripts/install-tui.mjs` — presentation-only installer TUI front-end delegating to install.sh --source.
+- `scripts/installer-branding.mjs` — shared installer banner with the checkout's package version embedded at build time.
 - `tests/continuity-acp-probe.test.ts` — ACP probe contract, lifecycle and fault-injection coverage.
 - `tests/continuity-archive.test.ts` — archive identity, retention and refusal behavior.
 - `tests/continuity-handoff.test.ts` — handoff packet coverage, budgets and facade.
@@ -616,4 +617,3 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/install-tui.test.ts` — read-only help, confirmation options and private concurrent invocation logs.
 - `tests/memory-lock-recovery.test.ts` — cross-process recovery barriers for lock ownership and quota/publication races.
 - `tests/quickjs-cancellation-service.test.ts` — cancellation through service admission and refusal of late VM success.
-

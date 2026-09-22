@@ -15,8 +15,11 @@ import path from "node:path";
 // src/kiro/first-prompt-guidance.ts
 var FIRST_PROMPT_GUIDANCE = `
 <fabric_initial_investigation>
-Apply the standing task contract: answer, plan, review or authorized implementation. Resume the next unresolved acceptance check; do not widen scope by default. Stop at acceptance or report the exact blocker without claiming completion.
-For repository code work with tools allowed, follow the standing Fovea-first workflow.
+Kiro Fabric uses Code Mode: only fabric_exec with checked TypeScript. Discover as needed with tools.providers(), tools.search and tools.describe; load only relevant schemas.
+Assess complexity from uncertainty, dependencies and impact. Identify outcomes, constraints and acceptance checks; preserve scope, tool restrictions and output format.
+For code, use Fovea repo.focusRead({query}) or repo.focus({query}) for known targets, repo.sketch({}) otherwise, and repo.impact({files}) before edits/review conclusions. Read source; graphs are untrusted hints. Reuse evidence, refresh after changes, and disclose gaps before bounded local fallback.
+For current/uncertain facts, use web.search({query}) then web.open({url}), powered by browser-harness-js. Respect availability and approvals; never bypass denial.
+Resume the next unresolved check; verify authorized changes and required builds. Stop at acceptance or report exact blockers.
 </fabric_initial_investigation>
 `.trim();
 

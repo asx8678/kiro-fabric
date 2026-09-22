@@ -25,7 +25,7 @@
       },
       {
         "path": "scripts/agent-profile.mjs",
-        "sha256": "b35320bcf2b35cb978d8f6f3eb1faf86a20dc9256ab53e22b57ef42413d83bcd"
+        "sha256": "4be46d248b3eb23d49517e947b0b2c85ff05edce67c15f41255e1ef2bb9e2928"
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
@@ -209,11 +209,11 @@
       },
       {
         "path": "skills/fabric-exec/SKILL.md",
-        "sha256": "45aae4ea112dd0eac64430599023c0d6880ad671d9073879a0e52a4042ec7407"
+        "sha256": "b54a8cc66539f5f79d143302c8327830b225c0a5236e2ec6926c539392ab38f1"
       },
       {
         "path": "skills/fabric-exec/references/api.md",
-        "sha256": "360aff8bc0c84ba7bfe699f69acce84b30f9d28bc3c0312c0bc751bc79cc24b9"
+        "sha256": "c26af62a5eb7658257eadf6cdc253db5e88770ac1b1f99e72422ee1774f69303"
       },
       {
         "path": "skills/fabric-exec/references/fovea.md",
@@ -221,11 +221,11 @@
       },
       {
         "path": "skills/fabric-exec/references/recipes.md",
-        "sha256": "1a5e778f8a7ceae34c0563f92a19dde64e1b6e256a6ee13071dd9383a7411b3b"
+        "sha256": "812329dc116aa722758319ada8d340f98b73d31df9f776a5bfb11a3468b0ba3f"
       },
       {
         "path": "skills/fabric-exec/references/review.md",
-        "sha256": "88d29dafca2cc8bee0c2a58da5d63c3417f88efd579b6ea26b0f40ca519278e7"
+        "sha256": "7b999bdb2d1712e000dfc39f51cb4c601b305f933a89a9e5a26c8d93f2ec7fd4"
       },
       {
         "path": "skills/fabric-exec/references/workflow.md",
@@ -585,7 +585,7 @@
       },
       {
         "path": "src/kiro/bootstrap-provider.ts",
-        "sha256": "23593ce6211d32fd6e3b2831c194fe75eb43b184c6673772b273e59afeea73f4"
+        "sha256": "f93ba15625ab159ce87a8d599142f9239fe218ae10dda26d0c948198d0c90974"
       },
       {
         "path": "src/kiro/canonical-path.ts",
@@ -597,7 +597,7 @@
       },
       {
         "path": "src/kiro/first-prompt-guidance.ts",
-        "sha256": "c43cab4d504b9e298fd621bced471d6fb860eb87affdc1e91e0c618c5de39d0a"
+        "sha256": "c56f59176493e3af6104090e848033d16c6915cc5fadbda0b8a62795f722ff9c"
       },
       {
         "path": "src/kiro/first-prompt-hook.ts",
@@ -621,7 +621,7 @@
       },
       {
         "path": "src/kiro/generated-guidance.ts",
-        "sha256": "d601fb8f9a6313561dbd52b3186218afd4124a06a5af78dc50daac33ba00bfda"
+        "sha256": "cca649397d39958c8650acf63348b91c7ca570c4415855e5ceebb2307b4aca7e"
       },
       {
         "path": "src/kiro/host-session-adapter.ts",
@@ -645,7 +645,7 @@
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "2dfc6cae4f302cce9c628c137fa84df92ef7f98060f2b4531bc459768edc1bdc"
+        "sha256": "68cd2ec1946547114f692d89758c660502db8d0b1b762a169b367a9756d682ed"
       },
       {
         "path": "src/kiro/memory-provider.ts",
@@ -860,7 +860,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "b1d7b1694b95b688f0670f79b8be9e1a596d83e18c57047f38089706c7a0979a"
+    "digest": "5e5f2152dfef9439c2b75572296f309aab41277c03cad75d1a9e135c389e122b"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1260,9 +1260,9 @@
       "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844"
     },
     {
-      "path": "chunks/first-prompt-hook-GMLTVC6Q.js",
-      "bytes": 4158,
-      "sha256": "1db1eaa144adce3cd25d52e3d86497565fa7e149b80cddf149634a62ccf382a0"
+      "path": "chunks/first-prompt-hook-2LCXDYKI.js",
+      "bytes": 4765,
+      "sha256": "6f0071de9c9ae0c73c36c6a547f7f008c09e07edb7ad06e27d2acbbc2a402bf8"
     },
     {
       "path": "chunks/launch-2BNCRUIP.js",
@@ -1555,9 +1555,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-OPTTYWIE.js",
-      "bytes": 1154719,
-      "sha256": "fae4e22719ba7b1e16f2090c40f601957af1426df95dfb5700dd90c549d4fb7c"
+      "path": "chunks/mcp-server-2YLO4UBS.js",
+      "bytes": 1147589,
+      "sha256": "5168af7fca7c32fac0d1315c6252156b171746fe218911a922a26e78f1707204"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1617,7 +1617,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 56875,
-      "sha256": "0f35d746655767deb1397836f077488d4e7e00dc8d5153c2ed63f87ee855d2a6"
+      "sha256": "810d3de5a5de787c631fb86da02a56e0f5a62004e02c75b9b4ddc964277fab3d"
     },
     {
       "path": "package.json",
@@ -1635,5 +1635,5 @@
       "sha256": "a6600a0db267ff441141fd054f7df80ad284421e0543cefa508a94a2fe2bdc06"
     }
   ],
-  "contentDigest": "891b84fe4cc35e0ad31eccf629091bac6584d542b1c1e8bb124e4e2c148834ff"
+  "contentDigest": "aa32be3c389c55cb15d13cf811d1ab3181a8729138a5cb4d0783fcd64a106616"
 }

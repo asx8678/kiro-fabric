@@ -143,12 +143,14 @@ describe("Kiro Agent profile generation", () => {
     expect(() => generateAgentProfile({ ...options, steeringPath: "relative/steering.md" })).toThrow("steeringPath must be absolute");
   });
 
-  it("bounds the standing prompt and first-turn hook budget", () => {
-    // Measured pre-change first-turn guidance was 9,077 characters. This is a
-    // static size/contract guard, not proof of model quality or billed tokens.
-    // Reallocate some freed hook budget to admission/severity, not a larger total prompt.
+  it("bounds the standing prompt, first-turn hook and attached skill", () => {
+    // Count configured source text, including the full skill when activated.
+    // These guard against bloat; they do not measure delivery, tokens or quality.
     expect(AGENT_PROMPT.length).toBeLessThanOrEqual(8_600);
-    expect(AGENT_PROMPT.length + FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(9_077);
+    expect(FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(1_000);
+    expect(skill.length).toBeLessThanOrEqual(8_500);
+    expect(AGENT_PROMPT.length + FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(9_600);
+    expect(AGENT_PROMPT.length + FIRST_PROMPT_GUIDANCE.length + skill.length).toBeLessThanOrEqual(18_000);
   });
 
   it("keeps Kiro's per-call timeout beyond Fabric's maximum request envelope", () => {

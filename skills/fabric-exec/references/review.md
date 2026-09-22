@@ -36,7 +36,7 @@ Optional [typed review/probe/readEvidence recipes](api.md#optional-typed-operati
 
 ## Map once, then follow behavior
 
-Optional recipes follow; none is a required first call. Cold help+inventory→starter reads loads help unless payloads.reviewKnown="true"; do not choose it for no-guidance work. Focused tasks use search→read. Hypotheses require judgment.
+Optional recipes, not required first calls. For standard/review code tasks, use Fovea first; inventory/search fills coverage gaps (docs/config/unsupported languages). Known targets use focusRead. The starter loads help unless payloads.reviewKnown="true"; skip for no-guidance work. Hypotheses require judgment.
 
 ```ts
 // Recipe: initial review evidence
