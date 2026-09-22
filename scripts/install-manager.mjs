@@ -21,14 +21,9 @@ import { prepareLaunchProfile } from "./launch-profile.mjs";
 
 import { InstallerError, display, shellQuote, MANAGER_COMMANDS, parseManagerArguments, validateCommandOptions, managerHelp, formatManagerHelp } from "./installer-cli-contract.mjs";
 import { installedIdentity, installationGuidance, inspectSourceComparison, previewManagerOperation } from "./installer-diagnostics.mjs";
+import { INSTALLER_BANNER } from "./installer-branding.mjs";
 export { InstallerError, shellQuote, parseManagerArguments } from "./installer-cli-contract.mjs";
-
-export const INSTALLER_BANNER = [
-  "+--------------------------------------+",
-  "|             KIRO FABRIC              |",
-  "|      Native agent + orchestration    |",
-  "+--------------------------------------+",
-].join("\n") + "\n";
+export { INSTALLER_BANNER } from "./installer-branding.mjs";
 
 function installedVersionLabel(identity) {
   if (identity?.version) return `${identity.version} (${identity.status})`;
@@ -318,7 +313,8 @@ export async function runManager(argv, internal = {}) {
       process.stderr.write(`Kiro Fabric\nSystem        ${platform.target}\nKiro CLI      ${kiro ? `Found (${kiro.version})` : "Not required for this operation"}\nKiro home     ${display(home)} (${selected.source})\nOperation     ${options.command}\nDurable data is retained. Preparation, backups and requested configuration changes may remain if a later step fails.\n`);
       if (installation) process.stderr.write(`Installed     ${display(installedVersionLabel(installedIdentity(installation)))}\n`);
       if (["install", "update"].includes(options.command)) {
-        process.stderr.write("Will install  Fabric backend, private Node/ripgrep, manager, agent profile, skills and steering\n");
+        process.stderr.write("Will install  Fabric + Fovea, private Node/ripgrep/ast-grep, manager, agent profile, skills and steering\n");
+        process.stderr.write(`Install root  ${display(path.join(home, "kiro-fabric"))}\nAgent profile ${display(path.join(home, "agents", "kiro-fabric.json"))}\nExisting skills and configuration are preserved. Older runtime generations are retained for existing sessions and rollback.\n`);
         process.stderr.write(`Target        ${options.version ? `${display(options.version)} (requested; verification pending)` : "Version determined after bundle verification"}\nKiro CLI is already installed; it will not be installed, upgraded or authenticated by this installer.\n`);
       }
       if (spec.backup) process.stderr.write(`Backup root   ${display(path.join(home, "kiro-fabric", "backups"))} (configuration only; created if the home exists)\n`);

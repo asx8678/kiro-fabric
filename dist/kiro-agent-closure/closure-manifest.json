@@ -41,7 +41,7 @@
       },
       {
         "path": "scripts/build-complete-bundle.mjs",
-        "sha256": "33b052f02ef9f9d6c5fcf16634520e16d2a1e083028120e279fb5a6e6ad23a33"
+        "sha256": "bd14b3ccec6b0bbd7e27c2ac185894c5615c4af1318638d6b0dbf5279ddfd7c3"
       },
       {
         "path": "scripts/build-fovea-native.mjs",
@@ -101,7 +101,7 @@
       },
       {
         "path": "scripts/install-manager.mjs",
-        "sha256": "ea600defc766bbf432ee36ed8b8d121e75bdc5c1341617b19f4eb4187a69da53"
+        "sha256": "ef5458ad29b30736bde01cdf637be79eea1d4bae2b9c3ba8c0889e0403e9966b"
       },
       {
         "path": "scripts/install-transaction.mjs",
@@ -112,8 +112,12 @@
         "sha256": "395aae75a7388f13a13e0b1876f76de6c019e281018f23b9e67f60092dbad880"
       },
       {
+        "path": "scripts/installer-branding.mjs",
+        "sha256": "b0e6559f54081677d7e19057aacd54ea8786e18e29a0f40137b509f4120e43b9"
+      },
+      {
         "path": "scripts/installer-cli-contract.mjs",
-        "sha256": "1de303506ecc981b47e4515ed87ca61a54446293d1f7e4839a37275f31805853"
+        "sha256": "b51a1cf72b6e8c00fe7a4275159571e5aef43ae8cac5c7d919d6342b5c95a12e"
       },
       {
         "path": "scripts/installer-configuration-backup.mjs",
@@ -856,7 +860,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "0fea7cf4f5891d3ec7e3997edd2d37ed91b7206dce0dcb80a42959fe369a7b8e"
+    "digest": "b1d7b1694b95b688f0670f79b8be9e1a596d83e18c57047f38089706c7a0979a"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",

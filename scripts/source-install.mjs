@@ -24,6 +24,10 @@ export async function runSourceInstaller(args) {
     if (args.filter(arg => arg === "--enable-pull-hook").length > 1) throw new InstallerError("Duplicate --enable-pull-hook", 2, "usage");
     const argv = ["install", ...args.filter(arg => arg !== "--source" && arg !== "--enable-pull-hook")];
     const options = parseManagerArguments(argv);
+    // Source installation is also the upgrade path. Its confirmation covers
+    // replacing an owned legacy profile after backup; unowned/modified profiles
+    // still fail the manager's ownership and checksum checks.
+    if (!options.migratePiFabric) { options.migratePiFabric = true; argv.push("--migrate-pi-fabric"); }
     if (options.archive || options.version) throw new InstallerError("--source cannot be combined with --from-archive or --version", 2, "usage");
     if (options.help) return await runManager(argv);
     if (!options.dryRun && (!process.stdin.isTTY || options.json || options.nonInteractive) && !options.yes) throw new InstallerError("Noninteractive source installation requires --yes", 2, "usage");

@@ -37,15 +37,22 @@ async function compileManager(root, outfile) {
   fs.chmodSync(outfile, 0o600);
 }
 const dependencies = { provenance: sourceProvenance, compileManager, acquireTools: acquirePrivateTools };
-function contextFor(root, target, initialBuild, deps, closure = path.join(root, "dist/kiro-agent-closure")) {
+function selectBundleTarget(target) {
   target ??= detectInstallerPlatform().target;
   if (!["darwin-arm64", "darwin-x64", "linux-arm64", "linux-x64"].includes(target)) throw new Error("Unsupported bundle target");
+  return target;
+}
+function nativeSourceTarget(closure) {
   const nativeMetadata = path.join(closure, 'fovea/source-platform.json');
-  if (fs.existsSync(nativeMetadata)) {
-    const native = JSON.parse(fs.readFileSync(nativeMetadata, 'utf8'));
-    if (native.platform !== 'darwin' || native.schemaVersion !== 1 || native.abiVersion !== 1 ||
-        `${native.platform}-${native.arch}` !== target) throw new Error('Native source artifact does not match bundle target; build on that native host');
-  }
+  if (!fs.existsSync(nativeMetadata)) return null;
+  const native = JSON.parse(fs.readFileSync(nativeMetadata, 'utf8'));
+  if (native.platform !== 'darwin' || native.schemaVersion !== 1 || native.abiVersion !== 1 || !['arm64', 'x64'].includes(native.arch)) throw new Error('Invalid native source artifact metadata');
+  return `${native.platform}-${native.arch}`;
+}
+function contextFor(root, target, initialBuild, deps, closure = path.join(root, "dist/kiro-agent-closure")) {
+  target = selectBundleTarget(target);
+  const nativeTarget = nativeSourceTarget(closure);
+  if (nativeTarget && nativeTarget !== target) throw new Error('Native source artifact does not match bundle target; build on that native host');
   const provenance = deps.provenance(root), rawToolchain = fs.readFileSync(path.join(root, "build-toolchain.json"));
   const pins = JSON.parse(rawToolchain.toString("utf8")).targets[target]; checkToolPins(pins, undefined, target);
   const identity = { schema: 1, inputs: initialBuild.buildInputs.digest, closure: sha256(fs.readFileSync(path.join(closure, "closure-manifest.json"))), toolchain: sha256(rawToolchain), target,
@@ -143,7 +150,8 @@ async function publish(context, parent, selected, archiveRequested, reused) {
  * downloads, compiles, copies, archives or creates a generation. Requires an
  * intact dist/kiro-agent-closure with current buildInputs, matching host Node,
  * target/toolchain/pins, Git HEAD AND dirty state, and a recorded validated bundle.
- * Returns null for absent/stale inputs (caller may build); corruption THROWS.
+ * Returns null for absent/stale inputs or an intact foreign native artifact
+ * (caller may build); corruption THROWS.
  * Hold withInstallerArtifactLease(root, async () => { lookup/build/activate })
  * around the ENTIRE use of the returned root. The inner lookup lease alone ends
  * on return and does not protect a later activation. Result.archive is null. */
@@ -163,7 +171,13 @@ export async function findReusableSourceBundleForTest(options, deps) {
     validateBuildInputProvenance(initialBuild.buildInputs);
     if (captureBuildInputs(root).digest !== initialBuild.buildInputs.digest) return null;
     verifyBuildClosure(root); // validate provenance shape, not just its claimed digest
-    const context = contextFor(root, options.target, initialBuild, deps);
+    const target = selectBundleTarget(options.target), nativeTarget = nativeSourceTarget(closure);
+    // A checkout can carry verified macOS build outputs onto Linux or another
+    // architecture. This is a cache miss: let source bootstrap rebuild locally.
+    // Integrity checks above still reject corruption; direct packaging below
+    // still refuses to relabel or copy a foreign native artifact.
+    if (nativeTarget && nativeTarget !== target) return null;
+    const context = contextFor(root, target, initialBuild, deps);
     const selected = await lookup(context, parent, active);
     return selected ? publish(context, parent, selected, false, true) : null;
   });

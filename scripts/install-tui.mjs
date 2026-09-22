@@ -24,7 +24,9 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { createInterface } from "node:readline/promises";
 import { fileURLToPath } from "node:url";
-import { findKiro } from "./install-manager.mjs";
+import { findKiro, shellQuote } from "./install-manager.mjs";
+import { resolveKiroHome } from "./install-agent-user.mjs";
+import { INSTALLER_VERSION } from "./installer-branding.mjs";
 
 const ROOT = fs.realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."));
 const INSTALL_SH = path.join(ROOT, "install.sh");
@@ -63,32 +65,30 @@ const FABRIC_INTRO = [
   "Node.js runtime and ripgrep so the agent never depends on your system tools.",
 ];
 const FOVEA_INTRO = [
-  "Fovea is the repository navigation engine bundled with the agent profile. It",
-  "snapshots your source tree, indexes it through ast-grep into a typed code",
-  "graph, and serves sketch / focus / dwell / impact operations so the agent",
-  "can reason about structure instead of re-reading whole files. It activates",
-  "per-session on explicit request, keeps a bounded private snapshot cache,",
-  "and never modifies your working tree or Kiro settings on its own.",
+  "Fovea is bundled with Fabric, including its private ast-grep parser.",
+  "It provides repo.sketch / focus / dwell / impact through Fabric.",
+  "The installer verifies a real query before activating the runtime.",
+  "Analysis starts when requested; automatic native hooks stay off.",
 ];
 
 /** Everything the underlying installer may create or change. Mirrors the
  * manager's plans (home preparation, launch profile, shell integration). */
 const MODIFICATIONS = [
-  ["KIRO_HOME/kiro-fabric/bin", "launcher shim (kiro-fabric start/doctor/...)"],
-  ["KIRO_HOME/kiro-fabric/manager", "transactional install/update/rollback manager"],
-  ["KIRO_HOME/kiro-fabric/runtime/<gen>/tools", "private Node.js + ripgrep generations"],
-  ["KIRO_HOME/kiro-fabric/agent", "agent profile bound to kiro-cli --v3"],
-  ["KIRO_HOME/kiro-fabric/{skills,steering}", "agent skills and steering documents"],
-  ["KIRO_HOME/kiro-fabric/backups", "Kiro configuration backups (created on change)"],
-  ["KIRO_HOME/kiro-fabric/logs/installer.log", "bounded private operation log (successes)"],
-  ["KIRO_HOME/kiro-fabric/install-owner.json", "installation ownership manifest"],
-  ["Optional shell integration file", "workspace handoff helper; prior content is backed up first"],
+  ["kiro-fabric", "Fabric installation"],
+  ["agents/kiro-fabric.json", "Active Kiro agent profile"],
+  ["kiro-fabric/bin/kiro-fabric", "Launcher (start / doctor / rollback)"],
+  ["kiro-fabric/runtime/<generation>/app/fovea", "Bundled Fovea engine"],
+  ["kiro-fabric/runtime/<generation>/tools", "Private Node.js, ripgrep and ast-grep"],
+  ["kiro-fabric/runtime/<generation>/resources", "Versioned Fabric skills and steering"],
+  ["kiro-fabric/backups", "Prior configuration backups"],
 ];
-const NOT_TOUCHED = [
-  "No system packages, no sudo, no PATH changes, no kiro-cli install or upgrade",
-  "(Kiro CLI >= 2.21.1 must already be installed), and no authentication is",
-  "performed. Durable data is retained across updates; uninstall retires the",
-  "managed profile but never deletes data or repositories.",
+const UPGRADE_POLICY = [
+  "Back up and replace only the verified, owned Fabric profile.",
+  "Keep existing user skills, custom agents and configuration.",
+  "Keep old runtimes for existing sessions and rollback.",
+  "Preserve repositories, durable data and recovery evidence.",
+  "Optional shell setup keeps a backup of the prior startup file.",
+  "Kiro CLI must already be installed; no sudo or authentication.",
 ];
 
 // ── Terminal plumbing ────────────────────────────────────────────────────────
@@ -104,6 +104,7 @@ const TUI = {
       else if (argument === "--no-color") flags.noColor = true;
       else if (argument === "--help" || argument === "-h") flags.help = true;
       else if (argument === "--no-shell-integration") flags.noShellIntegration = true;
+      else if (argument === "--migrate-pi-fabric") continue; // included in source upgrades
       else if (argument === "--kiro-home") { const value = raw[++index]; if (!value || value.startsWith("--")) usageError("--kiro-home requires an absolute path"); flags.kiroHome = value; }
       else usageError(`unknown option: ${argument}`);
     }
@@ -117,7 +118,9 @@ function helpText() {
     "  Educational TUI front-end. Prompts, explains, then delegates to install.sh --source.", "",
     "  -v, --verbose             stream raw installer/build output live",
     "      --dry-run             read-only preview through the real installer (no consent needed)", "  -y, --yes                 accept the TUI confirmation non-interactively",
-    "      --kiro-home PATH      absolute Kiro home (default: ~/.kiro)",
+    "      --kiro-home PATH      absolute Kiro home (default: KIRO_HOME or ~/.kiro)",
+    "                           e.g. --kiro-home \"$HOME/.kiro-fabric\"",
+    "      --migrate-pi-fabric   included: back up and replace the owned legacy profile",
     "      --no-shell-integration  skip the optional shell setup",
     "      --no-color            force plain text (default when not a TTY or NO_COLOR)",
     "  -h, --help                this help", "",
@@ -162,6 +165,9 @@ class Spinner {
 
 const flags = TUI.parse(process.argv.slice(2));
 if (flags.help) { process.stdout.write(helpText()); process.exit(0); }
+let kiroHome;
+try { kiroHome = resolveKiroHome(process.env, os.homedir(), { ...(flags.kiroHome ? { kiroHome: flags.kiroHome } : {}), sourceRoot: ROOT }); }
+catch (error) { process.stderr.write(`install-tui: ${error.message}\n`); process.exit(5); }
 process.umask(0o077); // mirror the installer's private-by-default hygiene for our log file
 paint = buildPaint(process.stderr.isTTY && process.stdout.isTTY && !process.env.NO_COLOR && !flags.noColor);
 const spinner = new Spinner();
@@ -230,7 +236,8 @@ async function preflight() {
   } catch { check(paint.yellow("!"), next("pnpm"), "not found; the installer will fail its own prerequisite if a build is needed"); }
 
   try {
-    const target = path.dirname(fs.realpathSync(process.env.KIRO_HOME ?? path.join(os.homedir(), ".kiro")));
+    let target = kiroHome;
+    while (!fs.existsSync(target)) target = path.dirname(target);
     const stats = fs.statfsSync(target);
     const free = stats.bsize * stats.bavail;
     check(free >= DISK_MIN_BYTES ? paint.green("✓") : paint.yellow("!"), next("Disk space"), `${(free / 1024 ** 3).toFixed(1)} GiB free on ${target}`);
@@ -248,16 +255,19 @@ async function preflight() {
 
 function overview() {
   process.stderr.write(paint.cyan(BANNER) + "\n");
+  say(paint.bold(`Kiro Fabric v${INSTALLER_VERSION} + Fovea`));
   say(paint.dim("This front-end explains, confirms, and logs. The audited installer does the work.\n"));
   process.stderr.write(frame("WHAT IS FABRIC?", FABRIC_INTRO) + "\n\n");
   log.write(frame("WHAT IS FABRIC?", FABRIC_INTRO) + "\n");
   process.stderr.write(frame("WHAT IS FOVEA?", FOVEA_INTRO) + "\n\n");
   log.write(frame("WHAT IS FOVEA?", FOVEA_INTRO) + "\n");
-  const modifications = MODIFICATIONS.map(([item, detail]) => `  ${paint.cyan("•")} ${item.padEnd(42)} ${paint.dim(detail)}`);
-  process.stderr.write(frame("SYSTEM MODIFICATIONS", modifications) + "\n\n");
-  log.write(frame("SYSTEM MODIFICATIONS", MODIFICATIONS.map(([item, detail]) => `  • ${item}  (${detail})`)) + "\n");
-  process.stderr.write(frame("NOT TOUCHED", NOT_TOUCHED) + "\n\n");
-  log.write(frame("NOT TOUCHED", NOT_TOUCHED) + "\n");
+  say(paint.bold("INSTALLATION PATHS"));
+  say(`Kiro home: ${kiroHome}`);
+  // Keep destination paths outside fixed-width panels: long/custom home paths
+  // must remain fully visible before consent and match the delegated argument.
+  for (const [relative, detail] of MODIFICATIONS) say(`${detail}:\n  ${path.join(kiroHome, relative)}`);
+  say("");
+  say(frame("UPGRADE AND PRESERVATION", UPGRADE_POLICY));
   if (flags.dryRun) say(paint.yellow("[!] Read-only preview: nothing below will be modified (--dry-run)."));
 }
 
@@ -271,7 +281,7 @@ async function confirm() {
   if (flags.yes) return true;
   const terminal = createInterface({ input: process.stdin, output: process.stderr });
   try {
-    const answer = (await terminal.question(paint.bold("Proceed with installation? [Y/n] "))).trim().toLowerCase();
+    const answer = (await terminal.question(paint.bold(`Install Fabric v${INSTALLER_VERSION} + Fovea in ${kiroHome}? [Y/n] `))).trim().toLowerCase();
     if (["", "y", "yes"].includes(answer)) return true;
     say(paint.yellow("Cancelled before any modification."));
     process.exit(3); // mirrors the installer's cancelled exit code
@@ -281,8 +291,8 @@ async function confirm() {
 // ── Delegation, tee'd logging and signal traps ───────────────────────────────
 
 async function runInstaller() {
-  const args = [INSTALL_SH, "--source", ...(flags.dryRun ? ["--dry-run"] : ["--yes"]), ...(flags.kiroHome ? ["--kiro-home", flags.kiroHome] : []), ...(flags.noShellIntegration ? ["--no-shell-integration"] : []), ...(flags.verbose ? ["--verbose"] : [])];
-  say(paint.dim(`Delegating to: bash ${args.map(a => a.includes(" ") ? `"${a}"` : a).join(" ")}`));
+  const args = [INSTALL_SH, "--source", "--kiro-home", kiroHome, "--migrate-pi-fabric", ...(flags.dryRun ? ["--dry-run"] : ["--yes"]), ...(flags.noShellIntegration ? ["--no-shell-integration"] : []), ...(flags.verbose ? ["--verbose"] : [])];
+  say(paint.dim(`Delegating to: bash ${args.map(shellQuote).join(" ")}`));
   say(paint.dim(`Verbose raw output: ${flags.verbose ? "on" : "off (add -v)"} · Log: ${LOG_PATH}\n`));
 
   const child = spawn("bash", args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });

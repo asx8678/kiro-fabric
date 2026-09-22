@@ -15,7 +15,7 @@ const fixture = (): string => {
   return root;
 };
 interface Run { status: number | null; signal: NodeJS.Signals | null; stdout: string; stderr: string }
-const runTui = (root: string, args: string[], setup = ""): Promise<Run> => {
+const runTui = (root: string, args: string[], setup = "", environment: NodeJS.ProcessEnv = {}): Promise<Run> => {
   // Exercise the actual CLI, but force its Node-version preflight to refuse
   // before any pnpm, Kiro client or installer subprocess can be started.
   const code = `import fs from "node:fs";
@@ -26,7 +26,7 @@ ${setup}
 await import(${JSON.stringify(pathToFileURL(tui).href)});`;
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ["--input-type=module", "--eval", code], {
-      env: { ...process.env, TMPDIR: root, NO_COLOR: "1" },
+      env: { ...process.env, TMPDIR: root, NO_COLOR: "1", ...environment },
       stdio: ["ignore", "pipe", "pipe"], timeout: 15_000,
     });
     let stdout = "", stderr = "";
@@ -62,6 +62,34 @@ const assertPrivateLog = (file: string): void => {
 };
 
 describe("installer TUI CLI and private logging", () => {
+  it.each(["default", "environment", "explicit"])("shows and delegates the same %s home with versioned, skill-preserving upgrade consent", async selection => {
+    const root = fixture(), home = path.join(root, "home"), bin = path.join(root, "bin");
+    for (const directory of [home, bin]) fs.mkdirSync(directory, { mode: 0o700 });
+    const pkg = JSON.parse(fs.readFileSync(path.resolve("package.json"), "utf8"));
+    const scripts = {
+      pnpm: `printf '%s\\n' '${pkg.packageManager.slice(5)}'`,
+      "kiro-cli": "printf 'kiro-cli 2.21.1\\n'",
+      // Capture the real delegated argv, never execute the actual installer.
+      bash: "printf 'DELEGATED_ARG:%s\\n' \"$@\"",
+    };
+    for (const [name, script] of Object.entries(scripts)) fs.writeFileSync(path.join(bin, name), `#!/bin/sh\n${script}\n`, { mode: 0o700 });
+    const envHome = path.join(home, ".kiro-fabric"), explicitHome = path.join(home, "a long custom installation directory that must not be clipped", ".kiro");
+    const expected = selection === "explicit" ? explicitHome : selection === "environment" ? envHome : path.join(home, ".kiro");
+    const result = await runTui(root, ["--yes", "--no-shell-integration", ...(selection === "explicit" ? ["--kiro-home", explicitHome, "--migrate-pi-fabric"] : [])],
+      `Object.defineProperty(process.versions, "node", { value: ${JSON.stringify(process.versions.node)} });`,
+      { HOME: home, KIRO_HOME: selection === "default" ? undefined : envHome, PATH: bin });
+    expect(result.signal, result.stderr).toBeNull(); expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain(`Kiro Fabric v${pkg.version} + Fovea`);
+    expect(result.stderr).toContain(`Kiro home: ${expected}`);
+    expect(result.stderr).toContain(path.join(expected, "agents/kiro-fabric.json"));
+    expect(result.stderr).toContain(path.join(expected, "kiro-fabric/runtime/<generation>/resources"));
+    expect(result.stderr).toContain("Keep existing user skills");
+    expect(result.stderr).toContain("Keep old runtimes for existing sessions and rollback");
+    const delegated = result.stdout.split("\n").filter(line => line.startsWith("DELEGATED_ARG:")).map(line => line.slice("DELEGATED_ARG:".length));
+    expect(delegated).toEqual([path.resolve("install.sh"), "--source", "--kiro-home", expected, "--migrate-pi-fabric", "--yes", "--no-shell-integration"]);
+    expect(fs.existsSync(expected)).toBe(false);
+  });
+
   it.each(["--yes", "-y"])("accepts %s and reports the log even when preflight fails", async flag => {
     const root = fixture(), run = await runTui(root, [flag]);
     assertRefusedPreflight(run);

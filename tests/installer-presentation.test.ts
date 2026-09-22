@@ -60,7 +60,10 @@ describe("installer presentation", () => {
     const f = await setup(); expect(await f.run()).toBe(0);
     expect(f.stderr.split(INSTALLER_BANNER)).toHaveLength(2);
     expect(f.stderr).toContain("Installed     Not installed (fresh installation)");
-    expect(f.stderr).toContain("Will install  Fabric backend, private Node/ripgrep, manager, agent profile, skills and steering");
+    expect(f.stderr).toContain("Will install  Fabric + Fovea, private Node/ripgrep/ast-grep, manager, agent profile, skills and steering");
+    expect(f.stderr).toContain(`Install root  ${path.join(f.home, "kiro-fabric")}`);
+    expect(f.stderr).toContain(`Agent profile ${path.join(f.home, "agents/kiro-fabric.json")}`);
+    expect(f.stderr).toContain("Existing skills and configuration are preserved");
     expect(f.stderr).toContain("Target version: 1.0.0 (verified bundle)");
     expect(f.stderr).toContain("Private tools: Node 24.20.0, ripgrep 14.1.1");
     expect(f.stderr.indexOf("Target version:")).toBeLessThan(f.stderr.indexOf("Preparing installation"));

@@ -21,7 +21,7 @@ export const MANAGER_OPTIONS = Object.freeze({
   json: { flag: "--json", description: "One JSON result on stdout; no progress or prompts" },
   noColor: { flag: "--no-color", description: "Plain text output (the default)" },
   purgeData: { flag: "--purge-data", description: "Request purge; currently refused because process inactivity is unqualified" },
-  migratePiFabric: { flag: "--migrate-pi-fabric", description: "Explicitly preserve and replace a hash-verified legacy Pi Fabric profile" },
+  migratePiFabric: { flag: "--migrate-pi-fabric", description: "Back up and replace a hash-verified legacy Pi Fabric profile; included by source installs; preserve skills and runtimes" },
   noShellIntegration: { flag: "--no-shell-integration", description: "Skip optional shell setup/removal" },
   dryRun: { flag: "--dry-run", description: "Read-only scope preview; no downloads, builds, client probes, backups or changes" },
   help: { flag: "--help", description: "Show generated command help without accessing the installation" },

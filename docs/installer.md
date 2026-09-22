@@ -18,7 +18,7 @@ See [Linux validation](linux-validation.md) for kernel suffix support, bounded c
 
 | System | Architectures | Minimum system |
 | --- | --- | --- |
-| Linux | x64, ARM64 | glibc 2.28, kernel 4.18; musl/Alpine is not supported |
+| Linux | x64, ARM64 | glibc 2.34 on x64 (Fovea parser), 2.28 on ARM64; kernel 4.18; musl/Alpine is not supported |
 | macOS | Intel x64, Apple Silicon ARM64 | macOS 13.5 |
 
 Use Bash (the macOS system Bash is sufficient), Git, Node >=24, pnpm **11.20.0**, tar/gzip, and a trusted Kiro CLI >=2.21.1 with v3 support on PATH. Development also requires ripgrep. Authenticate Kiro separately if needed with `kiro-cli login`; do not run the installer with sudo. The source installer and generated release bootstrap select native ARM64 on Apple Silicon even when launched under Rosetta. Native macOS/ARM execution qualification is still pending.
@@ -64,12 +64,20 @@ No manual `chmod` or `sudo` is needed. Foreign ownership, writable-by-others
 directories, and symlinks are rejected before building; other directory/file
 permissions are preserved. Doctor never adjusts permissions.
 
-Human-readable installs show an ASCII banner and an overview even with `--yes`: the
-selected Kiro home, detected installed Fabric version, components and planned
+Human-readable installs show an ASCII banner labeled with the installer's version
+from `package.json` and an overview even with `--yes`: the selected Kiro home,
+installation root, active profile, detected installed Fabric version, components and planned
 configuration-backup root. After bundle verification and before activation, the
 installer reports the exact target version, private Node/ripgrep versions and
 whether this is a fresh install, upgrade, downgrade, same-version replacement or
-already-installed generation. Legacy installations without version metadata are
+already-installed generation. The guided frontend, `node scripts/install-tui.mjs`,
+shows the same version, the full resolved destination paths, Fovea's private parser,
+and the skills/runtime preservation policy before confirmation. `--kiro-home`
+takes precedence over `KIRO_HOME`, which takes precedence over `~/.kiro`.
+An alternative such as `--kiro-home "$HOME/.kiro-fabric"` selects the entire Kiro
+home; the Fabric installation is its `kiro-fabric/` child and profiles are in
+its `agents/` child. Use that home's installed launcher to select it consistently.
+Legacy installations without version metadata are
 explicitly reported as version unknown. Kiro CLI itself is not installed or updated.
 
 As soon as a backup succeeds, its exact path under
@@ -79,12 +87,18 @@ in the final result or any later error. An absent home needs no backup. `--json`
 remains a single result without a banner; `--dry-run` only reports the installed
 identity and planned backup root, without creating a backup or verifying a target.
 
-`--migrate-pi-fabric` also handles an older Pi Fabric profile using
+Source installation includes `--migrate-pi-fabric` automatically as part of
+confirmed installation/upgrade. The flag remains available for direct manager
+installs. It handles an older Pi Fabric profile using
 `.kiro-fabric/install.json`. The record must identify a user installation and its
 profile checksum must match. A complete configuration backup is required before
 the verified profile is copied durably to `kiro-fabric/legacy-profiles/` and removed
-from the active profile path under the installation lock. Old runtimes and other
-agents remain in place. Unknown or modified profiles are preserved and rejected.
+from the active profile path under the installation lock. The new profile then
+selects the new verified generation. Existing skills (including custom
+`skills/fabric-exec` and legacy skills), old runtimes and other agents remain in
+place. Cleanup replaces the old active profile; it does not delete runtime
+directories that existing sessions or rollback may need. Unknown or modified
+profiles are preserved and rejected.
 The option does nothing when migration is unnecessary. If later activation fails,
 the error reports the saved profile path; keep that backup when retrying.
 

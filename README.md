@@ -7,10 +7,16 @@ Requires Bash, Git, Node >=24, pnpm **11.20.0**, tar/gzip, and Kiro CLI >=2.21.1
 From your Kiro Fabric checkout, run:
 
 ```sh
-bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --migrate-pi-fabric
+bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}"
 ```
 
-The installer builds and installs Fabric, backs up existing configuration, and makes the selected Kiro home and its `agents` directory private (0700). Do not use `sudo`. Executable ancestry and shell configuration must already have safe ownership and permissions; see the preflight troubleshooting below. The migration flag replaces an old Pi Fabric profile only when its recorded ownership and checksum match; otherwise, unnecessary migration does nothing.
+The installer builds and installs Fabric with Fovea, backs up existing configuration, and makes the selected Kiro home and its `agents` directory private (0700). Source upgrades replace an old Fabric profile only when its recorded ownership and checksum match. Existing user skills, other agents, configuration and runtime generations are preserved. Do not use `sudo`. Executable ancestry and shell configuration must already have safe ownership and permissions; see the preflight troubleshooting below.
+
+The default installation is `~/.kiro/kiro-fabric/`, with the active profile at
+`~/.kiro/agents/kiro-fabric.json`. To use a separate Kiro home, pass
+`--kiro-home "$HOME/.kiro-fabric"`; use its installed launcher afterward.
+For a guided overview with the current version, exact paths and upgrade policy,
+run `node scripts/install-tui.mjs` from the checkout.
 
 For unattended installation, add `--yes --non-interactive`. To leave shell configuration untouched, add `--no-shell-integration`.
 

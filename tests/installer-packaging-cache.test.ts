@@ -9,10 +9,27 @@ import { generateBundleSbomOutputs } from "../scripts/generate-bundle-sbom.mjs";
 import { parseBundleArchive } from "../scripts/bundle-archive.mjs";
 import { packagingFixture, refreshFixtureClosure, fixtureDependencies, hash, put } from "./installer-packaging-fixture.js";
 const roots: string[] = [];
-const fixture = () => { const root = packagingFixture(); roots.push(root); return root; };
+const fixture = (nativeSource = false) => { const root = packagingFixture(nativeSource); roots.push(root); return root; };
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 
 describe("early installer bundle reuse", () => {
+  it.each(["linux-x64", "linux-arm64"])("returns a rebuild miss for a verified macOS Fovea closure on %s", async target => {
+    const root = fixture(true), deps = fixtureDependencies();
+    const compile = vi.spyOn(deps, "compileManager"), acquire = vi.spyOn(deps, "acquireTools");
+    const native = path.join(root, "dist/kiro-agent-closure/fovea/source-platform.node");
+    const before = fs.readFileSync(native);
+    expect(await findReusableSourceBundleForTest({ root, target }, deps)).toBeNull();
+    expect(fs.readFileSync(native)).toEqual(before);
+    expect(compile).not.toHaveBeenCalled(); expect(acquire).not.toHaveBeenCalled();
+    // Only source bootstrap may rebuild; explicit packaging must not relabel
+    // an intact Mach-O artifact as a Linux generation.
+    await expect(buildCompleteBundleForTest({ root, target, archive: false }, deps)).rejects.toThrow("Native source artifact does not match bundle target");
+  });
+  it("still rejects a corrupted foreign Fovea closure before returning a rebuild miss", async () => {
+    const root = fixture(true), deps = fixtureDependencies();
+    fs.appendFileSync(path.join(root, "dist/kiro-agent-closure/fovea/source-platform.node"), "tampered");
+    await expect(findReusableSourceBundleForTest({ root, target: "linux-x64" }, deps)).rejects.toThrow("Closure manifest checksum mismatch");
+  });
   it("skips copying, acquisition and manager compilation, including pre-pnpm lookup", async () => {
     const root = fixture(), deps = fixtureDependencies();
     const compile = vi.spyOn(deps, "compileManager"), acquire = vi.spyOn(deps, "acquireTools");

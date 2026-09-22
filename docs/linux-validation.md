@@ -1,11 +1,51 @@
 # Linux compatibility and efficiency validation
 
-Supported installer targets are Linux x64 and ARM64 with glibc >=2.28 and
-kernel >=4.18. Alpine/musl is not qualified. Source mode requires Node >=24,
+Supported installer targets require kernel >=4.18 and glibc >=2.34 on Linux
+x64, or glibc >=2.28 on ARM64. The x64 floor comes from the bundled Fovea
+ast-grep parser; historical bundles without that parser required only 2.28.
+Alpine/musl is not qualified. Source mode requires Node >=24,
 the package's pinned pnpm, and Kiro CLI >=2.21.1. Kernel LOCALVERSION suffixes
 such as `6.12.25+rpt-rpi-2712`, `6.12.0+`, and WSL's fourth numeric component
 are accepted by both the source installer and generated Bash bootstrap without
 relaxing the minimum version or Node/Kiro version checks.
+
+## Checking Fovea on Ubuntu and WSL
+
+Fovea is part of the Fabric generation, not a separate `fovea` command or Kiro
+MCP server. Its engine, metadata and private `tools/ast-grep` parser are required
+bundle entries. Before activation, the current installer checks the parser
+version and runs `repo.focus` followed by `repo.dwell` over a temporary source
+file, checking extraction and state retention through the actual Fabric backend.
+
+The default installation is `~/.kiro/kiro-fabric/`. The profile at
+`~/.kiro/agents/kiro-fabric.json` selects a `runtime/<generation>/` directory
+containing `app/fovea/engine-entry.js` and `tools/ast-grep`. These paths are
+relative to the selected Kiro home when `KIRO_HOME` or `--kiro-home` is used.
+Looking only in `~/.kiro-fabric` or `~/.kiro/.kiro-fabric` does not inspect this
+installation.
+
+Run the installed launcher from the project you want to analyze:
+
+```sh
+"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
+```
+
+In that session, ask Fabric to execute:
+
+```ts
+return { fabric: fabric.info(), fovea: await repo.status() };
+```
+
+Inspect the actual `@fabric/fabric_exec` result. `engineActive: false` before
+the first analysis is normal: `repo.status()` does not start the engine. Run
+`repo.sketch({maxTokens: 256})` to exercise analysis. A successful install does
+not enable automatic native prompt/turn hooks; that capability is reported
+separately from explicit analysis. Standard/review profiles can append Fovea
+context to supported local file operations within a Fabric invocation.
+
+An intact checkout build from macOS is a source-install cache miss on Linux,
+so the installer rebuilds it for Linux. Modified or missing inventory bytes
+still fail verification instead of being silently replaced.
 
 ## Fixed work and integrity contracts
 
