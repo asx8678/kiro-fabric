@@ -26,7 +26,7 @@ Source: [execution service](../src/execution-service.ts), [compiler](../src/runt
 3. **Reduce data in code.** Intermediate results stay inside the guest unless returned or printed. Code can filter and combine them, returning only the fields the model needs.
 4. **Reuse the compiler.** Each service retains at most one warm idle compiler worker. Its idle expiry is 30 seconds, and it is recycled after 250 uses. The compiler reuses stable declarations, but every new program is checked and gets a fresh guest context.
 
-Actions can be discovered on demand using `tools.search` and `tools.describe`. Configured MCP discovery still follows approval policy. Compilation, validation, and bookkeeping add cost. The repository has no comparable end-to-end benchmark establishing speed, token, or billed-cost savings. See [efficiency measurement scope](efficiency-baseline.md).
+Actions can be discovered on demand using `tools.search` and `tools.describe`. Configured MCP discovery still follows approval policy. Compilation, validation, and bookkeeping add cost. The repository has no comparable end-to-end benchmark establishing speed, token, or billed-cost savings. See the efficiency measurement scope note (archived in Git history).
 
 ## Permissions
 

@@ -1,8 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ActionRegistry, type FabricRegistryInvocationContext } from "../src/core/action-registry.js";
 import { ContinuityExecution, type ContinuityOperationObserver } from "../src/continuity/execution.js";
-import { StateCommitAcknowledgementError } from "../src/providers/state-provider.js";
-import type { FabricProvider } from "../src/protocol.js";
+import { FABRIC_COMMIT_ACKNOWLEDGEMENT, type FabricProvider } from "../src/protocol.js";
 
 const deferred = () => { let resolve!: () => void; const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve }; };
 const context = (observer: ContinuityOperationObserver): FabricRegistryInvocationContext => ({ cwd: "/workspace", audits: [], maxResultChars: 10000, approve: async () => {}, operationObserver: observer });
@@ -110,13 +109,39 @@ describe("host operation observation and closed prefixes", () => {
   });
   it("retains observed commit acknowledgement even if later reservation cleanup masks the original error", async () => {
     const execution = new ContinuityExecution(), operation = execution.admit("state.set"), registry = new ActionRegistry();
-    registry.register(provider(async () => { throw new StateCommitAcknowledgementError(9, { cause: new Error("PRIVATE_ACK") }); },
+    // The acknowledgement class is internal; a real Error carrying the trusted
+    // in-process symbol marker must be observed before cleanup masks it.
+    const marked = Object.assign(new Error("PRIVATE_ACK"), {
+      [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { version: 1 as const, operation: "set" as const },
+    });
+    registry.register(provider(async () => { throw marked; },
       async () => () => { throw new Error("PRIVATE_CLEANUP"); }));
     await expect(invoke(registry, operation.observer)).rejects.toThrow("PRIVATE_CLEANUP");
     const receipt = execution.admit("continuity.checkpoint").capture().receipts[0]!;
     expect(receipt).toMatchObject({ outcome: "failed", dispatchState: "dispatched", effectOutcome: "committed", commitAcknowledgement: { version: 1, operation: "set" } });
     expect(JSON.stringify(receipt)).not.toContain("PRIVATE");
     await registry.close();
+  });
+
+  it("does not trust unmarked or JSON-forged commit acknowledgements", async () => {
+    const execution = new ContinuityExecution(), operation = execution.admit("state.set"), registry = new ActionRegistry();
+    registry.register(provider(async () => { throw new Error("PRIVATE_UNMARKED"); }));
+    await expect(invoke(registry, operation.observer)).rejects.toThrow("PRIVATE_UNMARKED");
+    const receipt = execution.admit("continuity.checkpoint").capture().receipts[0];
+    expect(receipt).toMatchObject({
+      outcome: "failed", dispatchState: "dispatched", effectOutcome: "uncertain",
+    });
+    expect(JSON.stringify(receipt)).not.toContain("PRIVATE");
+    await registry.close();
+
+    const forgedExecution = new ContinuityExecution(), forgedOperation = forgedExecution.admit("state.set"), forgedRegistry = new ActionRegistry();
+    // A guest/serialized claim (committed:true in JSON) is not a trusted marker.
+    const forged = Object.assign(new Error("PRIVATE_FORGED"), { committed: true, operation: "set",
+      serialized: JSON.stringify({ committed: true, operation: "set" }) });
+    forgedRegistry.register(provider(async () => { throw forged; }));
+    await expect(invoke(forgedRegistry, forgedOperation.observer)).rejects.toThrow("PRIVATE_FORGED");
+    expect(forgedExecution.admit("continuity.checkpoint").capture().receipts[0]).toMatchObject({ outcome: "failed", effectOutcome: "uncertain" });
+    await forgedRegistry.close();
   });
   it("observes returned metadata before generic result truncation", async () => {
     const execution = new ContinuityExecution(), operation = execution.admit("state.set"), registry = new ActionRegistry();

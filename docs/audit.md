@@ -1,10 +1,14 @@
 # Implementation and validation inventory
 
-This inventory is checked by the package-boundary tests. Current runtime contracts are documented in [configuration.md](configuration.md), and qualification requirements are in [release.md](release.md). Historical audit reports and completed implementation plans remain in Git history; keep new local reports and probes under the ignored `.tmp/` directory.
+This inventory was checked by the now-deleted package-boundary tests. Entries naming removed tests/scripts are historical pending the [cleanup repair and containment plan](browser-repair-containment-plan.md); the inventory is not current verification evidence. Current runtime contracts are documented in [configuration.md](configuration.md), and qualification requirements are in [release.md](release.md). Historical audit reports and completed implementation plans remain in Git history; keep new local reports and probes under the ignored `.tmp/` directory. Current local commands are `pnpm run check:local`, `pnpm run verify:references` and `pnpm run verify:offline baseline|installer|runtime`; required incomplete installer cases still block `pnpm run verify:offline all`. `pnpm run test`, `test:fast`, the release-grade `pnpm run check`, `prepack` and `release:candidate` still exist but fail closed at `scripts/qualification-unavailable.mjs` (nonzero, not missing). Every `tests/**` entry below is historical/removed and not runnable.
 
-Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below and the full test suite. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
+Kiro Fabric is one native custom-agent product. The selected agent owns one stdio MCP child; the child exposes exactly `fabric_info`, `fabric_workspace`, and `fabric_exec`. Native Kiro tools remain outside QuickJS. The repository contains no discoverable `.kiro/agents/kiro-fabric.*`; only the user-global installed profile has that name. The execution, approval, workspace, persistence, cancellation, and package boundaries are covered by the files below; they were previously exercised by the full test suite, which has since been deleted (see the repair plan). Current behavioral coverage is therefore unverified. Power-named source paths, documented deprecated API aliases, explicit migration messages, and the `kiro-fabric-power-workspace-v3` salt remain only for compatibility; active descriptions and primary APIs are Agent/Fabric-first.
 
-- `tests/installer-capability-fixture.ts` — native inode-anchored directory traversal probe for crash-recovery qualification.
+- ~~`tests/installer-capability-fixture.ts`~~ — historical; removed with the test suite. This was the native inode-anchored directory-traversal probe for crash-recovery qualification. No current equivalent exists, so crash-recovery qualification remains unavailable.
+
+## Browser removal
+
+The contained browser and legacy CLI-backed web providers, guest/public APIs, bundled skill resources and operator commands have been retired. See [configuration migration](configuration.md#privacy-compatibility-after-browser-removal) and the [removal/verification record](browser-removal.md). Earlier browser implementation plans remain explicitly historical, not executable capability or current qualification evidence.
 
 - `tests/remediation-regressions.test.ts` — fail-closed approval diagnostics, unknown benchmark spend, and TinyShop agent execution-audit regressions.
 
@@ -55,14 +59,6 @@ Continuity remains explicit and opt-in: declared checks and historical host rece
 
 The execution approval controller and qualification/validation phase helpers remain private; public APIs, approval ordering and qualification gates are retained.
 
-## Browser-backed fact grounding
-
-- `src/providers/web-provider.ts` — opt-in trusted CLI discovery, bounded execution, closed contracts, explicit Google/Bing selection with matching discovery/effects/output, fixed CAPTCHA/consent/redirect categories and withheld raw diagnostics.
-- `src/providers/web-privacy.ts` — bounded heuristic secret/PII and token-URL rejection before dispatch; not semantic DLP.
-- `src/providers/web-snippets.ts` — fixed JSON-escaped CDP recipes, per-call private contexts, bounded deadline cleanup, Google/Bing extraction, decoded destination links and bounded page text. Confirmed CDP context disposal closes its pages even if concurrent tab closure rejects; unconfirmed context disposal still fails.
-- `tests/web-provider.test.ts` — executable trust, process bounds, configuration, checked guest/runtime registration and denied-before-launch controls.
-- `tests/web-snippets.test.ts` — actual generated JS with deterministic CDP/DOM fixtures, isolated parallel tabs, error paths and late-creation cleanup.
-
 ## Review reliability and explicit profiles
 
 These additions preserve Code Mode and ordinary approvals. Structural evidence accounting is not semantic validation or proof of live-agent superiority.
@@ -76,8 +72,6 @@ These additions preserve Code Mode and ordinary approvals. Structural evidence a
 - `src/providers/probe-discovery.ts` — bounded SDK/executable/cache presence checks without version execution or credential assumptions.
 - `src/kiro/run-provenance.ts` — bounded hashed configured-versus-observed metadata; unknown routing remains unknown.
 - `scripts/launch-profile.mjs` — explicit generation-specific review/minimal launch profiles without replacing the managed default.
-- `scripts/steering-benchmark/run-provenance.mjs` — explicit-file manifest/compare CLI and independently classified delivery evidence.
-- `scripts/steering-benchmark/review-regressions.mjs` — seeded/held-out cross-file and framework-contract fixtures, private structural oracles and offline qualification.
 - `tests/review-ledger.test.ts` — task isolation, structural admission, stale source, quotas, expiry, authority and guest declarations.
 - `tests/local-evidence.test.ts` — compact packets, Unicode/escaping, continuations, failures and source safety.
 - `tests/probe-provider.test.ts` — denied effects, actual process exits, retention, discovery, quotas, identity and cancellation.
@@ -111,17 +105,8 @@ These additions preserve Code Mode and ordinary approvals. Structural evidence a
 - `src/kiro/generated-guidance.ts` — immutable canonical skill/guide/recipe/workflow strings; no runtime file reads.
 - `scripts/generate-agent-guidance.mjs` — bounded UTF-8 source validation and deterministic checked guidance generation.
 - `tests/guidance.test.ts` — byte parity, closed help topics, paging/progress, cancellation, Unicode and public guest declarations.
-- `scripts/steering-benchmark.mjs` — explicit opt-in live benchmark CLI; initialization/selftests do not invoke a model.
-- `scripts/steering-benchmark/cases.mjs` — deterministic benign fixtures and explicit output/source contracts.
-- `scripts/steering-benchmark/core.mjs` — bounded inventories, hashing and scope checks; no OS-sandbox claim.
-- `scripts/steering-benchmark/oracles.mjs` — raw output, actual filesystem and execution evidence validation, with independent disposable Python probes.
-- `scripts/steering-benchmark/plan.mjs` — paired schedules, immutable identities, live CLI settings and conservative spend admission.
-- `scripts/steering-benchmark/runner.mjs` — exactly-once rows, retention of every failure/charge and stop-on-unknown behavior.
-- `scripts/steering-benchmark/stream.mjs` — bounded process collection and strict ACP/usage accounting.
-- `scripts/steering-benchmark/selftest.mjs` — explicitly synthetic offline oracle qualification, excluded from measured results.
-- `tests/steering-benchmark.test.ts` — contract negatives, source/config drift, process bounds, interrupted rows and credit gates.
 
-Benchmark scripts are development tooling, not installed model capabilities. Their reproducible workflow and measurement limits are documented in [agent-comparison.md](agent-comparison.md).
+Benchmark scripts are development tooling, not installed model capabilities. Their reproducible workflow and measurement limits are documented in the agent comparison notes (archived in Git history).
 
 ## Complete implementation inventory
 
@@ -323,7 +308,6 @@ These additions do not rewrite historical findings or establish authenticated cl
 - `scripts/efficiency-baseline.mjs` — closed offline manifest/fixture/help probes with explicit measurement boundaries and null unobserved billing.
 - `tests/efficiency-baseline.test.ts` — offline restrictions, provenance, failure retention and expanded-help accounting.
 - `tests/approval-quotas.test.ts` — silent policy versus interactive quota accounting, unchanged provider/audit bounds, legacy compatibility and cancellation cleanup.
-- `docs/efficiency-baseline.md` — reproducible offline procedure and separately authorized future paid comparison.
 
 ## Linux compatibility and efficiency follow-up (current implementation)
 
@@ -339,18 +323,9 @@ These entries extend the implementation inventory, not historical native or rele
 
 These entries extend the implementation inventory; observed statistics are descriptive, not release qualification.
 
-- `scripts/steering-benchmark/projects.mjs` — dependency-free TinyShop bug catalog: eight seeded bug classes plus an all-bugs project, public reproductions, controller-held edge-case checks and bounded Node probes.
-- `scripts/steering-benchmark/task-behavior.mjs` — opt-in single-turn plan, review-only, exact scoped repair, deep-ledger and read-only diagnosis fixtures; finite proposition/source-evidence grading, not proof of model reasoning, complete read coverage or credit savings.
-- `scripts/steering-benchmark/native-policy.mjs` — opt-in workspace-scoped native shell consent: exclusive per-workspace policy creation, identity recording and verified cleanup without touching global rules.
-- `scripts/steering-benchmark/metrics.mjs` — coverage-aware statistics separating strict compliance, independent repair quality, latency and outer-call traffic; unknown telemetry stays null.
-- `scripts/agent-comparison.mjs` — offline example export, oracle selftest and report generation; no inference in any command.
-- `tests/agent-comparison.test.ts` / `tests/native-fixture-policy.test.ts` — fixture discrimination, held-out rejection, pairing, continuation selection, credit bounds and permission cleanup regression.
-- `docs/agent-comparison.md` — runnable labs, checked-TypeScript Code Mode examples, live-plan consent and interpretation rules.
 
 ## Review adherence additions (current implementation)
 
-- `scripts/steering-benchmark/review-quality.mjs` — opt-in finite claim/proof/confidence/coverage oracle; manual semantic adjudication remains required.
-- `scripts/steering-benchmark/review-delivery.mjs` — bounded matching of observed structured help pages against a frozen arm reference, not inferred invocation or comprehension.
 - `tests/review-quality.test.ts` — contradiction, unsupported consequence, confidence, citation coverage, recall and failure-aware metric regressions.
 - `tests/review-delivery.test.ts` — full/partial/missing/forged help-output evidence and UTF-16 continuity.
 
@@ -380,7 +355,6 @@ These entries record implementation and regression coverage, not live-model qual
 - `tests/local-query-pagination.test.ts` — explicit query-v1 scope, reduced selective-query I/O, membership/content/ignore drift, unsafe files, bounded independent pages and cursor lifecycle.
 - `tests/compiler-cache.test.ts` / `tests/code-mode-cache.test.ts` — bounded compiler-output reuse and fresh policy/payload/provider/guest execution.
 - `tests/projection-noise.test.ts` / `tests/agent-profile.test.ts` — diagnostic hint deduplication and profile/prompt-size contracts.
-- `scripts/steering-benchmark/review-calibration.mjs` — finite controller-owned consequence, severity and recommendation calibration with independent inert probes.
 - `tests/review-calibration.test.ts` / `tests/review-calibration-integration.test.ts` — fixture mutation, grounding, calibrated admission, private oracle hashes and failure-aware comparison metrics.
 - `tests/review-runtime-controls.test.ts` — optional offline Helm/PowerShell qualification; missing binaries remain explicit skips.
 
@@ -388,7 +362,6 @@ These entries record implementation and regression coverage, not live-model qual
 
 These entries document later changes, not a revision to historical results or evidence of live model superiority.
 
-- `scripts/steering-benchmark/reviews.mjs` — seeded read-only infrastructure, cleanup and boundary fixtures; source-line/caller-consumer grading; independent Node/Bash qualification of defects and false-positive controls.
 - `tests/review-benchmark.test.ts` — recall/precision, duplicate/forged evidence rejection, read-only scope, failure-inclusive cost and equal-model/effort regression.
 - `tests/local-review-coverage.test.ts` — hidden CI discovery, ignore/VCS/alias safeguards, bounded scope metadata and whole-file line/continuation checks.
 - `tests/local-search-read.test.ts` — deterministic guest search→read composition: deduplicated match paths, merged and capped context windows with explicit continuation, zero-match short-circuit, and explicit requested-range/scope-exhaustion reporting.
@@ -451,7 +424,9 @@ Historical module bytes in `tests/fixtures/installer-history/c0f65e9/agent-profi
 
 Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces SIGKILL between owner unlink and directory removal, then verifies durable release-marker recovery, positive birth identity, preserved foreign evidence and retained committed transaction provenance. `src/installation/installer-lock.mjs` and `src/installation/pinned-recovery.mjs` keep public lock APIs unchanged. Legacy ownerless locks without proof remain preserved; this is not an age-based force-clean mechanism.
 
-## Native Fovea implementation and acceptance
+<a id="native-fovea-implementation-and-acceptance"></a>
+
+## Native Navigator implementation and acceptance
 
 - `scripts/fovea-capability-probe.mjs` — native integration, managed distribution or isolated qualification support.
 - `scripts/fovea-reference-harness.mjs` — native integration, managed distribution or isolated qualification support.
@@ -515,28 +490,30 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `src/kiro/fovea-hook.ts` — native integration, managed distribution or isolated qualification support.
 - `src/providers/repo-contract.ts` — native integration, managed distribution or isolated qualification support.
 - `src/providers/repo-provider.ts` — native integration, managed distribution or isolated qualification support.
-- `tests/fovea/capability.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/config-project.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/core-basins.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/core-conserved-heat.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/core-heat.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/engine-languages.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/engine-review.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/engine.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/guest-focus-read.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/guest-grep.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/host-boundaries.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/host-process.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/observations.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/packaging.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
-- `tests/fovea/reference-differential.test.ts` — warm-fact operation compatibility, cold-core exact-parser/FIFO-input replay, and separate unqualified independent-cold repeatability probe; see Fovea parity ledger.
+- `tests/fovea/capability.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/config-project.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/core-basins.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/core-conserved-heat.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/core-heat.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/engine-languages.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/engine-review.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/engine.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/guest-focus-read.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/guest-grep.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/host-boundaries.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/host-process.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/observations.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/packaging.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
+- `tests/fovea/reference-differential.test.ts` — warm-fact operation compatibility, cold-core exact-parser/FIFO-input replay, and separate unqualified independent-cold repeatability probe; see Navigator parity ledger.
 - `tests/fovea/cold-inputs.test.ts` — fail-closed parser tape identity, exact output/error bytes, quota/corruption/unconsumed-request guards and source-read scheduling recovery.
 - `tests/fovea/fixtures/cold-inputs.mjs` — development-only generated subprocess entry; FIFO source-read dependency adapter and exact parser tape. Not shipped or a production determinism claim.
-- `tests/fovea/reference.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/reference.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
 - `scripts/qualify-fovea-references.mjs` — opt-in exact-pinned prerequisite admission and full lifecycle/differential execution; rejects unexplained skips and preserves the full-suite report.
 - `tests/fovea/reference-qualification.test.ts` — missing pins, missing modules, failures and unexpected skips cannot grant qualification.
 
-## Native Fovea implementation and acceptance
+<a id="native-fovea-implementation-and-acceptance-1"></a>
+
+## Native Navigator implementation and acceptance
 
 - `scripts/installer-directory-identity.mjs` — APFS volume-UUID and inode binding across device renumbering; legacy mismatch remains recovery-required, never automatically reanchored.
 - `tests/installer-directory-identity.test.ts` — stable-volume matching, adversarial identity refusal and historical snapshot/transaction evidence preservation.
@@ -547,7 +524,7 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/provenance-native.test.ts` — compiled descriptor-relative journal CAS, cross-session publication, revocation and adversarial failure coverage.
 - `tests/fovea/fixtures/native-lifecycle-platform.ts` — Darwin component lifecycle native-binding fixture; generation admission alone is substituted, not engine/IPC/provenance behavior.
 - `tests/fovea/qualification-records.test.ts` — current qualification/parity agreement and separation from historical isolated authentication/platform evidence.
-- `tests/fovea/provenance.test.ts` — executable component/behavior qualification; see Fovea parity ledger.
+- `tests/fovea/provenance.test.ts` — executable component/behavior qualification; see Navigator parity ledger.
 - `src/kiro/fovea-context.ts` — bounded host-owned post-settlement collection and transport emission ledger; activation requires a trusted qualified capability.
 - `tests/fovea/context-delivery.test.ts` — replay, budget, cancellation, revocation, and emission-not-acknowledgment regressions.
 - `tests/fovea/coverage-contract.test.ts` — real engine coverage packet/schema and guest typing checks.
@@ -565,20 +542,22 @@ Lock-release crash coverage: `tests/installer-lock-release.test.ts` reproduces S
 - `tests/fovea/native-lifecycle.test.ts` — native identity/replay/order guards, surviving hooks, generated Tcl recorder and real fixture stdio/input boundaries.
 - `tests/fovea/fixtures/lifecycle-contract-hook.mjs` — owned bounded hook-input recorder and cancellable-signal observation; no model context or continuation authority.
 - `tests/fovea/fixtures/lifecycle-contract-mcp.mjs` — harmless nonce MCP recorder with instance identity; deliberately no invented native chat mapping.
-- `scripts/release-native-evidence.mjs` — explicitly trusted-local read-only native smoke of exact schema-2 bundle/archive bytes, closure provenance and tools; never production promotion or installation.
+- `scripts/release-native-evidence.mjs` — explicitly trusted-local read-only native smoke of exact schema-3 browser-capable bundle/archive bytes, closure provenance and tools; never production promotion, browser qualification or installation.
 - `tests/release-native-evidence.test.ts` — mismatched host/translation/archive/provenance refusal, spawn failure and byte-identity regression checks.
 - `scripts/fovea-reference-diagnostics.mjs` — unchanged pinned cold reference/native repeats and exact graph identity preimages; multiset diagnostics never waive strict output parity.
 - `tests/fovea/reference-diagnostics.test.ts` — identity reconstruction, empty-discovery refusal and order-only mismatch diagnostics without normalization.
-- `scripts/prepare-complete-release.mjs` — exact clean-commit schema-2 candidate snapshots, release provenance before qualification, unsigned final-byte signing inputs and native smoke; no install or signing authority.
-- `scripts/complete-release-signing-inputs.mjs` — all-target native evidence/witness capture and offline signing request creation, with no key access or signature generation.
-- `scripts/complete-release-inputs.mjs` — bounded authenticated encrypted private-witness transport and allowlisted create-only extraction; never a signing or qualification authority.
+- `scripts/prepare-complete-release.mjs` — exact clean-commit schema-3 browser-capable candidate snapshots, release provenance before qualification, unsigned final-byte signing inputs and native smoke; no install or signing authority.
+- `scripts/complete-release-signing-inputs.mjs` — all-target five-gate evidence/witness capture, exact browser component/policy/mode validation and offline signing request creation, with no key access or signature generation.
+- `scripts/complete-release-inputs.mjs` — bounded authenticated encrypted five-gate private-witness transport and allowlisted create-only extraction; never a signing or qualification authority.
 - `tests/complete-release-inputs.test.ts` — ciphertext authentication, distinct nonces, wrong-secret refusal and pre-extraction path/digest/schema rejection.
-- `scripts/complete-release-promotion.mjs` — static-root signed metadata and independently signed qualification, all-four-target exact archive/SPDX/closure checks, private witness binding and captured-byte bootstrap/asset publication.
-- `tests/complete-release-fixture.ts` — four-target synthetic signed complete-bundle fixtures; no fixture binary is executed and keys are test-only.
-- `tests/release-complete.test.ts` — exact captured promotion plus missing/stale/unsigned/tampered evidence, dirty source and offline ceremony guards.
+- `scripts/complete-release-promotion.mjs` — static-root signed metadata and independently signed five-gate qualification, all-four-target schema-3 archive/SPDX/closure checks, exact all-mode browser witness/component/policy binding and captured-byte bootstrap/asset publication.
+- `tests/complete-release-fixture.ts` — four-target synthetic signed schema-3/five-gate complete-bundle fixtures explicitly marked non-live qualification; no fixture binary is executed and keys are test-only.
+- `tests/release-complete.test.ts` — exact captured promotion plus missing/stale/unsigned/tampered evidence, omitted/partial browser gates, wrong component/policy identity, dirty source and offline ceremony guards.
 - `tests/complete-release-workflow.test.ts` — protected manual candidate/promotion registration, signed tag/commit/origin checks, no signing secret exposure and inert hostile tag inputs.
 
-## Continuity handoff, ACP probe, Fovea call contexts and installer TUI (current implementation)
+<a id="continuity-handoff-acp-probe-fovea-call-contexts-and-installer-tui-current-implementation"></a>
+
+## Continuity handoff, ACP probe, Navigator call contexts and installer TUI (current implementation)
 
 - `src/continuity/conversation-archive.ts` — bounded conversation archive: append-only records, identity binding and tamper-evidence retention.
 - `src/continuity/handoff.ts` — deterministic fresh-session handoff packets: pinned objective, constraints, open checks, resume prompt and stable packet hash.

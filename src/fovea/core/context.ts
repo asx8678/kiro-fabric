@@ -1,5 +1,6 @@
 // Native host adaptation of pi-fovea b5944838. No ambient engine state.
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Stats } from 'node:fs';
 export interface CoreContext {
   store: Map<string, unknown>;
   sessionStore: Map<string, unknown>;
@@ -14,11 +15,17 @@ export interface CoreContext {
   spills: Map<string, string>;
   readGitMetadata?: ((path: string) => Promise<string>) | undefined;
   artifactLabel?: ((operation: string, key: string) => string) | undefined;
+  cleanupTemporary?: ((file: string, snapshot: Stats, available: () => boolean) => Promise<boolean>) | undefined;
+  displayName?: string | undefined;
+  toolName?: ((operation: string) => string) | undefined;
 }
 export const coreContext = new AsyncLocalStorage<CoreContext>();
+// Direct-core callers retain upstream labels; the host supplies its public names.
+export const coreDisplayName = (fallback = 'fovea'): string => coreContext.getStore()?.displayName ?? fallback;
+export const coreToolName = (operation: string): string => coreContext.getStore()?.toolName?.(operation) ?? `fovea_${operation}`;
 export function context(): CoreContext {
   const value = coreContext.getStore();
-  if (!value) throw new Error('Fovea core requires an explicit engine context');
+  if (!value) throw new Error('Navigator core requires an explicit engine context');
   return value;
 }
 export const privateTmpdir = (): string => context().storageRoot;

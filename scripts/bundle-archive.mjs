@@ -1,6 +1,4 @@
-import { gzipSync, gunzipSync, createGzip } from 'node:zlib';
-import { writeFile } from 'node:fs/promises';
-import { createHash, randomBytes } from 'node:crypto';
+import { gunzipSync, createGzip } from 'node:zlib';import { createHash, randomBytes } from 'node:crypto';
 import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation, writePinnedDirectoryStream } from './pinned-directory-child.mjs';
 import { captureDirectoryAncestry } from '../src/installation/filesystem-boundary.mjs';
 import { extractPrivateEntries } from './private-extraction.mjs';
@@ -25,18 +23,14 @@ function header(name,size,mode,flavor='bundle',directory=false,modifiedAt=0){
  b.write(name,0,100);b.write(octal(mode,8),100);b.write(octal(0,8),108);b.write(octal(0,8),116);b.write(octal(size,12),124);b.write(octal(0,12),136);b.fill(32,148,156);b[156]=48;b.write('ustar\0',257);b.write('00',263);b.write(prefix,345,155);
  if(flavor==='legacy'){b.write(octal(modifiedAt,12),136);b[156]=directory?53:48;b.write(octal(0,8),329);b.write(octal(0,8),337);}
  const sum=b.reduce((a,v)=>a+v,0);b.write(sum.toString(8).padStart(6,'0')+'\0 ',148);return b;
-}
-/** @param {ArchiveEntry[]} entries */
-export function encodeBundleTar(entries){
- const parts=[];let bytes=1024;if(entries.length>LIMITS.entries+1)throw Error('Archive count bound');
- for(const e of entries){safePath(e.path);bytes+=512+Math.ceil(e.data.length/512)*512;if(bytes>LIMITS.bytes+LIMITS.manifest+LIMITS.entries*1024)throw Error('Tar bound');parts.push(header(e.path,e.data.length,e.mode),e.data,Buffer.alloc((512-e.data.length%512)%512));}
- return Buffer.concat([...parts,Buffer.alloc(1024)]);
-}
-/** @param {Buffer} b @param {number} start @param {number} len */
+}/** @param {Buffer} b @param {number} start @param {number} len */
 function text(b,start,len){const field=b.subarray(start,start+len);const end=field.indexOf(0);if(end>=0&&field.subarray(end).some(v=>v!==0))throw Error('USTAR string padding');const raw=end<0?field:field.subarray(0,end);const s=raw.toString('utf8');if(!Buffer.from(s).equals(raw))throw Error('Invalid UTF8');return s;}
 /** @param {Buffer} b @param {number} start @param {number} len */
 function number(b,start,len){const s=b.subarray(start,start+len).toString('ascii');if(!/^[0-7]+\0$/.test(s))throw Error('USTAR number');return parseInt(s,8);}
-/** @param {Buffer} raw */
+/** @internal Raw-USTAR parser seam. Production callers use parseBundleArchive/
+ * extractBundleArchiveBytes, which gunzip first; hostile-header fault cases need to
+ * feed mutation bytes straight to the restricted reader. Not a root/package export.
+ * @param {Buffer} raw */
 export function parseBundleTar(raw){return validateEntries(parseRestrictedTar(raw,'bundle'));}
 /** Only the two repository-owned encodings; not a general tar reader.
  * @param {Buffer} raw @param {'bundle'|'legacy'} flavor */
@@ -93,7 +87,10 @@ export function captureLegacyArtifact(file,limit){
   return bytes;
  }finally{fs.closeSync(fd);}
 }
-/** @param {Buffer} bytes */
+/** @internal Legacy parser seam. Legacy mutation fixtures parse selected raw
+ * archives in-process; public extractLegacyAgentArchiveBytes extracts immediately and
+ * cannot expose the parsed entry model. Used in production by extractLegacyAgentArchiveBytes
+ * at :95. Not a root/package export. @param {Buffer} bytes */
 export function parseLegacyAgentArchive(bytes){
  if(!Buffer.isBuffer(bytes)||bytes.length>LEGACY_ARCHIVE_LIMITS.archive)throw Error('Archive bound');
  return {entries:parseRestrictedTar(gunzipSync(bytes,{maxOutputLength:LEGACY_ARCHIVE_LIMITS.tar}),'legacy')};
@@ -127,7 +124,11 @@ function validateEntries(entries){
 export async function writeBundleArchive(root,output,options={}){
  return writeBundleArchiveForTest(root,output,{},options);
 }
-/** Internal mutation fixture seam; no hook is selectable by CLI/environment.
+/** @internal Internal mutation fixture seam; no hook is selectable by CLI/environment.
+ * Production writeBundleArchive at :119 calls the empty-hook path and public
+ * writeBundleArchive exposes no member/chunk/validation hooks, so fault-injection tests
+ * cannot exercise mid-stream drift, bound and beforeValidation failure without it.
+ * Not a root/package export.
  * @param {string} root @param {string} output @param {any} hooks
  * @param {{maxBytes?:number}} [options] */
 export async function writeBundleArchiveForTest(root,output,hooks,{maxBytes=LIMITS.archive}={}){
@@ -211,17 +212,7 @@ export async function writeBundleArchiveForTest(root,output,hooks,{maxBytes=LIMI
    }
   }finally{fs.closeSync(fd);}
  }
-}
-/** Compatibility Buffer-backed file API. Production packaging uses writeBundleArchive.
- * @param {string} root @param {string} output */
-export async function createBundleArchive(root,output){
- const bundle=await validateBundle(root);root=bundle.root;const entries=[];
- for(const e of bundle.inventory)entries.push({path:e.path,mode:e.mode,data:await readRegular(path.join(root,e.path),LIMITS.file,{mode:e.mode})});
- entries.push({path:'bundle-manifest.json',mode:384,data:Buffer.from(canonical(bundle.manifest)+'\n')});entries.sort((a,b)=>byteOrder(a.path,b.path));
- const raw=encodeBundleTar(entries);parseBundleTar(raw);const archive=gzipSync(raw,{level:9});if(archive.length>LIMITS.archive)throw Error('Compressed bound');
- await writeFile(output,archive,{flag:'wx',mode:384});return {path:output,size:archive.length,sha256:sha256(archive),digest:bundle.digest};
-}
-/** @param {Buffer} bytes */
+}/** @param {Buffer} bytes */
 export function parseBundleArchive(bytes){if(bytes.length>LIMITS.archive)throw Error('Archive bound');return parseBundleTar(gunzipSync(bytes,{maxOutputLength:LIMITS.bytes+LIMITS.manifest+LIMITS.entries*1024}));}
 /** @param {string} archive @param {string} output */
 export async function extractBundleArchive(archive,output){

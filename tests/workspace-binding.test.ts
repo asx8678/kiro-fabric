@@ -4,13 +4,28 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Value } from "typebox/value";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const wire = vi.hoisted(() => ({ servers: [] as Array<{ handlers: Map<unknown, (...args: any[]) => Promise<any>> }> }));
+vi.mock("@modelcontextprotocol/sdk/server/index.js", () => ({ Server: class {
+  handlers = new Map<unknown, (...args: any[]) => Promise<any>>();
+  constructor() { wire.servers.push(this); }
+  setRequestHandler(schema: unknown, handler: (...args: any[]) => Promise<any>) { this.handlers.set(schema, handler); }
+  setNotificationHandler(schema: unknown, handler: (...args: any[]) => Promise<any>) { this.handlers.set(schema, handler); }
+  getClientCapabilities() { return {}; }
+  async connect() {}
+  async close() {}
+} }));
+vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({ StdioServerTransport: class {} }));
+
+import { CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import {
   KiroPowerWorkspaceBinding,
   kiroPowerWorkspaceRequestSchema,
 } from "../src/kiro/power/workspace-binding.js";
-import { installedKiroHomeFor } from "../src/kiro/mcp-server.js";
+import { createKiroMcpServer } from "../src/kiro/mcp-server.js";
 import { CachedWorkspaceContextProvider } from "../src/kiro/power/workspace-context.js";
+import type { KiroWorkspaceSnapshot, WorkspaceContextProvider } from "../src/kiro/power/workspace-context.js";
 
 const roots: string[] = [];
 const temporary = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-workspace-")); roots.push(root); return root; };
@@ -20,6 +35,47 @@ const fixture = () => {
   const pluginRoot = path.join(root, "plugin"); const pluginData = path.join(root, "data");
   fs.mkdirSync(pluginRoot); fs.mkdirSync(pluginData);
   return { root, pluginRoot, pluginData, binding: new KiroPowerWorkspaceBinding({ pluginRoot, pluginData }) };
+};
+
+type WorkspaceCallResponse = { content: Array<{ type: "text"; text: string }>; isError?: boolean };
+const responseText = (response: WorkspaceCallResponse): string => response.content.map((entry) => entry.text).join("");
+const responseJson = (response: WorkspaceCallResponse): Record<string, unknown> => {
+  expect(response.isError, responseText(response)).not.toBe(true);
+  return JSON.parse(responseText(response)) as Record<string, unknown>;
+};
+const mutableWorkspaceContext = (initial: readonly string[]) => {
+  let paths = [...initial];
+  const provider: WorkspaceContextProvider = {
+    current: async (): Promise<KiroWorkspaceSnapshot> => ({
+      revision: 1,
+      status: paths.length ? "verified" : "explicitly-empty",
+      roots: paths.map((entry) => ({ uri: pathToFileURL(entry).href })),
+      observedAt: Date.now(),
+    }),
+    invalidate() {},
+    subscribe: () => ({ dispose() {} }),
+  };
+  return { provider, set(next: readonly string[]) { paths = [...next]; } };
+};
+const mountWorkspaceServer = async (options: {
+  runtimeRoot: string;
+  dataRoot: string;
+  context: WorkspaceContextProvider;
+  opened: Array<{ close(): Promise<void> }>;
+}) => {
+  const server = await createKiroMcpServer({
+    runtimeRoot: options.runtimeRoot,
+    dataRoot: options.dataRoot,
+    version: "fixture",
+    workspaceContext: options.context,
+    prepareRuntime: async () => { throw new Error("workspace-binding fixture must not create a runtime"); },
+  });
+  options.opened.push(server);
+  const handlers = wire.servers.at(-1)!.handlers;
+  return {
+    call: (args: Record<string, unknown>): Promise<WorkspaceCallResponse> =>
+      handlers.get(CallToolRequestSchema)!({ params: { name: "fabric_workspace", arguments: args } }, { signal: new AbortController().signal }),
+  };
 };
 
 describe("canonical workspace binding", () => {
@@ -115,21 +171,67 @@ describe("canonical workspace binding", () => {
     expect(binding.boundRoot()).toBe(fs.realpathSync(workspace));
   });
 
-  it("derives and validates the installed custom Kiro home from Agent storage", () => {
+  it("derives and validates the installed custom Kiro home from Agent storage", async () => {
+    const opened: Array<{ close(): Promise<void> }> = [];
+    const priorDebug = process.env.KIRO_FABRIC_DEBUG;
+    process.env.KIRO_FABRIC_DEBUG = "0";
     const root = temporary();
-    const kiroHome = path.join(root, "elsewhere", ".kiro-custom");
+    const elsewhere = path.join(root, "elsewhere");
+    const kiroHome = path.join(elsewhere, ".kiro-custom");
     const installRoot = path.join(kiroHome, "kiro-fabric");
-    const data = path.join(installRoot, "data");
-    const runtime = path.join(installRoot, "runtime", "a".repeat(64));
-    fs.mkdirSync(data, { recursive: true });
-    fs.mkdirSync(runtime, { recursive: true });
-    expect(installedKiroHomeFor(runtime, data)).toBe(fs.realpathSync(kiroHome));
-
+    const installedData = path.join(installRoot, "data");
+    const installedRuntime = path.join(installRoot, "runtime", "a".repeat(64));
+    const agents = path.join(kiroHome, "agents");
+    const workspace = path.join(root, "workspace");
     const unrelatedRuntime = path.join(root, "unrelated-runtime");
-    fs.mkdirSync(unrelatedRuntime);
-    expect(() => installedKiroHomeFor(unrelatedRuntime, data)).toThrow("digest-named runtime layout");
-    const unrelatedData = path.join(root, "library-data");
-    fs.mkdirSync(unrelatedData);
-    expect(installedKiroHomeFor(unrelatedRuntime, unrelatedData)).toBeUndefined();
+    const libraryData = path.join(root, "library-data");
+    for (const directory of [agents, installedData, installedRuntime, workspace, unrelatedRuntime, libraryData]) {
+      fs.mkdirSync(directory, { recursive: true });
+    }
+    try {
+      // A mismatched runtime for the same installed data root fails closed on the
+      // digest-named layout before any server, storage, or trace effect.
+      const serversBefore = wire.servers.length;
+      await expect(createKiroMcpServer({
+        runtimeRoot: unrelatedRuntime,
+        dataRoot: installedData,
+        version: "fixture",
+        prepareRuntime: async () => { throw new Error("workspace-binding fixture must not create a runtime"); },
+      })).rejects.toThrow("digest-named runtime layout");
+      expect(wire.servers.length).toBe(serversBefore);
+      expect(fs.existsSync(path.join(installedData, "fabric"))).toBe(false);
+
+      // The installed layout infers the custom Kiro home: its agents storage and
+      // an ancestor container stay reserved for workspace selection.
+      const inferred = mutableWorkspaceContext([agents]);
+      const inferredServer = await mountWorkspaceServer({ runtimeRoot: installedRuntime, dataRoot: installedData, context: inferred.provider, opened });
+      expect(responseJson(await inferredServer.call({ action: "list" })).roots).toEqual([]);
+      const agentsAttach = await inferredServer.call({ action: "attach", path: agents });
+      expect(agentsAttach.isError).toBe(true);
+      expect(responseText(agentsAttach)).toContain("too broad or reserved");
+
+      inferred.set([elsewhere]);
+      expect(responseJson(await inferredServer.call({ action: "list" })).roots).toEqual([]);
+      const ancestorAttach = await inferredServer.call({ action: "attach", path: elsewhere });
+      expect(ancestorAttach.isError).toBe(true);
+      expect(responseText(ancestorAttach)).toContain("too broad or reserved");
+
+      inferred.set([workspace]);
+      const bound = responseJson(await inferredServer.call({ action: "list" }));
+      expect(bound.status).toBe("bound");
+      expect(bound.rootId).toEqual(expect.any(String));
+      expect(fs.existsSync(path.join(installedData, "fabric", "traces"))).toBe(false);
+
+      // Unrelated runtime and library data infer no custom home, so an ordinary
+      // home-like task path is accepted through the public workspace list.
+      const unrelated = mutableWorkspaceContext([agents]);
+      const unrelatedServer = await mountWorkspaceServer({ runtimeRoot: unrelatedRuntime, dataRoot: libraryData, context: unrelated.provider, opened });
+      const accepted = responseJson(await unrelatedServer.call({ action: "list" }));
+      expect(accepted.status).toBe("bound");
+      expect(accepted.rootId).toEqual(expect.any(String));
+    } finally {
+      for (const server of opened.splice(0).reverse()) await server.close();
+      if (priorDebug === undefined) delete process.env.KIRO_FABRIC_DEBUG; else process.env.KIRO_FABRIC_DEBUG = priorDebug;
+    }
   });
 });

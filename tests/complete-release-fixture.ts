@@ -5,7 +5,7 @@ import path from 'node:path';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { fixture, fixtureTools } from './bundle-fixture.js';
 import { canonical, sha256, createBundleManifest, compatibilityFor, FOVEA_REQUIRED_APP, TARGETS } from '../scripts/bundle-contract.mjs';
-import { createBundleArchive } from '../scripts/bundle-archive.mjs';
+import { writeBundleArchive } from '../scripts/bundle-archive.mjs';
 import { generateBundleSbom } from '../scripts/generate-bundle-sbom.mjs';
 import { releaseSigningBytes } from '../scripts/release-trust.mjs';
 import { COMPLETE_GATES, completeQualificationSigningBytes } from '../scripts/complete-release-promotion.mjs';
@@ -47,7 +47,7 @@ export async function completeFixture() {
       const manifest = await createBundleManifest(bundle, { version: '1.0.0', target, compatibility: compatibilityFor(target, 2), provenance: { kind: 'release', sourceCommit: COMMIT }, tools: { ...fixtureTools(target), 'ast-grep': parser } });
       putBundle('bundle-manifest.json', canonical(manifest) + '\n');
       const name = `kiro-fabric-1.0.0-${target}.tar.gz`;
-      await createBundleArchive(bundle, path.join(input, name));
+      await writeBundleArchive(bundle, path.join(input, name));
       const archive = fs.readFileSync(path.join(input, name));
       const sbom = Buffer.from(JSON.stringify(await generateBundleSbom(bundle), null, 2) + '\n'); put(name + '.spdx.json', sbom);
       const m = { schema: 1, product: 'kiro-fabric', target, version: '1.0.0', sourceCommit: COMMIT, bundleDigest: manifest.digest, compatibility: manifest.compatibility,

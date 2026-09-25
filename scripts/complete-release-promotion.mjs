@@ -29,7 +29,7 @@ export function validateCompleteQualification(report, metadata, metadataBytes) {
   if (report.schema !== 1 || report.kind !== 'kiro-fabric.complete-qualification' ||
       ['target', 'version', 'sourceCommit', 'bundleDigest'].some(key => report[key] !== metadata[key]) ||
       report.archiveSha256 !== metadata.archive.sha256 || report.metadataSha256 !== sha256(metadataBytes)) throw Error('Complete qualification identity mismatch');
-  if (!Array.isArray(report.gates) || report.gates.length !== COMPLETE_GATES.length) throw Error('All complete native gates required');
+  if (!Array.isArray(report.gates) || report.gates.length !== COMPLETE_GATES.length) throw Error('All complete qualification gates required');
   const seen = new Set();
   for (const gate of report.gates) {
     fields(gate, ['gate', 'status', 'evidence']); fields(gate.evidence, ['size', 'sha256']);
@@ -93,6 +93,10 @@ async function captureCompleteRelease(input, expected, key, verifyMetadata) {
     const qualificationBytes = await readRegular(file + '.qualification.json', 65536);
     const qualificationSignature = await readRegular(file + '.qualification.sig', 89);
     const q = validateCompleteQualification(authenticateQualification(qualificationBytes, qualificationSignature, key), metadata, metadataBytes);
+    const archiveBytes = await readRegular(file, metadata.archive.size), parsed = parseBundleArchive(archiveBytes);
+    if (parsed.manifest.schema !== 2 || parsed.manifest.target !== target || parsed.digest !== metadata.bundleDigest ||
+        parsed.manifest.provenance.kind !== 'release' || parsed.manifest.provenance.sourceCommit !== expected.commit ||
+        parsed.manifest.version !== expected.version || canonical(parsed.manifest.compatibility) !== canonical(metadata.compatibility)) throw Error('Complete release manifest mismatch');
     for (const gate of q.gates) {
       const evidenceName = `${target}/${gate.gate}.json`;
       const bytes = await readRegular(path.join(input, evidenceName), gate.evidence.size);
@@ -106,21 +110,19 @@ async function captureCompleteRelease(input, expected, key, verifyMetadata) {
         // Witnesses stay private, never uploaded as public release assets.
       }
     }
-    const archiveBytes = await readRegular(file, metadata.archive.size);
     const sbomBytes = await readRegular(file + '.spdx.json', metadata.sbom.size);
     verifyMetadata(metadataBytes, signatureBytes, { archiveBytes, sbomBytes });
-    const parsed = parseBundleArchive(archiveBytes);
-    if (parsed.manifest.schema !== 2 || parsed.manifest.target !== target || parsed.digest !== metadata.bundleDigest ||
-        parsed.manifest.provenance.kind !== 'release' || parsed.manifest.provenance.sourceCommit !== expected.commit ||
-        parsed.manifest.version !== expected.version || canonical(parsed.manifest.compatibility) !== canonical(metadata.compatibility)) throw Error('Complete release manifest mismatch');
     // Files are data only here. No bundled executable or manager is invoked.
-    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'complete-release-')); fs.chmodSync(temp, 0o700);
-    try {
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'complete-release-'));
+    // Retain archive-derived scratch, never private witness contents or paths in logs.
+    console.error('Complete release inspection scratch retained locally; no automatic cleanup.');
+    fs.chmodSync(temp, 0o700);
+    {
       const root = path.join(temp, 'bundle');
       await extractBundleArchiveBytes(archiveBytes, root); await validateBundle(root);
       validateBuildInputProvenance(verifyClosureIntegrity(path.join(root, 'app')).buildInputs);
       if (canonical(await generateBundleSbom(root)) !== canonical(JSON.parse(sbomBytes.toString('utf8')))) throw Error('Complete release SPDX inventory mismatch');
-    } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+    }
     captures.push({ metadata, archiveBytes, sbomBytes });
     for (const [suffix, bytes] of [['', archiveBytes], ['.spdx.json', sbomBytes], ['.release.json', metadataBytes], ['.release.sig', signatureBytes], ['.qualification.json', qualificationBytes], ['.qualification.sig', qualificationSignature]]) assets.set(name + suffix, bytes);
   }

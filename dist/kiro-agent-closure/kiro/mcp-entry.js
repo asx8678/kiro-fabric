@@ -13,7 +13,7 @@ import {
 } from "../chunks/chunk-762YYRNE.js";
 import {
   validateBundle
-} from "../chunks/chunk-OLJUXTSO.js";
+} from "../chunks/chunk-U22TRE4R.js";
 import "../chunks/chunk-AE4E2KSU.js";
 
 // src/kiro/mcp-entry.ts
@@ -572,7 +572,7 @@ var writeControl = (target, value, onCreated, bindSelf = false) => {
       if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
     }
     fs.fchmodSync(fd, 384);
-    onCreated();
+    onCreated(owned);
     fs.writeFileSync(fd, text);
     fs.fsyncSync(fd);
   } catch (error) {
@@ -584,6 +584,7 @@ var writeControl = (target, value, onCreated, bindSelf = false) => {
   } finally {
     fs.closeSync(fd);
   }
+  return { file: owned };
 };
 var archiveRelease = (base, initialized) => {
   assertSnapshot(base, initialized);
@@ -600,6 +601,283 @@ var archiveRelease = (base, initialized) => {
   fs.unlinkSync(marker);
   syncDirectory(base);
 };
+var LEGACY_LOCK = ".install.lock";
+var LEGACY_FIELDS = ["pid", "nonce"];
+var legacyGateState = (base) => {
+  const target = path.join(base, LEGACY_LOCK);
+  let stat;
+  try {
+    stat = fs.lstatSync(target, { bigint: true });
+  } catch (error) {
+    return errorCode(error) === "ENOENT" ? { present: false, status: "absent" } : { present: true, valid: false, status: "recovery-required", reason: "legacy gate is unreadable; preserve for operator recovery" };
+  }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return { present: true, valid: false, status: "recovery-required", reason: "legacy gate type or symlink is unsafe; preserve for operator recovery" };
+  if (typeof process.getuid !== "function" || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7777n) !== 0o700n) return { present: true, valid: false, status: "recovery-required", reason: "unsafe legacy gate ownership or mode; preserve for operator recovery" };
+  let names;
+  try {
+    names = entries(target);
+  } catch {
+    return { present: true, valid: false, status: "recovery-required", reason: "legacy gate entry bound exceeded; preserve for operator recovery" };
+  }
+  if (names.length === 0) return { present: true, valid: false, status: "recovery-required", reason: "partial legacy gate without an owner record; preserve for operator recovery" };
+  if (names.length !== 1 || names[0] !== "owner.json") return { present: true, valid: false, status: "recovery-required", reason: "foreign entries inside legacy gate; preserve for operator recovery" };
+  let owner;
+  try {
+    owner = control(path.join(target, "owner.json"));
+  } catch {
+    return { present: true, valid: false, status: "recovery-required", reason: "invalid legacy owner record; preserve for operator recovery" };
+  }
+  const value = owner.value;
+  if (!keys(value, LEGACY_FIELDS) || !Number.isSafeInteger(value.pid) || value.pid <= 0 || value.pid > 2147483647 || typeof value.nonce !== "string" || !NONCE.test(value.nonce)) {
+    return { present: true, valid: false, status: "recovery-required", reason: "unrecognized legacy owner record; preserve for operator recovery" };
+  }
+  const record2 = { pid: value.pid, nonce: value.nonce };
+  if (liveness(value.pid) === "present") return { present: true, valid: true, status: "busy", owner: record2, reason: "legacy installation lock held by a live process" };
+  return { present: true, valid: true, status: "recovery-required", owner: record2, reason: "legacy lock owner is not live; PID/nonce-only evidence is never auto-reclaimed" };
+};
+var acquireLegacyGate = (base) => {
+  const root = rootIdentity(base);
+  const target = path.join(base, LEGACY_LOCK);
+  let created = false;
+  try {
+    fs.mkdirSync(target, { mode: 448 });
+    created = true;
+  } catch (error) {
+    if (errorCode(error) !== "EEXIST") throw error;
+  }
+  if (!created) {
+    const state = legacyGateState(base);
+    if (state.status === "busy") fail("another Kiro Fabric installation mutation is in progress", "INSTALL_LOCK_BUSY");
+    fail("legacy installation lock evidence requires operator recovery; it is never auto-reclaimed", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  const gateStat = privateStat(target, true);
+  if (gateStat.birthtimeNs <= 0n) fail("stable legacy gate birth identity unavailable", "INSTALL_LOCK_UNSUPPORTED");
+  const gateId = identity(gateStat);
+  const ownerPath = path.join(target, "owner.json");
+  const value = { pid: process.pid, nonce: nonce() };
+  let createdOwner;
+  let owner;
+  try {
+    if (entries(target).length) fail("new legacy gate replaced");
+    writeControl(ownerPath, value, (owned) => {
+      createdOwner = owned;
+    });
+    owner = control(ownerPath);
+    if (!keys(owner.value, LEGACY_FIELDS) || owner.value.pid !== process.pid || owner.value.nonce !== value.nonce) fail("new legacy owner binding changed");
+    if (!same(createdOwner, owner.file)) fail("new legacy owner inode replaced during acquisition");
+    syncDirectory(target);
+    syncDirectory(base);
+    assertRoot(base, root);
+    const finalGate = privateStat(target, true);
+    if (!same(identity(finalGate), gateId) || String(finalGate.birthtimeNs) !== String(gateStat.birthtimeNs)) fail("new legacy gate replaced");
+  } catch (error) {
+    try {
+      assertRoot(base, root);
+      if (createdOwner) {
+        try {
+          const currentOwner = fs.lstatSync(ownerPath, { bigint: true });
+          if (same(identity(currentOwner), createdOwner)) fs.unlinkSync(ownerPath);
+        } catch {
+        }
+      }
+      const currentGate = fs.lstatSync(target, { bigint: true });
+      if (same(identity(currentGate), gateId) && String(currentGate.birthtimeNs) === String(gateStat.birthtimeNs) && entries(target).length === 0) fs.rmdirSync(target);
+    } catch {
+    }
+    throw error;
+  }
+  return { target, root, dev: String(gateStat.dev), ino: String(gateStat.ino), birth: String(gateStat.birthtimeNs), pid: process.pid, nonce: value.nonce, ownerFile: owner.file, ownerHash: owner.hash };
+};
+var ownedLegacyRelease = (base, gate, onPhase = () => {
+}, shouldRetain = () => false) => {
+  const target = path.join(base, LEGACY_LOCK);
+  const ownerPath = path.join(target, "owner.json");
+  let ownerRemoved = false, gateRemoved = false, retained = false, done = false;
+  const run = () => {
+    if (done) return { retained, ownerRemoved, gateRemoved };
+    assertRoot(base, gate.root);
+    if (shouldRetain()) {
+      retained = true;
+      done = true;
+      return { retained, ownerRemoved, gateRemoved };
+    }
+    if (!ownerRemoved) {
+      const stat = fs.lstatSync(target, { bigint: true });
+      if (!stat.isDirectory() || stat.isSymbolicLink()) fail("legacy gate type changed; preserve for recovery");
+      if (!same(identity(stat), { dev: gate.dev, ino: gate.ino }) || String(stat.birthtimeNs) !== gate.birth) fail("legacy gate ownership changed; preserve for recovery");
+      privateStat(target, true);
+      const names = entries(target);
+      if (names.length !== 1 || names[0] !== "owner.json") fail("legacy gate content changed; preserve for recovery");
+      const ownerStat = fs.lstatSync(ownerPath, { bigint: true });
+      if (!same(identity(ownerStat), gate.ownerFile)) fail("legacy gate owner inode changed; preserve for recovery");
+      const owner = control(ownerPath);
+      if (!keys(owner.value, LEGACY_FIELDS) || owner.value.pid !== gate.pid || owner.value.nonce !== gate.nonce) fail("legacy gate owner changed; preserve for recovery");
+      if (owner.hash !== gate.ownerHash) fail("legacy gate owner bytes changed; preserve for recovery");
+      fs.unlinkSync(ownerPath);
+      ownerRemoved = true;
+      onPhase("legacy-owner-removed");
+      if (shouldRetain()) {
+        retained = true;
+        syncDirectory(target);
+        syncDirectory(base);
+        done = true;
+        return { retained, ownerRemoved, gateRemoved };
+      }
+    }
+    if (!gateRemoved) {
+      if (shouldRetain()) {
+        retained = true;
+        syncDirectory(target);
+        syncDirectory(base);
+        done = true;
+        return { retained, ownerRemoved, gateRemoved };
+      }
+      const after = fs.lstatSync(target, { bigint: true });
+      if (!after.isDirectory() || after.isSymbolicLink()) fail("legacy gate type changed; preserve for recovery");
+      if (!same(identity(after), { dev: gate.dev, ino: gate.ino }) || String(after.birthtimeNs) !== gate.birth) fail("legacy gate replaced during release; preserve for recovery");
+      if (entries(target).length) fail("legacy gate gained content during release; preserve for recovery");
+      fs.rmdirSync(target);
+      gateRemoved = true;
+      onPhase("legacy-gate-removed");
+    }
+    syncDirectory(base);
+    done = true;
+    return { retained, ownerRemoved, gateRemoved };
+  };
+  return { run, phase: () => ({ ownerRemoved, gateRemoved, retained, done }) };
+};
+var modernTransactionEvidence = (base) => {
+  for (const name of ["active.json", "candidate.json"]) {
+    try {
+      fs.lstatSync(path.join(base, ".transactions", name));
+      return true;
+    } catch (error) {
+      if (errorCode(error) !== "ENOENT") return true;
+    }
+  }
+  return false;
+};
+function acquireInstallationExclusion(base, { recover = false, transactionId, onPhase = () => {
+} } = {}) {
+  const incarnation = currentProcess();
+  const gate = acquireLegacyGate(base);
+  let modern;
+  try {
+    modern = acquireInstallationLock(base, { recover, transactionId, onPhase });
+  } catch (error) {
+    let retain = true;
+    const legacy2 = ownedLegacyRelease(base, gate, () => {
+    });
+    try {
+      if (!modernTransactionEvidence(base)) {
+        legacy2.run();
+        retain = false;
+      }
+    } catch (releaseError) {
+      const phase = legacy2.phase();
+      if (phase.gateRemoved) {
+        retain = false;
+        error.legacyGateReleased = true;
+        error.legacyGateDurabilityUncertain = true;
+      } else {
+        error.legacyGateReleaseError = releaseError;
+      }
+    }
+    if (retain) {
+      error.legacyGateRetained = true;
+      error.legacyGate = gate.target;
+    }
+    throw error;
+  }
+  if (!same(modern.owner.root, gate.root)) {
+    fail("installation root changed between legacy gate and modern lock; preserve all evidence for recovery", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  if (!equal(modern.owner.process, incarnation)) {
+    fail("installation process incarnation changed between legacy gate and modern lock; preserve all evidence for recovery", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  const state = { gateReleased: false, gateDurabilityUncertain: false, gateRetained: false, finished: false, releasing: false };
+  const legacy = ownedLegacyRelease(base, gate, onPhase, () => state.gateRetained);
+  const release = (
+    /** @type {any} */
+    ((options = {}) => {
+      if (state.finished || state.releasing) return release;
+      state.releasing = true;
+      try {
+        if (state.gateReleased) {
+          try {
+            legacy.run();
+            state.gateDurabilityUncertain = false;
+          } catch (error) {
+            state.gateDurabilityUncertain = true;
+            error.legacyGateReleased = true;
+            error.legacyGateDurabilityUncertain = true;
+            error.legacyGateRetained = false;
+            error.legacyGate = gate.target;
+            throw error;
+          }
+          state.finished = true;
+          return release;
+        }
+        let retain = options.retainLegacyGate === true || state.gateRetained;
+        if (!retain && modernTransactionEvidence(base)) retain = true;
+        try {
+          modern();
+        } catch (error) {
+          state.gateRetained = true;
+          error.legacyGateRetained = true;
+          error.legacyGate = gate.target;
+          throw error;
+        }
+        if (state.gateRetained) retain = true;
+        if (retain) {
+          state.gateRetained = true;
+          state.finished = true;
+          return release;
+        }
+        try {
+          const outcome = legacy.run();
+          if (outcome.retained) {
+            state.gateRetained = true;
+            state.finished = true;
+            return release;
+          }
+          state.gateReleased = true;
+          state.finished = true;
+        } catch (error) {
+          const phase = legacy.phase();
+          if (phase.gateRemoved) {
+            state.gateReleased = true;
+            state.gateDurabilityUncertain = true;
+            error.legacyGateReleased = true;
+            error.legacyGateDurabilityUncertain = true;
+            error.legacyGateRetained = false;
+          } else {
+            state.gateRetained = true;
+            error.legacyGateRetained = true;
+          }
+          error.legacyGate = gate.target;
+          throw error;
+        }
+        return release;
+      } finally {
+        state.releasing = false;
+      }
+    })
+  );
+  Object.defineProperties(release, {
+    owner: { value: modern.owner, enumerable: true },
+    recovered: { value: modern.recovered, enumerable: true },
+    retainedLegacyGate: { get: () => state.gateRetained },
+    releasedLegacyGate: { get: () => state.gateReleased },
+    legacyGate: { value: gate.target, enumerable: true }
+  });
+  release.retainLegacyGate = () => {
+    if (state.finished || state.gateReleased) return;
+    if (legacy.phase().gateRemoved) return;
+    state.gateRetained = true;
+  };
+  return release;
+}
 function acquireInstallationLock(base, { recover = false, transactionId, onPhase = () => {
 } } = {}) {
   if (typeof recover !== "boolean" || typeof onPhase !== "function" || transactionId !== void 0 && (typeof transactionId !== "string" || !TRANSACTION.test(transactionId))) fail("invalid installation lock options", "INSTALL_LOCK_USAGE");
@@ -891,7 +1169,7 @@ var boundedError = (error) => (error instanceof Error ? error.message : String(e
 var startKiroMcpServer = () => processServerTask ??= (async () => {
   const launch = resolveKiroAgentLaunchContext();
   const base = launch.managedGeneration ? managedInstallationBase(launch.managedGeneration.bundleRoot) : void 0;
-  const release = base ? acquireInstallationLock(base, { recover: false }) : void 0;
+  const release = base ? acquireInstallationExclusion(base, { recover: false }) : void 0;
   let server;
   try {
     try {
@@ -901,7 +1179,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
         validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
       }
       const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : void 0;
-      const { createKiroMcpServer } = await import("../chunks/mcp-server-2YLO4UBS.js");
+      const { createKiroMcpServer } = await import("../chunks/mcp-server-FYFISQ7W.js");
       server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedSearch ? { managedSearch } : {}, ...managedParser ? { managedParser } : {}, ...launch.foveaCallContext === true && managedParser ? { foveaCallContext: true } : {} });
     } finally {
       release?.();
@@ -999,7 +1277,7 @@ var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var self = realpathSync(fileURLToPath(import.meta.url));
 if (invoked === self) {
   if (process.argv[2] === "--first-prompt-hook") {
-    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-2LCXDYKI.js");
+    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-WOQFVOC3.js");
     process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : void 0));
   }
   process.exit(await runKiroMcpProcess());

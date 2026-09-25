@@ -6,6 +6,7 @@
 // on prefix length — aider's render-and-count loop generalized to a field.
 
 import { writeSpill } from "./temp-storage.js";
+import { coreDisplayName, coreToolName } from "./context.js";
 import type { Edge, EdgeEvidence, EdgeKind, Graph, NodeRec } from "./types.js";
 
 export const tokenEstimate = (text: string): number => Math.ceil(text.length / 4);
@@ -141,7 +142,7 @@ export const revealFoveated = (
   let vmax = 0;
   for (let i = 0; i < field.length; i++) if (field[i]! > vmax) vmax = field[i]!;
   if (vmax <= 0) {
-    return { text: `${opts.header ?? "fovea"}\n(nothing matched the current graph)`, tokens: 0, shown: 0, suppressed: 0, litTotal: 0, candidateOmitted: 0, truncated: false, revealedIds: [], revealed: [] };
+    return { text: `${opts.header ?? coreDisplayName()}\n(nothing matched the current graph)`, tokens: 0, shown: 0, suppressed: 0, litTotal: 0, candidateOmitted: 0, truncated: false, revealedIds: [], revealed: [] };
   }
   const seedSet = new Set(opts.seeds ?? []);
   const relations = directRelations(g, seedSet);
@@ -250,14 +251,14 @@ export const revealFoveated = (
   const items = [...lines, ...glowLines];
   const individual = lines.length;
 
-  const header = `${opts.header ?? "fovea"}${suppressed ? ` · ${suppressed} prior results omitted` : ""}`;
+  const header = `${opts.header ?? coreDisplayName()}${suppressed ? ` · ${suppressed} prior results omitted` : ""}`;
   const collapsed = litTotal - individual;
   const artifactNote = opts.overflowTo ? ` — full list saved to ${opts.overflowTo}` : "";
   const renderK = (k: number, note = artifactNote): string => {
     const shownIndiv = Math.min(k, individual);
     const remaining = collapsed + individual - shownIndiv;
     const footer = remaining > 0
-      ? `\n… ${remaining} more results collapsed or outside budget${note} — use fovea_dwell for wider context`
+      ? `\n… ${remaining} more results collapsed or outside budget${note} — use ${coreToolName('dwell')} for wider context`
       : "";
     return header + "\n" + items.slice(0, k).join("\n") + footer;
   };
@@ -319,7 +320,7 @@ export const revealGroups = (
   const renderK = (k: number, note = artifactNote): string => {
     const body = ordered.slice(0, k).map((gl) => `${gl.label.padEnd(2)} ${gl.detail}`);
     const rest = ordered.length - k;
-    const footer = rest > 0 ? [`\n… ${rest} more groups omitted${note} — use fovea_focus for detail`] : [];
+    const footer = rest > 0 ? [`\n… ${rest} more groups omitted${note} — use ${coreToolName('focus')} for detail`] : [];
     return [opts.header, ...body, ...footer].join("\n");
   };
   let hi = ordered.length;

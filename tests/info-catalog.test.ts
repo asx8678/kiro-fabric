@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { fabricInfoCatalog, MAX_INFO_CATALOG_BYTES } from "../src/kiro/info-catalog.js";
+import { fabricInfoCatalog } from "../src/kiro/info-catalog.js";
+
+// Independent contract ceiling; the production constant is intentionally private.
+const MAX_INFO_CATALOG_BYTES = 20_000;
 
 const action = (ref: string) => ({ ref, risk: "read" as const, descriptorDigest: "a".repeat(64) });
 const bytes = (value: unknown): number => Buffer.byteLength(JSON.stringify(value), "utf8");

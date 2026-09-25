@@ -4,8 +4,7 @@ import { createHash } from 'node:crypto';
 import { discoveryExclusionReason, filterSupported, isGeneratedSourceBytes } from './core/build.js';
 import { sha256 } from './parser-executable.js';
 import {
-  assertSourceComponent, openSourceDirectory, readSourceBounded, sourceLimit, sourcePlatform,
-  type SourceHandle, type SourcePlatform, type SourceStat,
+  assertSourceComponent, openSourceDirectory, readSourceBounded, sourceLimit,  type SourceHandle, type SourcePlatform, type SourceStat,
 } from './source-platform.js';
 
 export interface SourceSnapshot { id: string; root: string; hashes: Map<string, string>; coverage: Record<string, unknown> }
@@ -255,17 +254,7 @@ export class SourceAccess {
       throw error;
     } finally { await directory.close(); }
   }
-}
-
-/** Production selection fails closed when descriptor-relative support is absent. */
-export async function captureSourceSnapshot(root: string, destination: string, signal?: AbortSignal, options: SnapshotOptions = {}): Promise<SourceSnapshot> {
-  return new SourceAccess(sourcePlatform()).captureSourceSnapshot(root, destination, signal, options);
-}
-export async function readScopeSafeFile(root: string, path: string, maxBytes: number): Promise<string | undefined> {
-  return new SourceAccess(sourcePlatform()).readScopeSafeFile(root, path, maxBytes);
-}
-
-export function relativeStorageExclusion(root: string, storageRoot: string): string[] {
+}export function relativeStorageExclusion(root: string, storageRoot: string): string[] {
   const rel = relative(root, storageRoot);
   if (!rel) throw new Error('Storage root cannot be the authorized source root');
   return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel) ? [rel.split(sep).join('/')] : [];

@@ -202,17 +202,19 @@ export async function buildCompleteBundleForTest(options, deps) {
     if (!exists(cache)) {
       const acquiring = path.join(parent, `.private-tools-${randomBytes(16).toString("hex")}`);
       fs.mkdirSync(acquiring, { mode: 0o700 });
-      try {
+      console.error("[fabric:task-root] " + JSON.stringify({ path: acquiring, policy: "retain-if-unpublished" }));
+      {
         await deps.acquireTools(context.target, acquiring, root); await verifyPrivateToolCache(acquiring, pins, context.target);
         if (exists(cache)) await verifyPrivateToolCache(cache, pins, context.target);
         else fs.renameSync(acquiring, cache);
-      } finally { if (exists(acquiring)) fs.rmSync(acquiring, { recursive: true }); }
+      }
     }
     await verifyPrivateToolCache(cache, pins, context.target);
     await recordInstallerArtifact(parent, { schema: 1, kind: "tools", generation: path.basename(cache), digest: sha256(canonical(pins)), identity: { target: context.target, pins } });
     const staging = path.join(parent, `.complete-bundle-${randomBytes(16).toString("hex")}`);
     fs.mkdirSync(staging, { mode: 0o700 });
-    try {
+    console.error("[fabric:task-root] " + JSON.stringify({ path: staging, policy: "retain-if-unpublished" }));
+    {
       copyClosure(context.closure, path.join(staging, "app"));
       for (const tool of Object.keys(pins)) for (const member of pins[tool].members) {
         const file = path.join(staging, member.path);
@@ -229,7 +231,8 @@ export async function buildCompleteBundleForTest(options, deps) {
       verifyCapturedInputs(staging, initialBuild, mappings);
       verifyBuildCapture(root, path.join(staging, "app"), initialBuild); verifyBoundary(context);
       const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-      const manifest = await createBundleManifest(staging, { version: pkg.version, target: context.target, compatibility: compatibilityFor(context.target, Object.hasOwn(pins, "ast-grep") ? 2 : 1), provenance: context.provenance, tools: pins });
+      const schema = Object.hasOwn(pins, "ast-grep") ? 2 : 1;
+      const manifest = await createBundleManifest(staging, { version: pkg.version, target: context.target, compatibility: compatibilityFor(context.target, schema), provenance: context.provenance, tools: pins, schema });
       fs.writeFileSync(path.join(staging, "bundle-manifest.json"), canonical(manifest) + "\n", { mode: 0o600, flag: "wx" });
       const verified = await validateBundle(staging);
       const destination = path.join(parent, `kiro-fabric-bundle-${context.target}-${verified.digest}`);
@@ -239,7 +242,7 @@ export async function buildCompleteBundleForTest(options, deps) {
         if (previous.digest !== verified.digest) throw new Error("Existing bundle identity conflict");
       } else fs.renameSync(staging, destination);
       return await publish(context, parent, { ...verified, root: destination }, options.archive !== false, false);
-    } finally { if (exists(staging)) fs.rmSync(staging, { recursive: true }); }
+    }
   });
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -25,11 +25,17 @@ Trace the relevant production call paths before editing. Add focused regressions
 
 ## Verification results
 
+**Historical:** these counts come from Vitest suites that were later removed with
+the deleted test suite; they are not current evidence. Current local commands are
+`pnpm run check:local`, `pnpm run verify:references` and
+`pnpm run verify:offline baseline|installer`. The former `test:built`
+escalation below references a retired dispatcher that now fails closed.
+
 - Final integrated eight-finding suites: 239 passed, 2 platform-skipped.
 - Descriptor-pinned restore/helper suites: 149 passed; dependent staging/archive/boundary suites: 81 passed, 2 platform-skipped.
 - Source JSON and isolated release suites: 30 passed; real host closure/native output was built outside tracked `dist/` and left shared reachability evidence unchanged.
 - TypeScript and script typecheck passed. Structural review reported no blocking findings; independent runtime/concurrency review found no blockers. The first security review's restore TOCTOU/mode findings and shared reachability finding were fixed and regressed rather than accepted as residuals.
-- A full serial `test:built` escalation ran for the configured 20-minute external bound without a reported test failure, but timed out before suite completion; it is not counted as a full-suite pass.
+- A full serial `test:built` escalation ran for the configured 20-minute external bound without a reported test failure, but timed out before suite completion; it is not counted as a full-suite pass. (Historical: `pnpm run test:built` is now a retirement dispatcher under `scripts/qualification-unavailable.mjs` and exits nonzero.)
 - A fresh production build completed immediately before handoff.
 
 Residual qualification limits: Linux/macOS-x64 candidate jobs and live authenticated Kiro CLI qualification were not executed locally. Abandoned memory recovery claims deliberately require operator intervention; pre-fix binaries do not participate in the new claim protocol.

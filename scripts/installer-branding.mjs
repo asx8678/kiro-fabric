@@ -8,6 +8,6 @@ const row = text => `| ${text.padEnd(width - 2)} |`;
 export const INSTALLER_BANNER = [
   `+${"-".repeat(width)}+`,
   row(`KIRO FABRIC v${INSTALLER_VERSION}`),
-  row("Fabric agent + Fovea repository intelligence"),
+  row("Fabric + Navigator repository intelligence"),
   `+${"-".repeat(width)}+`,
 ].join("\n") + "\n";

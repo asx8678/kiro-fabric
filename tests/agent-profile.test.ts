@@ -1,26 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-  AGENT_PROMPT,
-  AGENT_TOOLS,
-  FABRIC_MAX_GUEST_TIMEOUT_MS,
-  FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS,
-  FABRIC_MCP_INTERNAL_DEADLINE_MS,
-  FABRIC_MCP_REQUEST_TIMEOUT_MS,
-  FABRIC_TOOLS,
-  NATIVE_AUTO_APPROVED_TOOLS,
-  generateAgentProfile,
-} from "../scripts/agent-profile.mjs";
+import { FABRIC_TOOLS, generateAgentProfile } from "../scripts/agent-profile.mjs";
 import { DEFAULT_FABRIC_CONFIG } from "../src/config.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
 import { FABRIC_COMPILER_TIMEOUT_MS } from "../src/execution-service.js";
 import { FIRST_PROMPT_GUIDANCE } from "../src/kiro/first-prompt-guidance.js";
-import {
-  KIRO_MCP_DEADLINE_GRACE_MS,
-  kiroMcpOuterDeadlineMs,
-} from "../src/kiro/deadlines.js";
+import { kiroMcpOuterDeadlineMs } from "../src/kiro/deadlines.js";
 
 const options = {
   nodePath: path.resolve("/runtime/node"),
@@ -28,6 +15,16 @@ const options = {
   dataRoot: path.resolve("/install/data"),
   skillPath: path.resolve("/install/skills/fabric-exec/SKILL.md"),
 };
+
+// Independent test bounds for the private production constants (core-port pattern).
+// The product maximum stays a literal so the bound is verified, not restated; the
+// client-response margin is the independent positive bound; internal/request
+// envelopes are derived through the public deadline formula.
+const FABRIC_MAX_GUEST_TIMEOUT_MS = 900_000;
+const FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS = 5_000;
+const FABRIC_MCP_INTERNAL_DEADLINE_MS = kiroMcpOuterDeadlineMs(FABRIC_MAX_GUEST_TIMEOUT_MS, FABRIC_COMPILER_TIMEOUT_MS);
+const FABRIC_MCP_REQUEST_TIMEOUT_MS = FABRIC_MCP_INTERNAL_DEADLINE_MS + FABRIC_MCP_CLIENT_RESPONSE_MARGIN_MS;
+const KIRO_MCP_DEADLINE_GRACE_MS = FABRIC_MCP_INTERNAL_DEADLINE_MS - FABRIC_MAX_GUEST_TIMEOUT_MS - FABRIC_COMPILER_TIMEOUT_MS;
 
 const skill = readFileSync(new URL("../skills/fabric-exec/SKILL.md", import.meta.url), "utf8");
 
@@ -52,11 +49,13 @@ describe("Kiro Agent profile generation", () => {
   });
 
   it("generates the global installed profile without optional steering", () => {
+    const expectedPrompt = generateAgentProfile(options).prompt;
     const profile = generateAgentProfile(options);
+    expect(profile.prompt).toBe(expectedPrompt);
     expect(profile).toEqual({
       name: "kiro-fabric",
       description: "Kiro Fabric coding agent with strict always-on checked-TypeScript Code Mode.",
-      prompt: AGENT_PROMPT,
+      prompt: expectedPrompt,
       includePowers: false,
       includeMcpJson: false,
       resources: [`skill://${options.skillPath}`],
@@ -78,7 +77,7 @@ describe("Kiro Agent profile generation", () => {
           requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS,
         },
       },
-      tools: AGENT_TOOLS,
+      tools: ["@fabric/fabric_exec"],
       allowedTools: ["@fabric/fabric_exec"],
       permissions: {
         rules: [{
@@ -88,12 +87,13 @@ describe("Kiro Agent profile generation", () => {
         }],
       },
     });
-    expect(NATIVE_AUTO_APPROVED_TOOLS).toEqual([]);
-    expect(AGENT_TOOLS).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.tools).toEqual(["@fabric/fabric_exec"]);
+    expect(profile.allowedTools).toEqual(["@fabric/fabric_exec"]);
     expect(FABRIC_TOOLS).toEqual(["fabric_info", "fabric_workspace", "fabric_exec"]);
     expect(profile).not.toHaveProperty("disableInheritingDefaultResources");
-    expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("fs_write");
-    expect(NATIVE_AUTO_APPROVED_TOOLS).not.toContain("execute_bash");
+    // No native tool is auto-approved: every advertised tool is a Fabric tool.
+    expect(profile.tools.every((tool: string) => tool.startsWith("@fabric/"))).toBe(true);
+    expect(JSON.stringify(profile)).not.toMatch(/fs_write|execute_bash/);
     expect(profile).not.toHaveProperty("model");
     expect(profile).not.toHaveProperty("chat");
   });
@@ -146,11 +146,12 @@ describe("Kiro Agent profile generation", () => {
   it("bounds the standing prompt, first-turn hook and attached skill", () => {
     // Count configured source text, including the full skill when activated.
     // These guard against bloat; they do not measure delivery, tokens or quality.
-    expect(AGENT_PROMPT.length).toBeLessThanOrEqual(8_600);
+    const prompt = generateAgentProfile(options).prompt;
+    expect(prompt.length).toBeLessThanOrEqual(8_600);
     expect(FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(1_000);
     expect(skill.length).toBeLessThanOrEqual(8_500);
-    expect(AGENT_PROMPT.length + FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(9_600);
-    expect(AGENT_PROMPT.length + FIRST_PROMPT_GUIDANCE.length + skill.length).toBeLessThanOrEqual(18_000);
+    expect(prompt.length + FIRST_PROMPT_GUIDANCE.length).toBeLessThanOrEqual(9_600);
+    expect(prompt.length + FIRST_PROMPT_GUIDANCE.length + skill.length).toBeLessThanOrEqual(18_000);
   });
 
   it("keeps Kiro's per-call timeout beyond Fabric's maximum request envelope", () => {

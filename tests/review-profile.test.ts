@@ -3,10 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  AGENT_PROMPT, AGENT_PROMPTS, STANDARD_AGENT_PROMPT, REVIEW_AGENT_PROMPT,
-  REVIEW_CORE_PROMPT, MINIMAL_AGENT_PROMPT, createAgentPrompt, generateAgentProfile,
-} from "../scripts/agent-profile.mjs";
+import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
@@ -35,20 +32,22 @@ afterEach(async () => {
 
 describe("explicit profile guidance modes", () => {
   it("keeps omitted/explicit standard identical and selects immutable public prompts", () => {
-    expect(generateAgentProfile(options)).toEqual(generateAgentProfile({ ...options, guidanceMode: "standard" }));
-    expect(AGENT_PROMPT).toBe(STANDARD_AGENT_PROMPT);
-    expect(createAgentPrompt()).toBe(AGENT_PROMPT);
-    expect(Object.isFrozen(AGENT_PROMPTS)).toBe(true);
-    expect(Object.keys(AGENT_PROMPTS)).toEqual([...modes]);
-    for (const mode of modes) {
-      expect(createAgentPrompt(mode)).toBe(AGENT_PROMPTS[mode]);
-      expect(generateAgentProfile({ ...options, guidanceMode: mode }).prompt).toBe(AGENT_PROMPTS[mode]);
+    const standard = generateAgentProfile(options);
+    expect(standard).toEqual(generateAgentProfile({ ...options, guidanceMode: "standard" }));
+    const profiles = modes.map(guidanceMode => generateAgentProfile({ ...options, guidanceMode }));
+    expect(new Set(profiles.map(profile => profile.prompt)).size).toBe(modes.length);
+    for (const [index, mode] of modes.entries()) {
+      expect(generateAgentProfile({ ...options, guidanceMode: mode }).prompt).toBe(profiles[index]!.prompt);
     }
+    // Public prompts are stable values; a returned profile cannot poison later generation.
+    const first = generateAgentProfile(options) as unknown as { prompt: string; resources: string[] };
+    first.prompt = "poisoned";
+    first.resources.push("file:///poisoned");
+    expect(generateAgentProfile(options)).toEqual(standard);
   });
 
   it.each(["", "automatic", "toString", "__proto__", null, 0, {}, ["standard"]])("rejects invalid mode %j without fallback", value => {
     const mode = value as "standard";
-    expect(() => createAgentPrompt(mode)).toThrow(/guidanceMode/);
     expect(() => generateAgentProfile({ ...options, guidanceMode: mode })).toThrow(/guidanceMode/);
   });
 
@@ -67,10 +66,10 @@ describe("explicit profile guidance modes", () => {
     expect(() => generateAgentProfile({ ...options, guidanceMode, dataRoot: "/bad\npath" })).toThrow(/control characters/);
   });
 
-  it("makes code navigation Fovea-first without enabling native hooks or minimal steering", () => {
+  it("makes code navigation Navigator-first without enabling native hooks or minimal steering", () => {
     for (const guidanceMode of ["standard", "review"] as const) {
       const profile = generateAgentProfile({ ...options, guidanceMode });
-      expect(profile.prompt).toContain("use Fovea first inside fabric_exec without being asked");
+      expect(profile.prompt).toContain("use Navigator first inside fabric_exec without being asked");
       for (const api of ["repo.focus(", "repo.sketch(", "repo.impact(", "repo.focusRead({query})", "fresh:true"]) {
         expect(profile.prompt).toContain(api);
       }
@@ -81,7 +80,7 @@ describe("explicit profile guidance modes", () => {
       expect(JSON.stringify(profile.hooks)).not.toContain("--fovea-hook");
       expect(profile.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT).toBe("1");
     }
-    expect(generateAgentProfile({ ...options, guidanceMode: "minimal" }).prompt).not.toMatch(/Fovea|repo\./);
+    expect(generateAgentProfile({ ...options, guidanceMode: "minimal" }).prompt).not.toMatch(/Navigator|repo\./u);
   });
 
   it("never attaches resources, first-prompt hooks, or hidden review advice in minimal", () => {
@@ -89,7 +88,7 @@ describe("explicit profile guidance modes", () => {
     expect(profile.resources).toEqual([]);
     expect(profile.hooks).toEqual([]);
     expect(profile.mcpServers.fabric.env.KIRO_FABRIC_FOVEA_CALL_CONTEXT).toBe("0");
-    expect(profile.prompt).toBe(MINIMAL_AGENT_PROMPT);
+    expect(profile.prompt.length).toBeGreaterThan(0);
     expect(profile.prompt).not.toMatch(/review|finding|coverage ledger|fabric\.help|bootstrap.*help/i);
     expect(profile.prompt).not.toMatch(/task contract|acceptance ledger|plan privately|simplest credible method|next unresolved check|stop and deliver/i);
     expect(JSON.stringify(profile)).not.toMatch(/first-prompt-hook|skill:\/\/|file:\/\//);
@@ -110,10 +109,12 @@ describe("explicit profile guidance modes", () => {
   it("opts into a short review core without automatic help or a finding quota", () => {
     const standard = generateAgentProfile(options);
     const review = generateAgentProfile({ ...options, guidanceMode: "review" });
-    expect(review.prompt).toBe(REVIEW_AGENT_PROMPT);
-    expect(review.prompt).toBe(`${STANDARD_AGENT_PROMPT}\n\n${REVIEW_CORE_PROMPT}`);
+    expect(review.prompt.startsWith(`${standard.prompt}\n\n`)).toBe(true);
+    const core = review.prompt.slice(standard.prompt.length + 2);
+    expect(core.length).toBeLessThan(1000);
+    expect(core).toContain("Explicit review mode");
+    expect(core).toContain("No finding quota");
     expect(standard.prompt).not.toContain("Explicit review mode");
-    expect(REVIEW_CORE_PROMPT.length).toBeLessThan(1000);
     expect(review.resources).toEqual(standard.resources);
     expect(review.hooks).toEqual(standard.hooks);
     expect(review.hooks).toHaveLength(1);

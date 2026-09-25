@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { generateAgentProfile } from "./agent-profile.mjs";
 import { captureDirectoryAncestry, readDirectoryBoundedSync, directoryIsEmpty } from "./filesystem-boundary.mjs";
+import { acquireInstallationExclusion } from "./installer-lock.mjs";
 import {
   snapshotTree,
   validateAgentPackage,
@@ -15,7 +16,7 @@ import {
 
 const OWNER = "kiro-fabric-agent-user-install";
 const MANIFEST = "install-owner.json";
-const MANIFEST_SCHEMA = 2;
+const MANIFEST_SCHEMA = 3;
 const MODULE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const HASH_PATTERN = /^[a-f0-9]{64}$/u;
 const MAX_INSTALL_MANIFEST_BYTES = 16 * 1024 * 1024;
@@ -42,6 +43,8 @@ const paths = (kiroHome) => ({
   manifest: path.join(kiroHome, "kiro-fabric", MANIFEST),
   data: path.join(kiroHome, "kiro-fabric", "data"),
   skills: path.join(kiroHome, "kiro-fabric", "skills"),
+  browserSkill: path.join(kiroHome, "kiro-fabric", "skills", "browser-harness"),
+  browserEvidence: path.join(kiroHome, "kiro-fabric", "docs", "browser-evidence"),
   runtime: path.join(kiroHome, "kiro-fabric", "runtime"),
 });
 
@@ -313,7 +316,7 @@ const readManifest = (installPaths) => {
       bytes,
     };
   }
-  if (manifest.schemaVersion !== MANIFEST_SCHEMA || typeof manifest.packageDigest !== "string" ||
+  if (![2, MANIFEST_SCHEMA].includes(manifest.schemaVersion) || typeof manifest.packageDigest !== "string" ||
       !HASH_PATTERN.test(manifest.packageDigest) || !HASH_PATTERN.test(manifest.profileSha256 ?? "") ||
       !manifest.skill || !Array.isArray(manifest.runtimeGenerations) ||
       manifest.runtimeGenerations.length > MAX_RUNTIME_GENERATIONS || !HASH_PATTERN.test(manifest.currentRuntime ?? "")) {
@@ -331,6 +334,13 @@ const readManifest = (installPaths) => {
     names.add(record.name);
   }
   if (!names.has(manifest.currentRuntime)) throw new Error("current runtime is absent from install manifest");
+  if (manifest.schemaVersion === 3) {
+    if (manifest.browser !== null && (!manifest.browser || typeof manifest.browser !== "object" || !manifest.browser.skill || !manifest.browser.evidence)) throw new Error("invalid browser resources in install manifest");
+    for (const [label, tree] of manifest.browser ? [["browser skill", manifest.browser.skill], ["browser evidence", manifest.browser.evidence]] : []) {
+      assertDigest(tree.digest, `${label} tree digest`);
+      if (!Array.isArray(tree.directories) || !Array.isArray(tree.files) || tree.directories.length + tree.files.length > MAX_TREE_INVENTORY_ENTRIES) throw new Error(`invalid or oversized ${label} inventory in install manifest`);
+    }
+  }
   return { manifest, bytes, legacy: undefined };
 };
 
@@ -350,6 +360,10 @@ const assertInstallationUnmodified = (installPaths, previousRecord) => {
     return;
   }
   assertSameTree(path.join(installPaths.skills, "fabric-exec"), previous.skill, "owned skill tree");
+  if (previous.schemaVersion === 3 && previous.browser) {
+    assertSameTree(installPaths.browserSkill, previous.browser.skill, "owned browser skill tree");
+    assertSameTree(installPaths.browserEvidence, previous.browser.evidence, "owned browser evidence tree");
+  }
   for (const generation of previous.runtimeGenerations) {
     assertSameTree(path.join(installPaths.runtime, generation.name), generation.tree, `owned runtime generation ${generation.name}`);
   }
@@ -381,6 +395,8 @@ const assertUnownedTargetsAbsent = (installPaths, generationName) => {
   if (lstat(skill)) throw new Error(`refusing to overwrite unowned skill: ${skill}`);
   const generation = path.join(installPaths.runtime, generationName);
   if (lstat(generation)) throw new Error(`refusing to adopt unowned runtime generation: ${generation}`);
+  if (lstat(installPaths.browserSkill)) throw new Error(`refusing to overwrite unowned browser skill tree: ${installPaths.browserSkill}`);
+  if (lstat(installPaths.browserEvidence)) throw new Error(`refusing to overwrite unowned browser evidence tree: ${installPaths.browserEvidence}`);
 };
 
 const inspectTarget = (kiroHome, installPaths, generationName) => {
@@ -417,41 +433,13 @@ const inspectTarget = (kiroHome, installPaths, generationName) => {
   return previous;
 };
 
-const acquireLock = (base) => {
-  const target = path.join(base, ".install.lock");
-  try {
-    fs.mkdirSync(target, { mode: 0o700 });
-  } catch (error) {
-    if (error?.code === "EEXIST") throw new Error("another Kiro Fabric install is in progress");
-    throw error;
-  }
-  const stats = fs.lstatSync(target);
-  const nonce = randomBytes(32).toString("hex");
-  try {
-    assertSafeDirectory(target, { private: true });
-    fs.writeFileSync(path.join(target, "owner.json"), `${JSON.stringify({ pid: process.pid, nonce })}\n`, { mode: 0o600, flag: "wx" });
-    return { target, dev: stats.dev, ino: stats.ino, nonce };
-  } catch (error) {
-    try { fs.rmdirSync(target); } catch {}
-    throw error;
-  }
-};
-
-const releaseLock = (lock) => {
-  const stats = fs.lstatSync(lock.target);
-  if (!stats.isDirectory() || stats.isSymbolicLink() || stats.dev !== lock.dev || stats.ino !== lock.ino) {
-    throw new Error("install lock ownership changed during operation");
-  }
-  assertCurrentUser(stats, "install lock");
-  const entries = readDirectoryBoundedSync(lock.target, 2);
-  if (JSON.stringify(entries) !== JSON.stringify(["owner.json"])) throw new Error("install lock contains unowned content");
-  const owner = path.join(lock.target, "owner.json");
-  assertSafeFile(owner, "install lock owner");
-  const parsed = JSON.parse(fs.readFileSync(owner, "utf8"));
-  if (parsed.pid !== process.pid || parsed.nonce !== lock.nonce) throw new Error("install lock identity changed during operation");
-  fs.unlinkSync(owner);
-  fs.rmdirSync(lock.target);
-};
+// W5: updated legacy writers acquire the legacy gate THEN the modern lock in a
+// fixed order. This excludes both reviewed historical protocol families and
+// never auto-reclaims ambiguous PID/nonce/partial/foreign legacy evidence.
+// No waits, retries or deadlock. Pending modern transaction evidence is never
+// interpreted here; it refuses the mutation and retains the legacy gate.
+const pendingModernEvidence = (installPaths) => [".transactions/active.json", ".transactions/candidate.json"]
+  .some((name) => lstat(path.join(installPaths.base, name)));
 
 const prepareMigration = (input, destination, options) => {
   if (input === undefined) return undefined;
@@ -483,21 +471,42 @@ const restoreRequiredMove = (backup, target, label) => {
   else if (!targetStats) throw new Error(`rollback backup is missing for ${label}`);
 };
 
-const rollbackInstall = (state) => {
+// Quarantine a whole attempted entry without following it or replacing an
+// existing recovery target. This is preservation under the installer lock,
+// not a no-replace syscall or hostile-filesystem atomicity guarantee.
+const preserveRecoveryEntry = (source, transaction, name) => {
+  if (!lstat(source)) return;
+  if (!transaction) throw new Error(`recovery directory unavailable for ${source}`);
+  assertSafeDirectory(transaction, { private: true });
+  const target = path.join(transaction, name);
+  if (lstat(target)) throw new Error(`recovery collision; evidence retained at ${source} and ${target}`);
+  fs.renameSync(source, target);
+};
+
+const recoveryError = (error, transaction, committed, legacyGateRetained) => {
+  const message = `${error instanceof Error ? error.message : String(error)}${transaction ? `; unverified recovery evidence: ${transaction}` : ""}`;
+  const result = error instanceof AggregateError
+    ? new AggregateError(error.errors, message, { cause: error })
+    : new Error(message, { cause: error });
+  return Object.assign(result, { committed, legacyGateRetained, recoveryRequired: legacyGateRetained,
+    retainedEvidence: transaction ? { path: transaction, status: "unverified" } : undefined });
+};
+
+const rollbackInstall = (state, transaction) => {
   // Restore payload first and publish its authenticating manifest last. If a
   // payload restore fails, the caller invalidates the active manifest and
   // leaves this transaction intact as recovery material.
   for (const migrated of state.migrated) {
-    if (lstat(migrated)) fs.rmSync(migrated, { recursive: true });
+    preserveRecoveryEntry(migrated, transaction, `rollback-migration-${path.basename(migrated)}`);
   }
-  if (state.profileInstalled && lstat(state.paths.profile)) fs.unlinkSync(state.paths.profile);
+  if (state.profileInstalled) preserveRecoveryEntry(state.paths.profile, transaction, "rollback-profile");
   if (state.profileBackedUp) restoreRequiredMove(state.backupProfile, state.paths.profile, "profile");
   const skillTarget = path.join(state.paths.skills, "fabric-exec");
-  if (state.skillInstalled && lstat(skillTarget)) fs.rmSync(skillTarget, { recursive: true });
+  if (state.skillInstalled) preserveRecoveryEntry(skillTarget, transaction, "rollback-skill");
   if (state.skillBackedUp) restoreRequiredMove(state.backupSkill, skillTarget, "skill");
-  if (state.generationInstalled && lstat(state.generation)) fs.rmSync(state.generation, { recursive: true });
+  if (state.generationInstalled) preserveRecoveryEntry(state.generation, transaction, "rollback-runtime");
   if (state.legacyPublished && lstat(state.legacyPreservedRoot)) {
-    fs.renameSync(state.legacyPreservedRoot, state.legacyPreparedRoot);
+    restoreRequiredMove(state.legacyPreservedRoot, state.legacyPreparedRoot, "legacy preservation");
     state.legacyPublished = false;
   }
   if (state.legacySkillMoved) {
@@ -508,15 +517,17 @@ const rollbackInstall = (state) => {
   }
   if (state.previousRecord) {
     assertInstallationUnmodified(state.paths, state.previousRecord);
-  } else if (lstat(state.paths.profile) || lstat(skillTarget) || lstat(state.generation)) {
+  } else if (state.payloadMutationStarted && (lstat(state.paths.profile) || lstat(skillTarget) || lstat(state.paths.browserSkill) || lstat(state.paths.browserEvidence) || lstat(state.generation))) {
     throw new Error("rollback left Agent payload behind after a new installation");
   }
   if (state.manifestWritten) {
+    preserveRecoveryEntry(state.paths.manifest, transaction, "rollback-manifest");
     if (state.previousManifestBytes) atomicWrite(state.paths.manifest, state.previousManifestBytes);
-    else if (lstat(state.paths.manifest)) fs.unlinkSync(state.paths.manifest);
   }
 };
 
+/** @internal Live CLI implementation, exported for hermetic installer probes only.
+ * This is the exact function `main()` executes; no wrapper or default changed. */
 export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, userHome = homedir(), options = {}) => {
   if (!["linux", "darwin"].includes(process.platform)) throw new Error("Agent installation requires Linux or macOS");
   if (!/^v?(?:2[4-9]|[3-9]\d|\d{3,})\./u.test(process.version)) throw new Error("Node.js >=24 is required");
@@ -536,11 +547,11 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
   const created = [];
   ensureDirectory(kiroHome, { private: false }, created);
   ensureDirectory(installPaths.base, { private: true }, created);
-  const lock = acquireLock(installPaths.base);
+  const lock = acquireInstallationExclusion(installPaths.base, { recover: false });
   let transaction;
+  let retainGate = false;
   let completed = false;
   let committed = false;
-  let rollbackCompleted = false;
   const state = {
     paths: installPaths,
     generation,
@@ -550,6 +561,7 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
     skillInstalled: false,
     skillBackedUp: false,
     manifestWritten: false,
+    payloadMutationStarted: false,
     previousManifestBytes: undefined,
     previousRecord: undefined,
     backupProfile: undefined,
@@ -565,8 +577,14 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
     migrated: [],
   };
   try {
+    if (pendingModernEvidence(installPaths)) { retainGate = true; throw new Error("pending modern installation transaction evidence; reconcile recovery before installing"); }
     const previousRecord = inspectTarget(kiroHome, installPaths, generationName);
     const previous = previousRecord?.manifest;
+    const previouslyOwnedBrowser = previous?.schemaVersion === 3 ? previous.browser : null;
+    if (!previouslyOwnedBrowser) {
+      if (lstat(installPaths.browserSkill)) throw new Error(`refusing to overwrite unowned browser skill tree: ${installPaths.browserSkill}`);
+      if (lstat(installPaths.browserEvidence)) throw new Error(`refusing to overwrite unowned browser evidence tree: ${installPaths.browserEvidence}`);
+    }
     state.previousManifestBytes = previousRecord?.bytes;
     state.previousRecord = previousRecord;
     ensureDirectory(path.dirname(installPaths.profile), { private: false }, created);
@@ -627,6 +645,9 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
       packageDigest: staged.digest,
       profileSha256: hash(profileBytes),
       skill: staged.skill,
+      // Ownership schema 3 is not bundle schema 3. Keep authenticated legacy
+      // resources inert at their original paths; new profiles never load them.
+      browser: previouslyOwnedBrowser,
       currentRuntime: generationName,
       runtimeGenerations,
     };
@@ -649,12 +670,13 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
       state.legacyRuntimeMoved = true;
     }
 
+    state.payloadMutationStarted = true;
     if (lstat(generation)) {
       if (!previous?.runtimeGenerations.some((record) => record.name === generationName)) {
         throw new Error(`refusing to adopt unowned runtime generation: ${generation}`);
       }
       assertSameTree(generation, staged.runtime, "existing runtime generation");
-      fs.rmSync(preparedRuntime, { recursive: true });
+      // Keep the redundant prepared copy as transaction evidence; never prune it.
     } else {
       fs.renameSync(preparedRuntime, generation);
       state.generationInstalled = true;
@@ -700,16 +722,19 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
     options.onCommitStep?.("manifest");
     assertSameTree(generation, staged.runtime, "installed runtime generation");
     assertSameTree(skillTarget, staged.skill, "installed skill");
+    if (previouslyOwnedBrowser) {
+      assertSameTree(installPaths.browserSkill, previouslyOwnedBrowser.skill, "preserved legacy browser skill tree");
+      assertSameTree(installPaths.browserEvidence, previouslyOwnedBrowser.evidence, "preserved legacy browser evidence tree");
+    }
     validateInstalledAgentProfile(installPaths.profile, { ...profileOptions, installRoot: installPaths.base });
     const installedManifest = readManifest(installPaths);
     if (!installedManifest || JSON.stringify(installedManifest.manifest) !== JSON.stringify(manifest)) {
       throw new Error("installed manifest verification failed");
     }
 
-    // The new manifest now describes and authenticates the complete active
-    // installation. Old backups are private inert cleanup from this point, so
-    // cleanup failure must never roll the active install back after deleting a
-    // backup needed for restoration.
+    // The new manifest now describes the complete active installation. Keep
+    // every previous payload and preparation entry as inert recovery evidence.
+    // A post-commit hook failure must never roll this installation back.
     committed = true;
     completed = true;
     state.generationInstalled = false;
@@ -717,10 +742,8 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
     state.profileInstalled = false;
     state.manifestWritten = false;
     options.onCleanupStep?.("committed");
-    if (state.skillBackedUp) fs.rmSync(state.backupSkill, { recursive: true });
-    if (state.profileBackedUp) fs.unlinkSync(state.backupProfile);
-    fs.rmSync(transaction, { recursive: true });
-    transaction = undefined;
+    // Transaction storage intentionally accumulates. Validity is not authority
+    // to delete previous profiles, skills, migrated repositories or partial copies.
 
     // Active sessions may still open files from ANY earlier generation. This
     // legacy installer has no reliable session-liveness proof, so updates must
@@ -742,6 +765,7 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
       runtime: generation,
       data: installPaths.data,
       packageDigest: staged.digest,
+      retainedEvidence: { path: transaction, status: "retained" },
       preservedLegacy: previousRecord?.legacy ? {
         root: state.legacyPreservedRoot,
         runtime: path.join(state.legacyPreservedRoot, "runtime"),
@@ -751,31 +775,37 @@ export const installUserAgent = (stagingRoot = MODULE_ROOT, env = process.env, u
   } catch (error) {
     if (!committed) {
       try {
-        rollbackInstall(state);
-        rollbackCompleted = true;
+        rollbackInstall(state, transaction);
       } catch (rollbackError) {
+        // Uncertain rollback: the active payload/manifest may be unrecovered.
+        // Retain the legacy exclusion so a historical writer cannot publish into
+        // this state. The .installing recovery evidence stays intact and the
+        // error carries explicit gate/commit facts.
+        retainGate = true;
+        lock.retainLegacyGate?.();
         const failures = [error, rollbackError];
         try {
-          if (lstat(installPaths.manifest)) fs.unlinkSync(installPaths.manifest);
+          preserveRecoveryEntry(installPaths.manifest, transaction, "unrecovered-manifest");
         } catch (manifestError) {
           failures.push(manifestError);
         }
-        throw new AggregateError(failures, "Agent installation and rollback both failed; recovery material was preserved");
+        throw recoveryError(new AggregateError(failures, "Agent installation and rollback both failed; recovery material was preserved and the legacy exclusion is retained"), transaction, false, true);
       }
-      throw error;
+      throw recoveryError(error, transaction, false, retainGate);
     }
-    throw new AggregateError([error], `Agent installation committed, but post-commit cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw recoveryError(new AggregateError([error], `Agent installation committed, but post-commit hook failed: ${error instanceof Error ? error.message : String(error)}`), transaction, true, retainGate);
   } finally {
-    if (!committed && rollbackCompleted && transaction && lstat(transaction)) fs.rmSync(transaction, { recursive: true, force: true });
-    releaseLock(lock);
     if (!completed) {
       for (const directory of created.reverse()) {
         if (lstat(directory)) removeIfEmpty(directory);
       }
     }
+    lock({ retainLegacyGate: retainGate || pendingModernEvidence(installPaths) });
   }
 };
 
+/** @internal Live CLI implementation, exported for hermetic installer probes only.
+ * This is the exact function `main()` executes; no wrapper or default changed. */
 export const uninstallUserAgent = (env = process.env, userHome = homedir(), options = {}) => {
   // Invocation cwd is not an authorized coding workspace. Only an explicit
   // workspace role participates in the installer overlap check.
@@ -788,17 +818,18 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
   if (!previousRecord) throw new Error("Kiro Fabric Agent is not installed");
   assertInstallationUnmodified(installPaths, previousRecord);
   assertNoUnownedRuntimeGenerations(installPaths, previousRecord);
-  const lock = acquireLock(installPaths.base);
+  const lock = acquireInstallationExclusion(installPaths.base, { recover: false });
+  let retainGate = false;
   const transaction = path.join(installPaths.base, `.uninstalling-${process.pid}-${randomBytes(16).toString("hex")}`);
   const moved = [];
   let committed = false;
-  let rollbackCompleted = false;
   let legacyPreparedRoot;
   let legacyPreservedRoot;
   let legacyPublished = false;
   let legacySkillMoved = false;
   let legacyRuntimeMoved = false;
   try {
+    if (pendingModernEvidence(installPaths)) { retainGate = true; throw new Error("pending modern installation transaction evidence; reconcile recovery before uninstalling"); }
     const fresh = readManifest(installPaths);
     if (!fresh || JSON.stringify(fresh.manifest) !== JSON.stringify(previousRecord.manifest)) {
       throw new Error("install manifest changed before uninstall");
@@ -834,6 +865,10 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
       legacyPublished = true;
     } else {
       move(path.join(installPaths.skills, "fabric-exec"), "skill");
+      if (fresh.manifest.schemaVersion === 3 && fresh.manifest.browser) {
+        move(installPaths.browserSkill, "browser-skill");
+        move(installPaths.browserEvidence, "browser-evidence");
+      }
       for (const record of fresh.manifest.runtimeGenerations) {
         move(path.join(installPaths.runtime, record.name), `runtime-${record.name}`);
       }
@@ -844,23 +879,20 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
     }
     move(installPaths.manifest, "manifest");
     options.onCommitStep?.("quarantined");
-    // Everything that makes the Agent discoverable or executable has now been
-    // moved into a private quarantine. Cleanup is irreversible from this point;
-    // a cleanup error must leave the remaining quarantine inert, never attempt
-    // to restore a partially deleted installation.
+    // Remove the active discoverability paths, not their contents. All payload,
+    // ownership and optional data quarantine remains available for recovery.
     committed = true;
-    fs.rmSync(transaction, { recursive: true });
     // Keep removal of owned sub-containers under the install lock. A new
     // installer must never have its freshly created runtime/skills directory
     // removed by an uninstaller that has already yielded the lock.
-    for (const directory of [installPaths.skills, installPaths.runtime]) {
+    for (const directory of [installPaths.skills, installPaths.runtime, path.dirname(installPaths.browserEvidence)]) {
       if (lstat(directory)) removeIfEmpty(directory);
     }
   } catch (error) {
     if (!committed) {
       try {
         if (legacyPublished && lstat(legacyPreservedRoot)) {
-          fs.renameSync(legacyPreservedRoot, legacyPreparedRoot);
+          restoreRequiredMove(legacyPreservedRoot, legacyPreparedRoot, "legacy preservation");
           legacyPublished = false;
         }
         if (legacyRuntimeMoved && previousRecord.legacy) {
@@ -889,27 +921,32 @@ export const uninstallUserAgent = (env = process.env, userHome = homedir(), opti
         if (!fs.readFileSync(installPaths.manifest).equals(previousRecord.bytes)) {
           throw new Error("restored install manifest differs from its recovery copy");
         }
-        rollbackCompleted = true;
       } catch (rollbackError) {
+        // Uncertain rollback: never release the legacy exclusion while the
+        // uninstall may be unrecovered. Recovery evidence is retained and the
+        // error carries explicit gate/commit facts.
+        retainGate = true;
+        lock.retainLegacyGate?.();
         const failures = [error, rollbackError];
         try {
-          if (lstat(installPaths.manifest)) fs.unlinkSync(installPaths.manifest);
+          preserveRecoveryEntry(installPaths.manifest, transaction, "unrecovered-manifest");
         } catch (manifestError) {
           failures.push(manifestError);
         }
-        throw new AggregateError(failures, "Agent uninstall and rollback both failed; recovery material was preserved");
+        throw recoveryError(new AggregateError(failures, "Agent uninstall and rollback both failed; recovery material was preserved and the legacy exclusion is retained"), transaction, false, true);
       }
-      if (rollbackCompleted && lstat(transaction)) fs.rmSync(transaction, { recursive: true, force: true });
     }
-    throw error;
+    throw recoveryError(error, transaction, committed, retainGate);
   } finally {
-    releaseLock(lock);
+    if (options.purgeData && lstat(installPaths.base)) removeIfEmpty(installPaths.base);
+    lock({ retainLegacyGate: retainGate || pendingModernEvidence(installPaths) });
   }
-  if (options.purgeData) removeIfEmpty(installPaths.base);
   return {
     profile: installPaths.profile,
-    dataPreserved: !options.purgeData,
-    data: installPaths.data,
+    dataPreserved: true,
+    dataQuarantined: moved.some(entry => entry.source === installPaths.data),
+    data: moved.some(entry => entry.source === installPaths.data) ? path.join(transaction, "data") : installPaths.data,
+    retainedEvidence: { path: transaction, status: "retained" },
     preservedLegacy: previousRecord.legacy ? {
       root: legacyPreservedRoot,
       runtime: path.join(legacyPreservedRoot, "runtime"),

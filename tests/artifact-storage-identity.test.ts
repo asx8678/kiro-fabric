@@ -8,6 +8,18 @@ const roots: string[] = [];
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const temporary = () => { const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "artifact-storage-identity-"))); roots.push(root); return root; };
 const operations = ["sweep", "read", "close", "count eviction", "size eviction"] as const;
+function expectIdentityFailure(attempt: () => unknown, aggregate: boolean) {
+  let failure: unknown;
+  try { attempt(); } catch (error) { failure = error; }
+  if (aggregate) {
+    expect(failure).toBeInstanceOf(AggregateError);
+    expect((failure as AggregateError).message).toBe("artifact store cleanup failed");
+    expect((failure as AggregateError).errors).toHaveLength(1);
+    failure = (failure as AggregateError).errors[0];
+  }
+  expect(failure).toBeInstanceOf(Error);
+  expect((failure as Error).message).toMatch(/replacement|changed|identity/u);
+}
 
 describe("artifact ownership after publication", () => {
   it.each(operations)("preserves a foreign artifact replacement during %s and retains accounting", operation => {
@@ -17,7 +29,7 @@ describe("artifact ownership after publication", () => {
     fs.renameSync(file, file + ".original"); fs.writeFileSync(file, "foreign sentinel", { mode: 0o600 });
     if (operation === "sweep" || operation === "read") now = 102;
     const attempt = () => operation === "sweep" ? store.sweep() : operation === "read" ? store.read(id) : operation === "close" ? store.close() : store.write("next");
-    expect(attempt).toThrow(/replacement|changed|identity/u); expect(attempt).toThrow();
+    expectIdentityFailure(attempt, operation === "close"); expect(attempt).toThrow();
     expect(fs.readFileSync(file, "utf8")).toBe("foreign sentinel");
     expect(fs.readFileSync(file + ".original", "utf8")).toBe("original");
     // A missing old name is recoverable, but the conflict must not silently free quota.
@@ -41,7 +53,7 @@ describe("artifact ownership after publication", () => {
   it("preserves in-place modifications of an artifact", () => {
     const root = temporary(), store = createKiroArtifactStore({ root }); const id = store.write("original");
     fs.writeFileSync(path.join(root, id), "changed by recovery", { mode: 0o600 });
-    expect(() => store.close()).toThrow(/replacement|changed|identity/u);
+    expectIdentityFailure(() => store.close(), true);
     expect(fs.readFileSync(path.join(root, id), "utf8")).toBe("changed by recovery");
   });
 

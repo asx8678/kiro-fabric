@@ -1,4 +1,4 @@
-# Native Fovea architecture
+# Native Navigator architecture
 
 Current implementation, not a full native-parity claim. See
 [implementation status](implementation-status.md), [parity matrix](parity-matrix.md)
@@ -21,6 +21,40 @@ No new model-facing MCP graph tools or Pi runtime dependencies are introduced.
 conversation-owned state. Default and named focuses remain separate; transient
 augmentation cannot replace a user's dwell focus. Results are immutable,
 bounded and replayable via authenticated cursors, unlike semantic widening.
+
+### Shutdown and generated scratch
+
+Close revokes admission synchronously and shares one sticky completion. Ensure,
+restart and reload recheck revocation after waits; callbacks belong to one child
+generation. Cancelled queued work releases capacity without dispatch. Shutdown
+drains active work and per-root maintenance; selective conversation/epoch
+retirement leaves other conversations and reusable graph state intact.
+
+An idle child gets at most 500ms for graceful shutdown **inside** the unchanged
+1500ms process-group cleanup budget. Its correlated acknowledgement follows
+successful engine cleanup and is flushed before exit; the supervisor still
+proves the whole group is gone. Failure/cancellation uses forced cleanup instead.
+The existing 250ms cancellation and 5000ms IPC handshake ceilings are unchanged;
+IPC startup and lazy parser initialization remain distinct phases.
+
+`src/fovea/scratch-owner.ts` owns exclusively allocated private engine/snapshot
+namespaces. Bounded preflight checks ownership, privacy, identity and contents;
+disposal uses captured regular-file unlink and **empty** directory removal, never
+recursive removal. Git metadata (including files/links), bare repositories,
+unknown content, links, changed identities and inspection failures are retained.
+Existing engine housekeeping uses the same owner through a host-only context
+capability; cache policies and active-file protection remain in place. Missing
+cleanup authority cannot fall back to raw asynchronous unlink. These checks are
+not a kernel sandbox against hostile same-UID filesystem races.
+
+`repo.status.cleanup` distinguishes graceful/forced/uncertain process cleanup
+from scratch removal/retention; `retainedScratchGenerations` counts stopped
+generations without acknowledged scratch removal. Current cleanup uncertainty
+is reported separately in `cleanup`. A confirmed killed process group is **not** evidence that
+its scratch was reclaimed. No abandoned-generation sweeper is added. Explicit
+ownership-cleanup failure or uncertain group cleanup stays latched, even if a
+later cleanup attempt succeeds; replacement is blocked rather than silently
+regranting authority. Primary and cleanup errors remain observable together.
 
 ## Authority
 

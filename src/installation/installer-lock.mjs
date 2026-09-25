@@ -12,8 +12,9 @@ import { runPinnedRecovery } from "./pinned-recovery.mjs";
 /** @typedef {{platform: string, pid: number, boot: string, start: string, namespace: string}} ProcessIncarnation */
 /** @typedef {{schema: number, kind: string, root: FileIdentity, lock: FileIdentity, nonce: string, process: ProcessIncarnation, transactionId: string | null, file?: FileIdentity, lockBirth?: string, recovered?: InstallationLockRecovery[]}} InstallationLockOwner */
 /** @typedef {{quarantine: string, owner: InstallationLockOwner, release?: {file: FileIdentity, hash: string}}} InstallationLockRecovery */
-/** @typedef {(() => void) & {recovered: InstallationLockRecovery[], owner: InstallationLockOwner}} InstallationLockRelease */
-/** @typedef {{status: 'absent' | 'busy' | 'stale' | 'recovery-required' | 'unsupported', available: boolean, owner?: InstallationLockOwner, claims?: number, recoverable?: boolean, reason?: string}} InstallationLockInspection */
+/** @typedef {((options?: {retainLegacyGate?: boolean}) => unknown) & {recovered: InstallationLockRecovery[], owner: InstallationLockOwner}} InstallationLockRelease */
+/** @typedef {InstallationLockRelease & {retainedLegacyGate?: boolean, releasedLegacyGate?: boolean, legacyGate?: string, retainLegacyGate?: () => void}} InstallationExclusionRelease */
+/** @typedef {{status: 'absent' | 'busy' | 'stale' | 'recovery-required' | 'unsupported', available: boolean, owner?: InstallationLockOwner, claims?: number, recoverable?: boolean, reason?: string, legacyGate?: {path: string, owner?: {pid: number, nonce: string}}}} InstallationLockInspection */
 
 const LOCK = ".install-lock";
 const RELEASE = ".install-lock-release.json";
@@ -407,6 +408,12 @@ const ownedRelease = (base, initialized, onPhase) => {
  */
 export function inspectInstallationLock(base) {
   try {
+    const legacy = legacyGateState(base);
+    if (legacy.present) {
+      /** @type {InstallationLockInspection} */
+      const inspection = /** @type {any} */ ({ status: legacy.status, available: false, legacyGate: { path: path.join(base, LEGACY_LOCK), ...(legacy.owner ? { owner: legacy.owner } : {}) }, ...(legacy.reason ? { reason: legacy.reason } : {}) });
+      return inspection;
+    }
     const root = rootIdentity(base);
     const pending = pendingRelease(base, root);
     if (!pending) {
@@ -512,8 +519,11 @@ export function inspectInstallationProcesses({ retainedNodePaths = [] } = {}) {
   }
 }
 
-/** Observation availability only, NOT native target qualification.
- * @returns {{supported: boolean, platform: string, incarnation?: ProcessIncarnation, reason?: string, purge: ReturnType<typeof inspectInstallationProcesses>}} */
+/** @internal Observation availability only, NOT native target qualification.
+ * Exported for the synthetic process-evidence model tests; the live
+ * `currentProcess()` and `inspectInstallationProcesses()` definitions are
+ * unchanged and no default, deadline or permission is affected.
+ * @returns {{supported: boolean, platform: string, incarnation?: any, reason?: string, purge: ReturnType<typeof inspectInstallationProcesses>}} */
 export function installationLockAvailability() {
   try {
     const incarnation = currentProcess();
@@ -538,7 +548,7 @@ const writeControl = (target, value, onCreated, bindSelf = false) => {
       if (Buffer.byteLength(text) > MAX_CONTROL) fail("lock control exceeds bound");
     }
     fs.fchmodSync(fd, 0o600);
-    onCreated();
+    onCreated(owned);
     fs.writeFileSync(fd, text);
     fs.fsyncSync(fd);
   } catch (error) {
@@ -546,6 +556,7 @@ const writeControl = (target, value, onCreated, bindSelf = false) => {
     try { if (same(identity(privateStat(target, false)), owned)) fs.unlinkSync(target); } catch {}
     throw error;
   } finally { fs.closeSync(fd); }
+  return { file: owned };
 };
 
 // An absent lock directory is still fenced by the live release marker. A dead
@@ -566,6 +577,319 @@ const archiveRelease = (base, initialized) => {
   fs.unlinkSync(marker);
   syncDirectory(base);
 };
+// ── Legacy compatibility gate (W5) ───────────────────────────────────────────
+// The reviewed legacy staged writers mkdir `.install.lock` and write a
+// PID/nonce `owner.json`. `.install-lock` and `.install.lock` do NOT exclude
+// each other, so updated writers acquire the legacy gate FIRST, then the modern
+// lock, in one documented fixed order. Legacy evidence is PID/nonce-only or
+// partial/foreign; it is NEVER auto-reclaimed and is preserved for operator
+// recovery. The gate uses the reviewed legacy format, so historical legacy
+// writers still see it as busy without understanding the modern lock.
+const LEGACY_LOCK = ".install.lock";
+const LEGACY_FIELDS = ["pid", "nonce"];
+
+/** Read-only strict legacy-gate state. Never creates, repairs or reclaims.
+ * @param {string} base
+ */
+const legacyGateState = (base) => {
+  const target = path.join(base, LEGACY_LOCK);
+  let stat;
+  try { stat = fs.lstatSync(target, { bigint: true }); }
+  catch (error) { return errorCode(error) === "ENOENT" ? { present: false, status: "absent" } : { present: true, valid: false, status: "recovery-required", reason: "legacy gate is unreadable; preserve for operator recovery" }; }
+  if (!stat.isDirectory() || stat.isSymbolicLink()) return { present: true, valid: false, status: "recovery-required", reason: "legacy gate type or symlink is unsafe; preserve for operator recovery" };
+  if (typeof process.getuid !== "function" || stat.uid !== BigInt(process.getuid()) || (stat.mode & 0o7777n) !== 0o700n) return { present: true, valid: false, status: "recovery-required", reason: "unsafe legacy gate ownership or mode; preserve for operator recovery" };
+  let names;
+  try { names = entries(target); }
+  catch { return { present: true, valid: false, status: "recovery-required", reason: "legacy gate entry bound exceeded; preserve for operator recovery" }; }
+  if (names.length === 0) return { present: true, valid: false, status: "recovery-required", reason: "partial legacy gate without an owner record; preserve for operator recovery" };
+  if (names.length !== 1 || names[0] !== "owner.json") return { present: true, valid: false, status: "recovery-required", reason: "foreign entries inside legacy gate; preserve for operator recovery" };
+  let owner;
+  try { owner = control(path.join(target, "owner.json")); }
+  catch { return { present: true, valid: false, status: "recovery-required", reason: "invalid legacy owner record; preserve for operator recovery" }; }
+  const value = owner.value;
+  if (!keys(value, LEGACY_FIELDS) || !Number.isSafeInteger(value.pid) || value.pid <= 0 || value.pid > 2147483647 || typeof value.nonce !== "string" || !NONCE.test(value.nonce)) {
+    return { present: true, valid: false, status: "recovery-required", reason: "unrecognized legacy owner record; preserve for operator recovery" };
+  }
+  const record = { pid: value.pid, nonce: value.nonce };
+  if (liveness(value.pid) === "present") return { present: true, valid: true, status: "busy", owner: record, reason: "legacy installation lock held by a live process" };
+  return { present: true, valid: true, status: "recovery-required", owner: record, reason: "legacy lock owner is not live; PID/nonce-only evidence is never auto-reclaimed" };
+};
+
+/** Fixed-order gate acquisition: create the reviewed legacy lock atomically.
+ * The canonical private root is validated BEFORE any mkdir/write. The exact gate
+ * directory (dev/ino/birth), owner-file inode and owner-bytes hash are captured
+ * in memory, so release can prove it deletes only what this process created.
+ */
+const acquireLegacyGate = (base) => {
+  const root = rootIdentity(base); // Canonical private root BEFORE any creation.
+  const target = path.join(base, LEGACY_LOCK);
+  let created = false;
+  try { fs.mkdirSync(target, { mode: 0o700 }); created = true; }
+  catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
+  if (!created) {
+    const state = legacyGateState(base);
+    if (state.status === "busy") fail("another Kiro Fabric installation mutation is in progress", "INSTALL_LOCK_BUSY");
+    fail("legacy installation lock evidence requires operator recovery; it is never auto-reclaimed", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  const gateStat = privateStat(target, true);
+  if (gateStat.birthtimeNs <= 0n) fail("stable legacy gate birth identity unavailable", "INSTALL_LOCK_UNSUPPORTED");
+  const gateId = identity(gateStat);
+  const ownerPath = path.join(target, "owner.json");
+  const value = { pid: process.pid, nonce: nonce() };
+  let createdOwner;
+  let owner;
+  try {
+    if (entries(target).length) fail("new legacy gate replaced");
+    writeControl(ownerPath, value, (owned) => { createdOwner = owned; });
+    owner = control(ownerPath);
+    if (!keys(owner.value, LEGACY_FIELDS) || owner.value.pid !== process.pid || owner.value.nonce !== value.nonce) fail("new legacy owner binding changed");
+    if (!same(createdOwner, owner.file)) fail("new legacy owner inode replaced during acquisition");
+    syncDirectory(target);
+    syncDirectory(base);
+    assertRoot(base, root); // Re-prove root ancestry after every gate write/durability step.
+    const finalGate = privateStat(target, true);
+    if (!same(identity(finalGate), gateId) || String(finalGate.birthtimeNs) !== String(gateStat.birthtimeNs)) fail("new legacy gate replaced");
+  } catch (error) {
+    // Remove only bytes this process proved it created, and only after re-proving
+    // the root and gate ancestry. A replaced root or gate is foreign evidence and
+    // is preserved for operator recovery, never cleaned up.
+    try {
+      assertRoot(base, root);
+      if (createdOwner) {
+        try {
+          const currentOwner = fs.lstatSync(ownerPath, { bigint: true });
+          if (same(identity(currentOwner), createdOwner)) fs.unlinkSync(ownerPath);
+        } catch {}
+      }
+      const currentGate = fs.lstatSync(target, { bigint: true });
+      if (same(identity(currentGate), gateId) && String(currentGate.birthtimeNs) === String(gateStat.birthtimeNs) && entries(target).length === 0) fs.rmdirSync(target);
+    } catch {}
+    throw error;
+  }
+  return { target, root, dev: String(gateStat.dev), ino: String(gateStat.ino), birth: String(gateStat.birthtimeNs), pid: process.pid, nonce: value.nonce, ownerFile: owner.file, ownerHash: owner.hash };
+};
+
+/**
+ * Phase-tracked release of ONLY the exact gate this process created. Mutations
+ * are recorded before their durability syncs, so a retry finishes durability
+ * instead of repeating or widening removal. A durability failure after rmdir
+ * reports a physically released gate whose removal fsync is uncertain.
+ *
+ * Late-retention contract: `shouldRetain()` is consulted before the owner unlink,
+ * immediately after the `legacy-owner-removed` callback (still before the
+ * physical gate removal), and again before the rmdir. A request arriving before
+ * the physical removal therefore preserves the gate directory and is reported as
+ * `retained` with `gateRemoved` false. A request arriving after the rmdir
+ * (`legacy-gate-removed`) is too late: the run completes as a physical release
+ * and never reports retention. `run()` returns the truthful outcome so callers
+ * cannot report both retained and released.
+ * @param {string} base @param {any} gate @param {(phase: string) => void} [onPhase] @param {() => boolean} [shouldRetain]
+ */
+const ownedLegacyRelease = (base, gate, onPhase = () => {}, shouldRetain = () => false) => {
+  const target = path.join(base, LEGACY_LOCK);
+  const ownerPath = path.join(target, "owner.json");
+  let ownerRemoved = false, gateRemoved = false, retained = false, done = false;
+  const run = () => {
+    if (done) return { retained, ownerRemoved, gateRemoved };
+    assertRoot(base, gate.root);
+    if (shouldRetain()) { retained = true; done = true; return { retained, ownerRemoved, gateRemoved }; }
+    if (!ownerRemoved) {
+      const stat = fs.lstatSync(target, { bigint: true });
+      if (!stat.isDirectory() || stat.isSymbolicLink()) fail("legacy gate type changed; preserve for recovery");
+      if (!same(identity(stat), { dev: gate.dev, ino: gate.ino }) || String(stat.birthtimeNs) !== gate.birth) fail("legacy gate ownership changed; preserve for recovery");
+      privateStat(target, true);
+      const names = entries(target);
+      if (names.length !== 1 || names[0] !== "owner.json") fail("legacy gate content changed; preserve for recovery");
+      const ownerStat = fs.lstatSync(ownerPath, { bigint: true });
+      if (!same(identity(ownerStat), gate.ownerFile)) fail("legacy gate owner inode changed; preserve for recovery");
+      const owner = control(ownerPath);
+      if (!keys(owner.value, LEGACY_FIELDS) || owner.value.pid !== gate.pid || owner.value.nonce !== gate.nonce) fail("legacy gate owner changed; preserve for recovery");
+      if (owner.hash !== gate.ownerHash) fail("legacy gate owner bytes changed; preserve for recovery");
+      fs.unlinkSync(ownerPath);
+      ownerRemoved = true;
+      onPhase("legacy-owner-removed");
+      // Retention delivered by the owner-removed callback arrives BEFORE the
+      // physical gate removal, so it can still preserve the gate directory.
+      if (shouldRetain()) { retained = true; syncDirectory(target); syncDirectory(base); done = true; return { retained, ownerRemoved, gateRemoved }; }
+    }
+    if (!gateRemoved) {
+      if (shouldRetain()) { retained = true; syncDirectory(target); syncDirectory(base); done = true; return { retained, ownerRemoved, gateRemoved }; }
+      const after = fs.lstatSync(target, { bigint: true });
+      if (!after.isDirectory() || after.isSymbolicLink()) fail("legacy gate type changed; preserve for recovery");
+      if (!same(identity(after), { dev: gate.dev, ino: gate.ino }) || String(after.birthtimeNs) !== gate.birth) fail("legacy gate replaced during release; preserve for recovery");
+      if (entries(target).length) fail("legacy gate gained content during release; preserve for recovery");
+      fs.rmdirSync(target);
+      gateRemoved = true;
+      onPhase("legacy-gate-removed");
+    }
+    syncDirectory(base); // Final durability, reached only for the gate this process removed.
+    done = true;
+    return { retained, ownerRemoved, gateRemoved };
+  };
+  return { run, phase: () => ({ ownerRemoved, gateRemoved, retained, done }) };
+};
+
+const modernTransactionEvidence = (base) => {
+  for (const name of ["active.json", "candidate.json"]) {
+    try { fs.lstatSync(path.join(base, ".transactions", name)); return true; }
+    catch (error) { if (errorCode(error) !== "ENOENT") return true; }
+  }
+  return false;
+};
+
+/**
+ * Fixed-order (legacy gate THEN modern lock) fail-fast exclusion for supported
+ * installation writers. Retention evidence is settled while the modern lock is
+ * still held; the modern lock is then released, and the legacy gate is released
+ * LAST. A late `release.retainLegacyGate()` request from a modern release
+ * callback is therefore honored, and a physically released gate is never
+ * reported as retained. A legacy phase callback that requests retention at
+ * `legacy-owner-removed` (before the physical gate removal) preserves the gate
+ * directory; a request at `legacy-gate-removed` arrives after release and cannot
+ * retroactively grant exclusion, so `retainedLegacyGate` and
+ * `releasedLegacyGate` are mutually exclusive. `owner`, `recovered`, `retainedLegacyGate` and
+ * `releasedLegacyGate` report truthful ownership; a removal-durability failure
+ * sets `legacyGateDurabilityUncertain` on the thrown error while the release is
+ * already physically effective. No waits, retries or automatic legacy takeover.
+ * @param {string} base
+ * @param {{recover?: boolean, transactionId?: string, onPhase?: (phase: string) => void}} [options]
+ * @returns {InstallationExclusionRelease}
+ */
+export function acquireInstallationExclusion(base, { recover = false, transactionId, onPhase = () => {} } = {}) {
+  // Establish a supported own incarnation BEFORE creating any bridge state, so an
+  // unsupported process identity cannot leave a legacy gate behind. The modern
+  // lock re-proves it and owns the durable owner record.
+  const incarnation = currentProcess();
+  const gate = acquireLegacyGate(base);
+  let modern;
+  try {
+    modern = acquireInstallationLock(base, { recover, transactionId, onPhase });
+  } catch (error) {
+    // Modern acquisition failed before any protected interval. Release only the
+    // gate this process proved it created, and only when no unresolved modern
+    // transaction evidence remains.
+    let retain = true;
+    const legacy = ownedLegacyRelease(base, gate, () => {});
+    try {
+      if (!modernTransactionEvidence(base)) {
+        legacy.run();
+        retain = false;
+      }
+    } catch (releaseError) {
+      const phase = legacy.phase();
+      if (phase.gateRemoved) {
+        retain = false;
+        error.legacyGateReleased = true;
+        error.legacyGateDurabilityUncertain = true;
+      } else {
+        error.legacyGateReleaseError = releaseError;
+      }
+    }
+    if (retain) { error.legacyGateRetained = true; error.legacyGate = gate.target; }
+    throw error;
+  }
+  // The gate was proven against the root before creation; the modern lock proves
+  // its own root again. Refuse to admit a bridge whose two halves observed
+  // different roots or process incarnations, preserving all evidence.
+  if (!same(modern.owner.root, gate.root)) {
+    fail("installation root changed between legacy gate and modern lock; preserve all evidence for recovery", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  if (!equal(modern.owner.process, incarnation)) {
+    fail("installation process incarnation changed between legacy gate and modern lock; preserve all evidence for recovery", "INSTALL_LOCK_RECOVERY_REQUIRED");
+  }
+  const state = { gateReleased: false, gateDurabilityUncertain: false, gateRetained: false, finished: false, releasing: false };
+  const legacy = ownedLegacyRelease(base, gate, onPhase, () => state.gateRetained);
+  const release = /** @type {any} */ ((options = {}) => {
+    if (state.finished || state.releasing) return release; // Reentrant calls never release twice.
+    state.releasing = true;
+    try {
+      // Physically released already: only the removal durability fsync remains.
+      // Never inspect or touch a possible replacement gate.
+      if (state.gateReleased) {
+        try { legacy.run(); state.gateDurabilityUncertain = false; }
+        catch (error) {
+          state.gateDurabilityUncertain = true;
+          error.legacyGateReleased = true;
+          error.legacyGateDurabilityUncertain = true;
+          error.legacyGateRetained = false;
+          error.legacyGate = gate.target;
+          throw error;
+        }
+        state.finished = true;
+        return release;
+      }
+      // Settle retention while the modern lock is STILL HELD. Reading transaction
+      // evidence after unlocking modern would be unprotected, so it happens here.
+      let retain = options.retainLegacyGate === true || state.gateRetained;
+      if (!retain && modernTransactionEvidence(base)) retain = true;
+      try { modern(); }
+      catch (error) {
+        state.gateRetained = true;
+        error.legacyGateRetained = true;
+        error.legacyGate = gate.target;
+        throw error; // Modern state uncertain: keep the legacy gate; retry may finish modern durability.
+      }
+      // A late retain request from the modern release callback is honored because
+      // the legacy gate is always released LAST, after modern cleanup.
+      if (state.gateRetained) retain = true;
+      if (retain) {
+        state.gateRetained = true;
+        state.finished = true;
+        return release;
+      }
+      try {
+        const outcome = legacy.run();
+        if (outcome.retained) {
+          // A late retention request delivered by a legacy release callback before
+          // the physical gate removal preserves the directory. The owner may
+          // already be gone (partial gate); exclusion still holds for legacy
+          // writers via the existing directory. Never report release here.
+          state.gateRetained = true;
+          state.finished = true;
+          return release;
+        }
+        state.gateReleased = true;
+        state.finished = true;
+      }
+      catch (error) {
+        const phase = legacy.phase();
+        if (phase.gateRemoved) {
+          // The gate directory is physically gone: exclusion is not retained, but
+          // its removal durability fsync is still uncertain. Retry finishes only
+          // that fsync and never removes a replacement.
+          state.gateReleased = true;
+          state.gateDurabilityUncertain = true;
+          error.legacyGateReleased = true;
+          error.legacyGateDurabilityUncertain = true;
+          error.legacyGateRetained = false;
+        } else {
+          state.gateRetained = true;
+          error.legacyGateRetained = true;
+        }
+        error.legacyGate = gate.target;
+        throw error;
+      }
+      return release;
+    } finally { state.releasing = false; }
+  });
+  Object.defineProperties(release, {
+    owner: { value: modern.owner, enumerable: true },
+    recovered: { value: modern.recovered, enumerable: true },
+    retainedLegacyGate: { get: () => state.gateRetained },
+    releasedLegacyGate: { get: () => state.gateReleased },
+    legacyGate: { value: gate.target, enumerable: true },
+  });
+  release.retainLegacyGate = () => {
+    if (state.finished || state.gateReleased) return;
+    // A physically released gate cannot retroactively grant exclusion. The legacy
+    // phase tracker distinguishes the owner-removed (preservable) boundary from
+    // the gate-removed (already released) boundary.
+    if (legacy.phase().gateRemoved) return;
+    state.gateRetained = true;
+  };
+  return release;
+}
+
 /**
  * Synchronous, fail-fast shared mutation/startup-admission lock. Startup uses
  * recover:false and holds it THROUGH launch validation and durable-data admission.

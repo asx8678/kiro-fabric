@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { installerSafety as s } from "./install-agent-user.mjs";
-import { acquireInstallationLock } from "./installer-lock.mjs";
+import { acquireInstallationExclusion } from "./installer-lock.mjs";
 import { syncDirectory, readControl, transactionPaths } from "./install-transaction.mjs";
 
 const marker = "# >>> kiro-fabric workspace handoff v1";
@@ -99,7 +99,9 @@ function assertCoreOwner(home, plan, expectedOwner) {
 export function applyShellIntegration(home, plan, options = {}) {
   if (plan.status !== "planned") return plan;
   if (!path.isAbsolute(home) || path.resolve(home) !== home || fs.realpathSync(home) !== home || plan.state !== statePath(home) || plan.managed !== block(home)) throw new Error("Shell plan home binding mismatch");
-  const release = acquireInstallationLock(path.join(home, "kiro-fabric"));
+  // Maintained writers share the fixed-order exclusion so a held legacy gate
+  // (a paused pre-W5 entrypoint) is honoured with zero effect.
+  const release = acquireInstallationExclusion(path.join(home, "kiro-fabric"));
   try {
     if (Object.hasOwn(options, "expectedOwner")) assertCoreOwner(home, plan, options.expectedOwner);
     const current = readSafe(plan.file);

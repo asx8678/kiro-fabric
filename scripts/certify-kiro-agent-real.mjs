@@ -6,7 +6,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { writeFileAtomic } from "./atomic-file.mjs";
 import { assertTrackedGitWorktreeClean } from "./package-identity.mjs";
 import { assertRealClientEvidence } from "./real-client-evidence.mjs";
 import { resolveRealClientAuthFlags } from "./run-kiro-agent-real-driver.mjs";
@@ -23,14 +22,20 @@ export async function certifyRealKiroAgent(argv = process.argv.slice(2)) {
   assertExternalDiagnosticPath(failureOutput, [requestedWorkRoot]);
   assertExternalDiagnosticPath(driverFailureOutput, [requestedWorkRoot]);
   if ([failureOutput, driverFailureOutput].includes(output)) throw new Error("Qualification and diagnostic outputs must differ");
-  let temporary;
+  let temporary, temporaryIdentity;
   const controller = new AbortController();
   const interrupt = () => controller.abort(Object.assign(new Error("Qualification interrupted"), { code: "QUALIFICATION_INTERRUPTED" }));
   process.once("SIGTERM", interrupt); process.once("SIGINT", interrupt);
   try {
     return await withQualificationFailureReport({ output: failureOutput, component: "wrapper", cleanupKind: "authHome", cleanup: () => {
-      if (temporary) { fs.rmSync(temporary, { recursive: true, force: true }); return "removed"; }
-      return "not-created";
+      if (!temporary) return "not-created";
+      // Preserve private state and repositories without inspecting their contents.
+      // Retention is NOT successful auth cleanup and cannot qualify publication.
+      try {
+        const current = fs.lstatSync(temporary);
+        return current.isDirectory() && !current.isSymbolicLink() && temporaryIdentity &&
+          ["dev", "ino", "mode", "uid", "gid"].every(key => current[key] === temporaryIdentity[key]) ? "retained" : "unverified";
+      } catch { return "unverified"; }
     } }, async record => {
       const hash = bytes => createHash("sha256").update(bytes).digest("hex");
       const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
@@ -51,6 +56,7 @@ export async function certifyRealKiroAgent(argv = process.argv.slice(2)) {
         fs.mkdirSync(requestedWorkRoot, { mode: 0o700 }); temporary = requestedWorkRoot;
         fs.chmodSync(temporary, 0o700); temporary = fs.realpathSync(temporary);
       } else temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "kiro-agent-real-")));
+      temporaryIdentity = fs.lstatSync(temporary);
       record.cleanup("authHome", "pending");
       assertExternalDiagnosticPath(output, [temporary]);
       const extracted = path.join(temporary, "package"), workspace = path.join(temporary, "workspace");
@@ -80,9 +86,9 @@ export async function certifyRealKiroAgent(argv = process.argv.slice(2)) {
       // Do not strip required proof and mislabel it as qualification. The legacy
       // transcript-bound schema must gain a privacy-safe successor before upload.
       assertSafeQualificationPublication(observed);
-      const qualification = { ...observed, kind: "kiro-fabric.real-client-qualification", schemaVersion: 13, ok: true };
-      writeFileAtomic(output, `${JSON.stringify(qualification, null, 2)}\n`);
-      return output;
+      // A valid evidence object is not authority to publish while private state
+      // is retained. Never write success output before disposition is verified.
+      throw Object.assign(new Error("Qualification publication blocked by private-state retention"), { code: "QUALIFICATION_STATE_RETAINED" });
     });
   } finally { process.removeListener("SIGTERM", interrupt); process.removeListener("SIGINT", interrupt); }
 }

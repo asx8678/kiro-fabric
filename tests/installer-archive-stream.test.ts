@@ -6,7 +6,7 @@ import os from "node:os";
 import { randomBytes } from "node:crypto";
 import { fixture } from "./bundle-fixture.js";
 import { canonical, createBundleManifest, LIMITS, sha256 } from "../scripts/bundle-contract.mjs";
-import { createBundleArchive, writeBundleArchive, writeBundleArchiveForTest, parseBundleArchive } from "../scripts/bundle-archive.mjs";
+import { writeBundleArchive, writeBundleArchiveForTest, parseBundleArchive } from "../scripts/bundle-archive.mjs";
 
 const roots: string[] = [];
 async function archiveFixture() {
@@ -26,7 +26,7 @@ describe("bounded streaming bundle archive writer", () => {
   it("is byte-identical to the compatibility USTAR/gzip encoder and deterministic across writes", async () => {
     const { root, outputRoot, output } = await archiveFixture(); await addLargeFile(root);
     const compatibility = path.join(outputRoot, "compatibility.tar.gz"), second = path.join(outputRoot, "second.tar.gz");
-    await createBundleArchive(root, compatibility);
+    await writeBundleArchive(root, compatibility);
     const first = await writeBundleArchive(root, output), again = await writeBundleArchive(root, second);
     const bytes = fs.readFileSync(output);
     expect(bytes).toEqual(fs.readFileSync(compatibility)); expect(bytes).toEqual(fs.readFileSync(second));
@@ -35,7 +35,7 @@ describe("bounded streaming bundle archive writer", () => {
   });
   it("uses the inherited-fd child strategy without Darwin directory-FD traversal", async () => {
     const { root, output, outputRoot } = await archiveFixture();
-    await createBundleArchive(root, path.join(outputRoot, "compatibility"));
+    await writeBundleArchive(root, path.join(outputRoot, "compatibility"));
     const descriptor = Object.getOwnPropertyDescriptor(process, "platform")!;
     Object.defineProperty(process, "platform", { value: "darwin" });
     try { await writeBundleArchive(root, output); }

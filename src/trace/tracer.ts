@@ -4,7 +4,7 @@ import { createTraceWriter, type TraceWriter, type TraceWriterOptions } from "./
 
 type TraceCategory = "init" | "eval" | "bridge" | "teardown";
 
-export interface TraceEvent {
+interface TraceEvent {
   v: 1;
   ts: string;
   /** Monotonic microseconds (process.hrtime.bigint() based) for span math. */

@@ -8,8 +8,8 @@ import { randomUUID } from 'node:crypto';
 import { StringDecoder } from 'node:string_decoder';
 import { pathToFileURL } from 'node:url';
 
-export const LIMITS = Object.freeze({ bytes: 262144, timeoutMs: 15000, cleanupMs: 1000, events: 256, markerBytes: 2048 });
-export const GATES = Object.freeze([
+const LIMITS = Object.freeze({ bytes: 262144, timeoutMs: 15000, cleanupMs: 1000, events: 256 });
+const GATES = Object.freeze([
   ['H01', 'same session and MCP instance across multiple turns'],
   ['H02', 'concurrent session-to-host mapping and ambiguity rejection'],
   ['H03', 'readiness, authorized binding and first-hook ordering'],
@@ -25,7 +25,10 @@ export const GATES = Object.freeze([
 ]);
 
 // Only newly created private trees. No caller-supplied scope or credential access.
-/** @returns {{root: string, home: string, workspace: string, env: Record<string, string>, cleanupUnconfirmed?: boolean}} */
+/** @internal Qualification-only: the isolated private scope factory is imported
+ * by cold-input tests, which need a disposable home/workspace/env without
+ * spawning a client. Not a runtime/package API.
+ * @returns {{root: string, home: string, workspace: string, env: Record<string, string>, cleanupUnconfirmed?: boolean}} */
 export function createScope() {
   const root = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'fovea-qualification-'));
   fs.chmodSync(root, 0o700);
@@ -43,7 +46,7 @@ export function createScope() {
 // Linux-only native mode: no inherited browser, display, DBus, SSH, auth, proxy,
 // shell initialization or tool executables. These are isolation controls, not
 // client trust/approval settings. This is NOT an OS filesystem/network sandbox.
-export function prepareNativeScope(scope) {
+function prepareNativeScope(scope) {
   if (process.platform !== 'linux') return { status: 'untested', reason: 'native-isolation-only-tested-on-linux' };
   const bin = path.join(scope.root, 'bin');
   fs.mkdirSync(bin, { mode: 0o700 });
@@ -106,15 +109,6 @@ export function runBounded(command, args, options = {}) {
   });
 }
 
-// Markers are test data, never client/model delivery evidence.
-export function marker(gate, phase, identity) {
-  const phases = ['hook-fired', 'model-context', 'tool-result', 'continuation', 'cancel', 'user-input', 'lifecycle'];
-  if (!GATES.some(([id]) => id === gate) || !phases.includes(phase)) throw new Error('invalid marker kind');
-  const keys = ['run', 'session', 'host', 'generation', 'turn'];
-  if (!identity || Object.keys(identity).length !== keys.length || keys.some(key => !Object.hasOwn(identity, key) || typeof identity[key] !== 'string' || !/^[a-zA-Z0-9_-]{1,80}$/.test(identity[key]))) throw new Error('invalid marker identity');
-  return { schemaVersion: 1, gate, phase, ...identity };
-}
-
 const SWITCHES = ['--v3', '--agent', '--output-format', '--require-mcp-startup', '--resume', '--resume-id', '--list-sessions', '--format'];
 // Exact diagnostics observed from installed 2.22.0, not heuristic secret-bearing
 // error excerpts. Neither auth URLs nor suggested login commands are retained.
@@ -124,7 +118,7 @@ const DIAGNOSTICS = Object.freeze([
   ['browser-opener-not-found', 'error: No such file or directory (os error 2)'],
 ]);
 
-export function sanitizeProbe(id, args, result) {
+function sanitizeProbe(id, args, result) {
   const diagnosticLines = result.stderr.split(/\r?\n/);
   const diagnostics = DIAGNOSTICS.filter(([, text]) => diagnosticLines.includes(text)).map(([code, text]) => ({ code, text }));
   let accountAbsent = false;
@@ -182,7 +176,7 @@ const REMAINING = {
   H11: 'Capture authoritative complete model-visible inventory; stream envelopes and picker counts do not suffice.',
   H12: 'Generation update with a retained native session not exercised; no installer/activation in this harness.',
 };
-export function assessGates(surface = 'headless', probes = []) {
+function assessGates(surface = 'headless', probes = []) {
   if (!['headless', 'native-tui', 'acp'].includes(surface)) throw new Error('invalid client surface');
   const startup = probes.find(probe => probe.id === 'chat-new');
   return GATES.map(([id, requirement]) => {
@@ -195,11 +189,11 @@ export function assessGates(surface = 'headless', probes = []) {
   });
 }
 
-export const CHAT_PROMPT = 'Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything.';
+const CHAT_PROMPT = 'Reply only FOVEA_PROBE_READY. Do not use tools, read files, run commands, or change anything.';
 const chatArgs = suffix => ['chat', '--v3', '--output-format', 'stream-json', ...suffix, CHAT_PROMPT];
 
 // Injection is for unit tests only, not a CLI evidence import/qualification path.
-export async function executeNativeProbes(scope, prerequisites, runner = runBounded) {
+async function executeNativeProbes(scope, prerequisites, runner = runBounded) {
   const probes = [];
   const run = async (id, args) => {
     const result = await runner('kiro-cli', args, { cwd: scope.workspace, env: scope.env });
@@ -242,12 +236,12 @@ export async function executeNativeProbes(scope, prerequisites, runner = runBoun
   return probes.sort((a, b) => ['identity', 'chat-new', 'sessions-after-new', 'chat-resume', 'concurrent-a', 'concurrent-b'].indexOf(a.id) - ['identity', 'chat-new', 'sessions-after-new', 'chat-resume', 'concurrent-a', 'concurrent-b'].indexOf(b.id));
 }
 
-export async function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2)) {
   if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) {
-    console.log('Usage: fovea-capability-probe.mjs [--dry-run] [--native]\nDefault: version/help only. --native: isolated, browser-disabled chat/new/resume/concurrent lifecycle attempts. No login, live home, trust flags or effect probes. Sanitized JSON report on stdout; disposable scope removed.'); return 0;
+    console.log('Usage: fovea-capability-probe.mjs [--dry-run] [--native]\nDefault: version/help only. --native: isolated, browser-disabled chat/new/resume/concurrent lifecycle attempts. No login, live home, trust flags or effect probes. Sanitized JSON report on stdout; the private scope is retained for inspection and never recursively deleted.'); return 0;
   }
   if (argv.some(arg => !['--dry-run', '--native'].includes(arg)) || new Set(argv).size !== argv.length) throw new Error('unsupported option; caller-supplied homes, workspaces and --allow-live are forbidden');
-  const report = { schemaVersion: 3, harness: 'fovea-capability-probe', run: randomUUID(), generatedAt: new Date().toISOString(), surface: 'headless', mode: argv.includes('--native') ? 'native' : 'prerequisites', qualified: false, automatic: false, gates: assessGates(), probes: [], scopeRemoved: null };
+  const report = { schemaVersion: 4, harness: 'fovea-capability-probe', run: randomUUID(), generatedAt: new Date().toISOString(), surface: 'headless', mode: argv.includes('--native') ? 'native' : 'prerequisites', qualified: false, automatic: false, gates: assessGates(), probes: [], scopeRemoved: null, scopeRetained: null, scopeDisposition: null, processCleanup: null };
   if (argv.includes('--dry-run')) { console.log(JSON.stringify(report)); return 0; }
   const scope = createScope();
   const runner = async (command, args, options) => {
@@ -266,10 +260,17 @@ export async function main(argv = process.argv.slice(2)) {
     }
     report.gates = assessGates(report.surface, report.probes);
   } finally {
-    // Do not race a possibly surviving process by removing its scope.
-    if (!scope.cleanupUnconfirmed) fs.rmSync(scope.root, { recursive: true, force: true });
-    else report.cleanupBlocker = 'native-process-cleanup-unconfirmed';
-    report.scopeRemoved = !fs.existsSync(scope.root);
+    // Retain-only teardown. Process closure is NOT repository-safe deletion
+    // authority: the private scope may contain a created Git repository, a
+    // substituted identity or unknown child-written evidence. It is never
+    // recursively removed. Process cleanup and scope disposition are reported
+    // separately and truthfully; retention is not qualification.
+    if (scope.cleanupUnconfirmed) report.cleanupBlocker = 'native-process-cleanup-unconfirmed';
+    report.processCleanup = scope.cleanupUnconfirmed ? 'unconfirmed' : 'confirmed';
+    const retained = fs.existsSync(scope.root);
+    report.scopeRetained = retained ? scope.root : null;
+    report.scopeDisposition = retained ? 'retained' : 'absent';
+    report.scopeRemoved = false;
   }
   console.log(JSON.stringify(report, null, 2)); return 0;
 }

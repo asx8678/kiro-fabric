@@ -10,7 +10,13 @@ import { FoveaResultStore, type ResultOwner } from '../../src/fovea/result-store
 import { FoveaScheduler } from '../../src/fovea/scheduler.js';
 import { FoveaOutbox } from '../../src/fovea/delivery.js';
 import { DEFAULT_FOVEA_CONFIG, FoveaConfiguration, validateFoveaConfig } from '../../src/fovea/config.js';
-import { decodeRequest, decodeResponse, projectEngineJson, FOVEA_FRAME_CHARS, FOVEA_REQUEST_CHARS } from '../../src/fovea/protocol.js';
+import { decodeRequest, decodeResponse, projectEngineJson } from '../../src/fovea/protocol.js';
+
+// Frame/request char budgets are module-private in src/fovea/protocol.ts. Mirror
+// the exact literals so the oversized-frame oracle still bounds real frames.
+const FOVEA_FRAME_CHARS = 1_000_000;
+
+const FOVEA_REQUEST_CHARS = 64_000;
 
 const cleanup: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });

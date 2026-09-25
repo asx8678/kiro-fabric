@@ -8,15 +8,19 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createAgentArchive } from "../scripts/create-agent-archive.mjs";
 import { validateReleaseArtifacts, writeReleaseAssetSnapshots } from "../scripts/release-artifacts.mjs";
 import { validateAgentPackage } from "../scripts/validate-agent-package.mjs";
+import { stagePortableAgentPackage } from "../scripts/verification/w5-portable-package.mjs";
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-release-artifact-test-"));
-const stage = path.resolve(".tmp/kiro-fabric-agent");
+let stage: string;
 const closure = path.resolve("dist/kiro-agent-closure");
 const archive = path.join(root, "qualified.tar.gz");
 const rebuilt = path.join(root, "rebuilt.tar.gz");
 const sbom = path.join(root, "qualified.spdx.json");
 let qualifiedBytes: Buffer; let sbomBytes: Buffer;
 beforeAll(() => {
+  // Capture a fresh fixture-local package. These are archive/SBOM contracts,
+  // not public staging/cache publication qualification; preserve shared caches.
+  stage = stagePortableAgentPackage(process.cwd(), root, "release-stage").validated.root;
   createAgentArchive(stage, archive);
   const content = gunzipSync(fs.readFileSync(archive));
   qualifiedBytes = gzipSync(content, { level: 1 });

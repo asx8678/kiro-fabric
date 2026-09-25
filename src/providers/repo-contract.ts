@@ -62,7 +62,7 @@ const coverageCount = (): Record<string, unknown> => integer(0, Number.MAX_SAFE_
 const coverageText = (maxLength = 100_000): Record<string, unknown> => ({ type: "string", maxLength });
 const coverageTexts = (maxItems = 1000): Record<string, unknown> => array(coverageText(), maxItems);
 const sourceReasons: RepoSourceCoverageReason[] = ["depthCap", "entryCap", "unreadableDirectories", "untrustedProjectRules", "excluded", "unavailableOrSymlink", "closedBoundaries", "notRegular", "hardlinks", "unsupported", "oversized", "raced", "byteCap", "generated"];
-export const REPO_COVERAGE_SCHEMA = object({
+const REPO_COVERAGE_SCHEMA = object({
   source: object({
     sourceFiles: coverageCount(), sourceBytes: coverageCount(), entriesVisited: coverageCount(), capped: boolean(),
     maxFiles: coverageCount(), maxFileBytes: coverageCount(), maxBytes: coverageCount(),
@@ -95,7 +95,7 @@ export const REPO_NAVIGATION_SCHEMA = object({
 }, ["schemaVersion", "status", "advisory", "resultId", "rootId", "sourceSnapshotId", "graphGeneration", "text", "estimatedTokens", "coverage", "reads", "truncated"]);
 const descriptor = (name: string, description: string, inputSchema: Record<string, unknown>, mutation = false, navigation = false): FabricActionDescriptor => ({ name, description, inputSchema, ...(navigation ? { outputSchema: structuredClone(REPO_NAVIGATION_SCHEMA) } : {}), risk: mutation ? "write" : "read", effect: { kind: mutation ? "write" : "read" }, annotations: { readOnlyHint: !mutation, idempotentHint: !["focus", "dwell", "reset", "configure", "reload"].includes(name), openWorldHint: false } });
 export const REPO_ACTION_DESCRIPTORS: FabricActionDescriptor[] = [
-  descriptor("status", "Cheap Fovea health/identity/capability status. Does not index. Graph evidence is advisory, never a source receipt or correctness verdict.", object(base())),
+  descriptor("status", "Cheap Navigator health/identity/capability status. Does not index. Graph evidence is advisory, never a source receipt or correctness verdict.", object(base())),
   descriptor("sketch", "Production-first architecture silhouette with extraction coverage. Whole authorized root analysis; filters never grant extra roots.", object({ ...base(), maxTokens: budget() }), false, true),
   descriptor("focus", "Graph navigation by symbol, approximate identifier, path, route, literal or protocol ID. fresh resets disclosure. Exact reads require local.readMany with returned SHA-256 windows.", object(focus(), ["query"]), false, true),
   descriptor("augment", "Transient graph hint for grep/sync; never advances an explicit focus. No-match or backend failure must preserve native matches.", object({ ...base(), query: string(1000), path: string(), maxTokens: budget() }, ["query"]), false, true),
@@ -107,7 +107,7 @@ export const REPO_ACTION_DESCRIPTORS: FabricActionDescriptor[] = [
   descriptor("rules", "Inspect built-in rules and discovered hypotheses; inspection does not adopt repository rules.", object({ ...base(), offset: integer(0, 1_000_000), limit: integer(1, 100) })),
   descriptor("adoptRules", "Approve session trust for an existing .fovea/rules.json at the exact local.read SHA-256. Publish declarations first using normal local.write. This grants no executable or extra-root authority.", object({ ...base(), expectedSha256: string(64) }, ["expectedSha256"]), true),
   descriptor("settings", "Inspect separate fovea.v1 configuration, revisions and settingSupport. sync.ackClean is stored but ineffective: native clean notifications are unsupported.", object(base())),
-  descriptor("configure", "Approved session/project/global Fovea settings update. Use settings.revision for session, revisions.project/global for persistent layers; strict versioned config, no executable or extra-root authority. Returns settingSupport; stored sync.ackClean does not enable native notifications.", object({ ...base(), scope: choices(["session", "project", "global"]), expectedRevision: string(64), config: { type: "object" } }, ["scope", "expectedRevision", "config"]), true),
+  descriptor("configure", "Approved session/project/global Navigator settings update. Use settings.revision for session, revisions.project/global for persistent layers; strict versioned config, no executable or extra-root authority. Returns settingSupport; stored sync.ackClean does not enable native notifications.", object({ ...base(), scope: choices(["session", "project", "global"]), expectedRevision: string(64), config: { type: "object" } }, ["scope", "expectedRevision", "config"]), true),
   descriptor("reset", "Reset this conversation/root navigation and retained results, not the host lifetime or source files.", object(base()), true),
   descriptor("reload", "Reload configuration and restart the same-generation engine PROCESS-WIDE: invalidates all engine navigation and retained results, not a session reset. New code requires product update and a new session.", object(base()), true),
   descriptor("sync", "Explicit authorized reconciliation; returns prepared context, never claims it was delivered. No automatic agent restart.", object(base())),

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { writeFileAtomic } from "./atomic-file.mjs";
 
 const QUALIFICATION_PHASES = Object.freeze([
@@ -8,14 +9,14 @@ const QUALIFICATION_PHASES = Object.freeze([
   "client-contract", "coding-and-form", "interactive", "manual-compaction", "automatic-compaction",
   "resume", "headless", "evidence-validation", "publication",
 ]);
-const outcomes = ["not-started", "not-created", "pending", "complete", "removed", "failed", "unverified", "wrapper-owned"];
-const reasonFor = error => error?.code === "ETIMEDOUT" || error?.name === "TimeoutError" || /timed out|timeout/iu.test(String(error?.message ?? "")) ? "timeout" : error?.code === "QUALIFICATION_INTERRUPTED" ? "interrupted" : "error";
+const outcomes = ["not-started", "not-created", "pending", "complete", "removed", "retained", "failed", "unverified", "wrapper-owned"];
+const reasonFor = error => error?.code === "QUALIFICATION_STATE_RETAINED" ? "retained-state" : error?.code === "ETIMEDOUT" || error?.name === "TimeoutError" || /timed out|timeout/iu.test(String(error?.message ?? "")) ? "timeout" : error?.code === "QUALIFICATION_INTERRUPTED" ? "interrupted" : "error";
 
 /** This schema intentionally cannot accept error messages, paths, argv, auth
  * values, transcripts, hashes of secrets, or arbitrary child report objects.
  * Write progress BEFORE effects/cleanup so SIGKILL still leaves honest evidence.
  * @param {string | undefined} output @param {"driver" | "wrapper"} component */
-export function qualificationFailureRecorder(output, component) {
+function qualificationFailureRecorder(output, component) {
   if (!["driver", "wrapper"].includes(component)) throw new Error("Invalid qualification component");
   const report = { kind: "kiro-fabric.qualification-diagnostic", schemaVersion: 1, ok: false, qualifying: false,
     scope: "nonqualifying-sanitized-diagnostic-only", component, phase: "preflight", phases: ["preflight"],
@@ -55,7 +56,14 @@ export async function withQualificationFailureReport(options, action) {
   try {
     try { record.cleanup(options.cleanupKind, "pending"); } catch { /* cleanup must still run */ }
     const outcome = await options.cleanup();
-    record.cleanup(options.cleanupKind, outcome === "not-created" ? "not-created" : options.cleanupKind === "authHome" ? "removed" : "complete");
+    const normalized = options.cleanupKind === "processes" && outcome === undefined ? "complete" : outcome;
+    const allowed = options.cleanupKind === "authHome" ? ["not-created", "removed", "retained", "unverified", "failed"] : ["complete", "unverified", "failed"];
+    if (!allowed.includes(normalized)) throw new Error("Invalid qualification cleanup result");
+    record.cleanup(options.cleanupKind, normalized);
+    if (!["not-created", "removed", "complete"].includes(normalized)) {
+      failure ??= Object.assign(new Error("Qualification cleanup incomplete"), { code: normalized === "retained" ? "QUALIFICATION_STATE_RETAINED" : "QUALIFICATION_CLEANUP_UNVERIFIED" });
+      record.failure(failure);
+    }
   } catch (error) {
     failure ??= error;
     try { record.cleanup(options.cleanupKind, "failed"); record.failure(failure); } catch { /* no raw diagnostics */ }
@@ -67,7 +75,8 @@ export async function withQualificationFailureReport(options, action) {
 
 /** Own a separate POSIX process group; never capture or echo auth output.
  * TERM gives the driver its exact-PID cleanup opportunity; KILL bounds timeout
- * even if a hung driver ignores TERM. Group cleanup precedes raw-home removal.
+ * even if a hung driver ignores TERM. Group cleanup remains mandatory even
+ * when the raw home must be retained and qualification is blocked.
  * @param {string} executable @param {string[]} argv
  * @param {{env?:NodeJS.ProcessEnv,timeoutMs:number,signal?:AbortSignal,interactive?:boolean,graceMs?:number,onFailure?:(error:any)=>void}} options */
 export function runBoundedQualificationProcess(executable, argv, options) {
@@ -118,35 +127,6 @@ export function assertSafeQualificationPublication(report) {
     }
   }
 }
-
-/** CI's always-run fallback also handles wrapper SIGKILL/runner cancellation.
- * Reproject through the allowlist, never upload arbitrary preexisting JSON.
- * @param {string} output @param {"removed"|"failed"} authHome */
-export function finalizeQualificationDiagnostic(output, authHome) {
-  if (!["removed", "failed"].includes(authHome)) throw new Error("Invalid auth cleanup outcome");
-  let previous;
-  try {
-    // Inspect the opened descriptor before reading; a writerless FIFO must not
-    // block open itself and prevent the always-run cleanup diagnostic.
-    const fd = fs.openSync(output, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
-    try {
-      const stat = fs.fstatSync(fd);
-      if (!stat.isFile() || stat.nlink !== 1 || stat.size > 4096) throw new Error("Unsafe diagnostic input");
-      const bytes = Buffer.alloc(4097), count = fs.readSync(fd, bytes, 0, bytes.length, 0);
-      if (count > 4096) throw new Error("Diagnostic input grew beyond bound");
-      previous = JSON.parse(bytes.subarray(0, count).toString("utf8"));
-    } finally { fs.closeSync(fd); }
-  } catch { /* Unknown input is replaced with a nonqualifying allowlisted record. */ }
-  const record = qualificationFailureRecorder(output, previous?.component === "driver" ? "driver" : "wrapper");
-  if (Array.isArray(previous?.phases)) for (const phase of previous.phases) if (QUALIFICATION_PHASES.includes(phase)) record.phase(phase);
-  if (QUALIFICATION_PHASES.includes(previous?.phase)) record.phase(previous.phase);
-  if (outcomes.includes(previous?.cleanup?.processes)) record.cleanup("processes", previous.cleanup.processes);
-  record.cleanup("authHome", authHome);
-  if (previous?.reason === "completed" && authHome === "removed") record.completed();
-  else record.failure(previous?.reason === "timeout" ? { code: "ETIMEDOUT" } : previous?.reason === "error" || authHome === "failed" ? {} : { code: "QUALIFICATION_INTERRUPTED" });
-  return record.snapshot();
-}
-
 /** Require a dedicated report outside every raw authentication/work directory. */
 export function assertExternalDiagnosticPath(output, rawRoots) {
   if (!path.isAbsolute(output)) throw new Error("Diagnostic output must be absolute");
@@ -161,4 +141,62 @@ export function assertExternalDiagnosticPath(output, rawRoots) {
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error("Unsafe diagnostic directory");
     const parent = path.dirname(current); if (parent === current) break; current = parent;
   }
+}
+
+const reasons = ["in-progress", "completed", "error", "timeout", "interrupted", "retained-state"];
+const sameKeys = (value, names) => value && typeof value === "object" && !Array.isArray(value) && Object.keys(value).sort().join() === [...names].sort().join();
+const exists = file => { try { fs.lstatSync(file); return true; } catch (error) { if (error.code === "ENOENT") return false; throw error; } };
+
+// Bounded reads of DIAGNOSTICS ONLY. Never inspect authentication/tree contents.
+function readDiagnostic(file, component) {
+  let fd;
+  try {
+    fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK);
+    const stat = fs.fstatSync(fd);
+    if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid?.() || (stat.mode & 0o077) || stat.size > 4096) throw new Error("Unsafe diagnostic");
+    const buffer = Buffer.alloc(4097), size = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    if (size > 4096) throw new Error("Diagnostic bound");
+    const report = JSON.parse(buffer.subarray(0, size).toString("utf8"));
+    if (!sameKeys(report, ["kind", "schemaVersion", "ok", "qualifying", "scope", "component", "phase", "phases", "reason", "cleanup"]) ||
+        report.kind !== "kiro-fabric.qualification-diagnostic" || report.schemaVersion !== 1 || report.ok !== false || report.qualifying !== false ||
+        report.scope !== "nonqualifying-sanitized-diagnostic-only" || report.component !== component || !QUALIFICATION_PHASES.includes(report.phase) ||
+        !Array.isArray(report.phases) || report.phases.length < 1 || report.phases.length > QUALIFICATION_PHASES.length || new Set(report.phases).size !== report.phases.length ||
+        report.phases[0] !== "preflight" || report.phases.at(-1) !== report.phase || report.phases.some(phase => !QUALIFICATION_PHASES.includes(phase)) ||
+        !reasons.includes(report.reason) || !sameKeys(report.cleanup, ["processes", "authHome"]) ||
+        !["not-started", "pending", "complete", "failed", "unverified"].includes(report.cleanup.processes) || !outcomes.includes(report.cleanup.authHome)) throw new Error("Invalid diagnostic");
+    return { report, valid: true };
+  } catch {
+    const report = qualificationFailureRecorder(undefined, component).snapshot();
+    report.reason = "error"; report.cleanup.processes = "unverified"; report.cleanup.authHome = "unverified";
+    return { report, valid: false };
+  } finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+
+// CLI owns the workflow entrypoints. Do not export unused inline-only helpers.
+function diagnosticCommand(argv) {
+  const [action, output, rawRoot, extra] = argv;
+  if (!output || extra || !["initialize", "finalize"].includes(action) || (action === "initialize" ? rawRoot !== undefined : !rawRoot || !path.isAbsolute(rawRoot))) throw new Error("Invalid diagnostic command");
+  assertExternalDiagnosticPath(output, rawRoot ? [rawRoot] : []);
+  if (action === "initialize") { qualificationFailureRecorder(output, "wrapper").flush(); return 0; }
+  const present = exists(rawRoot);
+  let failed = present;
+  for (const [file, component] of [[output, "wrapper"], [`${output}.driver.json`, "driver"]]) {
+    if (component === "driver" && !exists(file)) continue;
+    const safeOutput = `${file}.sanitized.json`;
+    assertExternalDiagnosticPath(safeOutput, [rawRoot]);
+    const { report, valid } = readDiagnostic(file, component);
+    const rootStat = present ? fs.lstatSync(rawRoot) : null;
+    const disposition = rootStat ? rootStat.isDirectory() && !rootStat.isSymbolicLink() ? "retained" : "unverified" : report.cleanup.authHome === "not-created" ? "not-created" : "unverified";
+    report.cleanup.authHome = disposition;
+    if (present && ["completed", "in-progress"].includes(report.reason)) report.reason = disposition === "retained" ? "retained-state" : "error";
+    failed ||= !valid || disposition !== "not-created" || report.reason !== "completed" || !["not-started", "complete"].includes(report.cleanup.processes);
+    // Upload ONLY this strict-schema copy, never the untrusted original.
+    writeFileAtomic(safeOutput, JSON.stringify(report, null, 2) + "\n", { mode: 0o600 });
+  }
+  if (failed) console.error("Qualification remains blocked; private state is retained or disposition is unverified. Diagnostic copies contain no raw state; no tree cleanup was performed.");
+  return failed ? 1 : 0;
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { process.exitCode = diagnosticCommand(process.argv.slice(2)); }
+  catch { console.error("Qualification diagnostic finalization failed; raw output suppressed."); process.exitCode = 1; }
 }

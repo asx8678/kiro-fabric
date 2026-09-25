@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { KiroMemoryCommitAcknowledgementError, openKiroMemory } from "../src/kiro/memory.js";
+import { openKiroMemory } from "../src/kiro/memory.js";
 
 const roots: string[] = [];
 // Track actual opens rather than relying on Linux-only /proc symlink lookup.
@@ -47,8 +47,16 @@ describe("Fabric memory commit recovery", () => {
       .rejects.toMatchObject({ committed: true, operation: "set", key: "key", cause: expect.any(Error) });
     await expect(memory.get("key")).resolves.toMatchObject({ value: true });
     calls = 0;
+    // The acknowledgement class is internal; assert its stable published
+    // contract (name/marker semantics) instead of constructor identity.
     await expect(memory.delete("key", undefined, () => { if (++calls === 4) throw new Error("deadline"); }))
-      .rejects.toBeInstanceOf(KiroMemoryCommitAcknowledgementError);
+      .rejects.toMatchObject({
+        name: "KiroMemoryCommitAcknowledgementError",
+        committed: true,
+        operation: "delete",
+        key: "key",
+        cause: expect.objectContaining({ message: "deadline" }),
+      });
     await expect(memory.get("key")).resolves.toBeNull();
   });
 

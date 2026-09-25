@@ -42,13 +42,13 @@ function versionChange(previous, bundle) {
     const comparison = compareVersions(bundle.version, previous.version);
     action = comparison > 0 ? "Upgrade to newer version" : comparison < 0 ? "Install older version (downgrade)" : "Replace same-version generation";
   }
-  const fovea = bundle.manifest.schema === 2 ? JSON.parse(fs.readFileSync(path.join(bundle.root, "app/fovea/component.json"), "utf8")) : undefined;
+  const fovea = bundle.manifest.schema >= 2 ? JSON.parse(fs.readFileSync(path.join(bundle.root, "app/fovea/component.json"), "utf8")) : undefined;
   return { previous, target: { version: bundle.version, generation: bundle.digest, node: bundle.manifest.tools.node.version, ripgrep: bundle.manifest.tools.rg.version,
     ...(fovea ? { fovea: { upstreamVersion: fovea.version, portVersion: fovea.portVersion, parserVersion: bundle.manifest.tools["ast-grep"].version, activation: "explicit authorized analysis; automatic native-client lifecycle unqualified; existing settings preserved" } } : {}) }, action };
 }
 
 function formatVersionChange(change) {
-  return `Previously installed: ${display(installedVersionLabel(change.previous))}\nTarget version: ${display(change.target.version)} (verified bundle)\nChange: ${display(change.action)}\nPrivate tools: Node ${display(change.target.node)}, ripgrep ${display(change.target.ripgrep)}\n${change.target.fovea ? `Fovea: ${display(change.target.fovea.upstreamVersion)} (port ${display(change.target.fovea.portVersion)}), ast-grep ${display(change.target.fovea.parserVersion)}\nActivation: ${display(change.target.fovea.activation)}\n` : ""}`;
+  return `Previously installed: ${display(installedVersionLabel(change.previous))}\nTarget version: ${display(change.target.version)} (verified bundle)\nChange: ${display(change.action)}\nPrivate tools: Node ${display(change.target.node)}, ripgrep ${display(change.target.ripgrep)}\n${change.target.fovea ? `Navigator: ${display(change.target.fovea.upstreamVersion)} (port ${display(change.target.fovea.portVersion)}), ast-grep ${display(change.target.fovea.parserVersion)}\nActivation: ${display(change.target.fovea.activation)}\n` : ""}`;
 }
 
 export function managerContext(script = fileURLToPath(import.meta.url)) {
@@ -313,7 +313,7 @@ export async function runManager(argv, internal = {}) {
       process.stderr.write(`Kiro Fabric\nSystem        ${platform.target}\nKiro CLI      ${kiro ? `Found (${kiro.version})` : "Not required for this operation"}\nKiro home     ${display(home)} (${selected.source})\nOperation     ${options.command}\nDurable data is retained. Preparation, backups and requested configuration changes may remain if a later step fails.\n`);
       if (installation) process.stderr.write(`Installed     ${display(installedVersionLabel(installedIdentity(installation)))}\n`);
       if (["install", "update"].includes(options.command)) {
-        process.stderr.write("Will install  Fabric + Fovea, private Node/ripgrep/ast-grep, manager, agent profile, skills and steering\n");
+        process.stderr.write("Will install  Fabric + Navigator, private Node/ripgrep/ast-grep, manager, agent profile, skills and steering\n");
         process.stderr.write(`Install root  ${display(path.join(home, "kiro-fabric"))}\nAgent profile ${display(path.join(home, "agents", "kiro-fabric.json"))}\nExisting skills and configuration are preserved. Older runtime generations are retained for existing sessions and rollback.\n`);
         process.stderr.write(`Target        ${options.version ? `${display(options.version)} (requested; verification pending)` : "Version determined after bundle verification"}\nKiro CLI is already installed; it will not be installed, upgraded or authenticated by this installer.\n`);
       }
@@ -427,7 +427,7 @@ export function presentManagerResult(result, options) {
   if (result.installationChange) process.stdout.write(formatVersionChange(result.installationChange));
   if (result.version) process.stdout.write(`Version: ${display(result.version)}\nGeneration: ${display(result.generation ?? result.digest)}\n`);
   if (result.dataRoot) process.stdout.write(`Data: ${display(result.dataRoot)}\n`);
-  if (result.configurationBackup) process.stdout.write(`Prior configuration backup: ${display(result.configurationBackup.path)}\n`);
+  if (result.configurationBackup) process.stdout.write(`${result.configurationBackup.status === "unverified" ? "Unverified configuration backup evidence" : "Prior configuration backup"}: ${display(result.configurationBackup.path)}\n`);
   if (result.homePreparation?.legacyProfileBackup) process.stdout.write(`Prior Pi Fabric profile: ${display(result.homePreparation.legacyProfileBackup)}\n`);
   for (const directory of result.homePreparation?.permissions ?? []) process.stdout.write(`Directory permissions: ${display(directory.path)} (${directory.previousMode} -> ${directory.mode})\n`);
   if (result.readOnly) process.stdout.write(`Scope: ${display(result.scope)}\nPlan: ${display(JSON.stringify(result.plan))}\n`);
@@ -439,6 +439,7 @@ export function presentManagerResult(result, options) {
   if (result.shellIntegration?.status === "removed") process.stdout.write("Shell integration removed; open a new terminal to unload the function.\n");
   if (result.restartRequired) process.stdout.write("Restart the Kiro session to adopt this generation. Existing sessions keep their files.\n");
 }
+/** @param {string|null} [home] */
 export function managerErrorResult(error, home = null) {
   const message = error instanceof Error ? error.message : String(error);
   const detail = error && typeof error === "object" ? error : {};
@@ -465,7 +466,7 @@ function presentErrorResult(result, json) {
     process.stderr.write(`Kiro Fabric: ${result.error}\nActivation committed: ${result.committed ? "yes" : "not confirmed"}\nRecovery required: ${result.recoveryRequired ? "yes" : "not reported"}\n`);
     if (result.operationCompleted) process.stderr.write("The backend operation completed before this failure.\n");
     if (result.recovery) process.stderr.write(`Recovery evidence: ${display(JSON.stringify(result.recovery))}\n`);
-    if (result.configurationBackup) process.stderr.write(`Prior configuration backup: ${display(result.configurationBackup.path)}\n`);
+    if (result.configurationBackup) process.stderr.write(`${result.configurationBackup.status === "unverified" ? "Unverified configuration backup evidence" : "Prior configuration backup"}: ${display(result.configurationBackup.path)}\n`);
     if (result.legacyProfileBackup) process.stderr.write(`Prior Pi Fabric profile preserved at: ${display(result.legacyProfileBackup)}\n`);
     for (const directory of result.homePreparation?.permissions ?? []) process.stderr.write(`Applied directory permissions: ${display(directory.path)} (${directory.previousMode} -> ${directory.mode})\n`);
     process.stderr.write(`${result.limitations[0]}\n`);

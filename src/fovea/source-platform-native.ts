@@ -2,11 +2,10 @@ import { constants } from 'node:fs';
 import {
   assertSourceComponent, SourcePlatformUnavailableError,
   type SourceHandle, type SourcePlatform, type SourceStat,
-} from './source-platform.js';
-import type { DarwinSourceBinding } from './source-platform-darwin.js';
-
-declare const nativeToken: unique symbol;
+} from './source-platform.js';declare const nativeToken: unique symbol;
 /** Opaque, native-tagged object; not an integer fd, pathname, or serialized ID. */
+/** @internal Qualification-only: opaque native handle brand shared with the
+ * compiled-binding tests. Not serialized or exposed through any public API. */
 export interface NativeSourceToken { readonly [nativeToken]: true }
 type NativeStat = Omit<SourceStat, 'isFile' | 'isDirectory'>;
 /** Low-level exports of source-platform-native.c. Binary loading/authentication
@@ -27,6 +26,8 @@ export interface PosixSourceBinding {
 /** Additive, separately gated ABI. Old source-only binaries remain usable for
  * reads, but never qualify as provenance writers. Only private journal names,
  * bounded bytes and opaque directory capabilities cross this boundary. */
+/** @internal Qualification-only: additive native provenance ABI surface used
+ * by the compiled-binding tests. Never authenticated or exported at runtime. */
 export interface PosixProvenanceBinding extends PosixSourceBinding {
   readonly provenanceAbiVersion: 1;
   journalRead(directory: NativeSourceToken, name: string): Promise<Buffer | null>;
@@ -118,19 +119,4 @@ export function createNativeSourcePlatform(binding: PosixSourceBinding): SourceP
     });
   }
   return platform;
-}
-
-/** Owner's verified Darwin loader can feed this into createDarwinSourcePlatform.
- * Never relabel a Linux test binary as Darwin. */
-export function createNativeDarwinSourceBinding(binding: PosixSourceBinding): DarwinSourceBinding {
-  if (binding?.platform !== 'darwin') throw new SourcePlatformUnavailableError('darwin', 'native binary was not compiled for Darwin');
-  const platform = createNativeSourcePlatform(binding);
-  return {
-    abiVersion: 1, platform: 'darwin', openRootDirectory: () => platform.openRootDirectory(),
-    openAt: (parent, name, kind) => platform.openChild(parent, name, kind),
-    readDirectory(parent, batchSize) {
-      if (batchSize !== 128) throw new Error('Invalid native source directory batch size');
-      return platform.entries(parent);
-    },
-  };
 }

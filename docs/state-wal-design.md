@@ -2,7 +2,7 @@
 
 Status: sanctioned long-term project, deliberately not started. This document
 is the executable specification for the state-store scalability work
-referenced by `docs/continuity-remediation-plan.md` (round-12 scope-out). It
+originally scoped out by the continuity remediation plan (round-12; archived in Git history). It
 exists so a future implementer does not have to rediscover constraints that
 the current fault matrix already pins.
 
@@ -15,11 +15,12 @@ by rewriting their whole documents as well. Cost per operation is
 O(document), so cost per task grows with total retained records -- the top
 architectural weak spot of the 2026-09 audit round.
 
-## Non-negotiable semantics (already pinned by tests)
+## Non-negotiable semantics (historically pinned by tests)
 
 The fault matrix in `tests/state-durability.test.ts`, the state boundary
-regressions, and the tamper suites pin these behaviors. Any WAL must
-preserve every one of them:
+regressions, and the tamper suites historically pinned these behaviors; those
+Vitest files were removed with the test suite and are no longer runnable. Any
+WAL must preserve every one of them:
 
 - **CAS revisions** -- `expectedRevision` compare-and-swap per key, and the
   document-level revisions consumed by the rotation journal.

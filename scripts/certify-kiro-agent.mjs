@@ -14,6 +14,8 @@ const jsonOutput = jsonIndex >= 0 ? path.resolve(process.argv[jsonIndex + 1]) : 
 const packageEvidence = validateAgentPackage(requestedPluginRoot);
 const pluginRoot = packageEvidence.root;
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-fabric-cert-"));
+// Retain even on setup failure; report only the path, never task contents.
+console.error("[fabric:task-root] " + JSON.stringify({ path: temporary, policy: "retain" }));
 const pluginData = path.join(temporary, "data");
 const workspace = path.join(temporary, "workspace");
 const home = path.join(temporary, "home");
@@ -108,8 +110,8 @@ try {
     throw new Error("fabric_info did not prove canonical workspace binding");
   }
   const providers = info.providers?.map((provider) => provider.name).sort();
-  const disabledProviders = ["continuity", "web"];
-  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "continuity", "fabric", "local", "mcp", "memory", "probe", "repo", "review", "state", "web"]) ||
+  const disabledProviders = ["continuity"];
+  if (JSON.stringify(providers) !== JSON.stringify(["artifacts", "continuity", "fabric", "local", "mcp", "memory", "probe", "repo", "review", "state"]) ||
       info.providers.some((provider) => provider.available !== !disabledProviders.includes(provider.name)) ||
       disabledProviders.some((name) => info.providers.find((provider) => provider.name === name)?.reason !== "disabled by configuration")) {
     throw new Error("fabric_info provider set is incomplete");
@@ -201,7 +203,7 @@ try {
     lifecycle: info.lifecycle,
     scope: "component-mcp-only",
     authenticatedKiro: "NOT TESTED",
-    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "nine-enabled-providers", "web-disabled-by-default", "continuity-disabled-by-default", "declared-versus-observed-provenance", "checked-execution", "structured-read-and-search", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
+    checks: ["package-digest", "initialize", "three-tools", "workspace-binding", "nine-enabled-providers", "continuity-disabled-by-default", "declared-versus-observed-provenance", "checked-execution", "structured-read-and-search", "dynamic-code-disabled", "compiler-filesystem-isolation", "strict-json-results", "form-elicitation-decline", "approval-boundary", "idempotent-info", "single-runtime-generation", "bounded-shutdown"],
   };
   const serialized = `${JSON.stringify(report, null, 2)}\n`;
   if (jsonOutput) writeFileAtomic(jsonOutput, serialized);
@@ -214,5 +216,5 @@ try {
       child.once("exit", () => { clearTimeout(timer); resolve(); });
     });
   }
-  fs.rmSync(temporary, { recursive: true, force: true });
+  // Keep task files for inspection; retaining state never replaces child shutdown.
 }

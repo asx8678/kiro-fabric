@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, lstat, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, lstat, realpath, writeFile } from 'node:fs/promises';
+import { FoveaScratchOwner } from './scratch-owner.js';
 import { isAbsolute, join, resolve } from 'node:path';
 import { coreContext, type CoreContext } from './core/context.js';
 import { sketch, focus, dwell, impact, type OpResult, type FocusOptions } from './core/ops.js';
@@ -32,7 +33,7 @@ export interface EngineRequest {
   operation: string;
   args: Record<string, unknown>;
 }
-export interface NavigationResult extends Record<string, unknown> {
+interface NavigationResult extends Record<string, unknown> {
   text: string;
   estimatedTokens: number;
   details: Record<string, unknown>;
@@ -83,16 +84,19 @@ export class FoveaEngine {
   private readonly conversations = new Map<string, Conversation>();
   private readonly preparedSync = new Map<string, { id: string; conversation: Conversation }>();
   private closed = false;
+  private closeTask: Promise<void> | undefined;
+  private scratch: FoveaScratchOwner | undefined;
+  private cleanupFailure: unknown;
   constructor(options: FoveaEngineOptions) {
     this.options = { ...options, parser: { ...options.parser } };
-    if (!isAbsolute(options.storageRoot)) throw new Error('Fovea storageRoot must be absolute');
+    if (!isAbsolute(options.storageRoot)) throw new Error('Navigator storageRoot must be absolute');
   }
   query(request: EngineRequest, signal?: AbortSignal): Promise<EngineResult> {
     // Copy before queueing: caller mutation must not change a scheduled capability.
     const input = structuredClone(request);
     const combined = signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
     const run = this.tail.then(async () => {
-      if (this.closed) throw new Error('Fovea engine closed');
+      if (this.closed || this.cleanupFailure) throw new Error('Navigator engine closed or cleanup uncertain', { cause: this.cleanupFailure });
       combined.throwIfAborted();
       const result = await this.execute(input, combined);
       combined.throwIfAborted();
@@ -105,8 +109,8 @@ export class FoveaEngine {
    * invalidation. Serialized with queries so a late query cannot resurrect state. */
   retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
     const run = this.tail.then(() => {
-      if (this.closed) throw new Error('Fovea engine closed');
-      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error('Invalid Fovea retirement owner');
+      if (this.closed || this.cleanupFailure) throw new Error('Navigator engine closed or cleanup uncertain', { cause: this.cleanupFailure });
+      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error('Invalid Navigator retirement owner');
       for (const map of [this.conversations, this.preparedSync]) for (const key of map.keys()) {
         const owner = JSON.parse(key) as [string, number, string];
         if (owner[0] === conversationId && owner[1] === conversationEpoch) map.delete(key);
@@ -120,10 +124,13 @@ export class FoveaEngine {
     await mkdir(this.options.storageRoot, { recursive: true, mode: 0o700 });
     const info = await lstat(this.options.storageRoot);
     if (!info.isDirectory() || info.isSymbolicLink() || (info.mode & 0o077) || info.uid !== process.getuid?.() || await realpath(this.options.storageRoot) !== this.options.storageRoot) {
-      throw new Error('Fovea storageRoot must be canonical, private, and owned');
+      throw new Error('Navigator storageRoot must be canonical, private, and owned');
     }
-    const directory = await mkdtemp(join(this.options.storageRoot, 'engine-'));
+    signal.throwIfAborted();
+    const scratch = new FoveaScratchOwner(this.options.storageRoot);
+    this.scratch = scratch;
     try {
+      const directory = await scratch.createRoot(signal);
       const parser = await resolveParserDescriptor(this.options.parser, directory, signal);
       let git: string | undefined;
       if (this.options.gitPath) {
@@ -135,14 +142,18 @@ export class FoveaEngine {
         ? await loadManagedSourcePlatform(this.options.parser, directory) : sourcePlatform());
       signal.throwIfAborted();
       this.directory = directory; this.parser = parser; this.git = git; this.source = source;
-    } catch (error) { await rm(directory, { recursive: true, force: true }); throw error; }
+    } catch (error) {
+      try { await scratch.close(); this.scratch = undefined; }
+      catch (cleanup) { this.cleanupFailure = cleanup; throw new AggregateError([error, cleanup], 'Navigator initialization and scratch cleanup failed', { cause: error }); }
+      throw error;
+    }
   }
   private async execute(request: EngineRequest, signal: AbortSignal): Promise<EngineResult> {
     const { operation, args } = request;
-    if (!['sketch', 'focus', 'dwell', 'impact', 'status', 'anchors', 'rules', 'reset', 'reload', 'sync'].includes(operation)) throw new Error(`Unsupported Fovea operation: ${operation}`);
+    if (!['sketch', 'focus', 'dwell', 'impact', 'status', 'anchors', 'rules', 'reset', 'reload', 'sync'].includes(operation)) throw new Error(`Unsupported Navigator operation: ${operation}`);
     if (!object(args) || !request.conversationId || !request.rootId || !Number.isSafeInteger(request.conversationEpoch) || request.conversationEpoch < 0 || !Number.isSafeInteger(request.authorizationEpoch) || request.authorizationEpoch < 0) throw new Error('Invalid engine request identity');
     const identity = await lstat(request.root, { bigint: true });
-    if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Fovea root must be a physical directory");
+    if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Navigator root must be a physical directory");
     // Authorization is checked by the host for every call; cache identity never grants access.
     const rootKey = JSON.stringify([request.root, String(identity.dev), String(identity.ino)]);
     const conversationKey = JSON.stringify([request.conversationId, request.conversationEpoch, rootKey]);
@@ -171,7 +182,7 @@ export class FoveaEngine {
       return { status: 'ok', operation, reset: 'conversation-root', ...(operation === 'reload' ? { graphInvalidated: true } : {}) };
     }
     await this.initialize(signal);
-    if (!isAbsolute(request.root) || await realpath(request.root) !== request.root) throw new Error('Fovea root must be canonical');
+    if (!isAbsolute(request.root) || await realpath(request.root) !== request.root) throw new Error('Navigator root must be canonical');
     let root = this.roots.get(rootKey);
     if (!root) {
       if (this.roots.size >= 32) {
@@ -191,7 +202,7 @@ export class FoveaEngine {
     }
     if (operation === 'dwell' && root.gap && !this.conversations.has(conversationKey)) throw new Error('Unknown or expired focusId after root retirement; focus again');
     const original = this.conversations.get(conversationKey) ?? { store: new Map(), focuses: new Map<string, number>(), active: '' };
-    if (!this.conversations.has(conversationKey) && this.conversations.size >= 128) throw new Error('Fovea conversation capacity reached');
+    if (!this.conversations.has(conversationKey) && this.conversations.size >= 128) throw new Error('Navigator conversation capacity reached');
     const conversation: Conversation = { store: cloneStore(original.store), focuses: new Map(original.focuses), active: original.active };
     const transient = args.transient === true;
     let focusId = typeof args.focusId === 'string' ? args.focusId : conversation.active;
@@ -199,17 +210,20 @@ export class FoveaEngine {
     // Omitted focusId uses this conversation/root's default focus, never another caller's.
     if (operation === 'focus' && (!focusId || args.fresh === true)) focusId = randomUUID();
     if (!focusId) focusId = 'transient';
-    const stage = await mkdtemp(join(this.directory!, 'snapshot-'));
+    const stage = await this.scratch!.createStage(signal);
     const ctx: CoreContext = { store: root.store, sessionStore: conversation.store, parserPath: this.parser!.path,
       storageRoot: this.directory!, sourceRoot: request.root, snapshotRoot: root.path, gitPath: this.git,
+      cleanupTemporary: (file, snapshot, available) => this.scratch!.removeTemporary(file, snapshot, available),
       readGitMetadata: async path => {
         signal.throwIfAborted();
         const text = await this.source!.readScopeSafeFile(request.root, resolve(request.root, path), 1024 * 1024);
         if (text === undefined) throw new Error('Git shallow metadata unavailable');
         return text;
       },
-      signal, gitFailures: [], focusKey: focusId, spills: new Map(), artifactLabel: operation => `retained:${operation}` };
+      signal, gitFailures: [], focusKey: focusId, spills: new Map(), artifactLabel: operation => `retained:${operation}`,
+      displayName: 'Navigator', toolName: operation => `repo.${operation}` };
     return coreContext.run(ctx, async () => {
+      let primary: { error: unknown } | undefined;
       try {
         const snapshot = await this.source!.captureSourceSnapshot(request.root, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
           trustedRulesSha256: typeof args.trustedRulesSha256 === 'string' ? args.trustedRulesSha256 : undefined,
@@ -217,8 +231,9 @@ export class FoveaEngine {
         signal.throwIfAborted();
         const snapshotReused = snapshot.root === root.path && root.snapshotId === snapshot.id;
         if (!snapshotReused) {
-          await rm(root.path, { recursive: true, force: true });
-          await rename(stage, root.path);
+          await this.removeScratchTree(root.path);
+          signal.throwIfAborted();
+          await this.scratch!.moveStage(stage, root.path);
         }
         const head = this.git ? await gitHead(root.path) : undefined;
         const warm = snapshotReused && head === root.head ? getState(root.path) : undefined;
@@ -264,11 +279,16 @@ export class FoveaEngine {
           const savedNavigation = navigationBeforePush ? structuredClone(navigationBeforePush) : undefined;
           const native = await this.bridgeProvenance(request, root, conversation, snapshot.hashes, state.facts, String(identity.dev), String(identity.ino));
           let outcome: Awaited<ReturnType<typeof sync>>;
+          let syncFailure: { error: unknown } | undefined;
           try { outcome = await sync(root.path, { files: strings(args.files), budget,
             steerThreshold: number(args.steerThreshold, 0.15, 0, 1_000_000), pushFocus: args.pushFocus !== false,
             scope: args.scope === 'repository' ? 'repository' : 'session', sessionId: native.origin,
           }, state, { current: () => !signal.aborted });
-          } finally { await Promise.all(native.paths.map(p => rm(p, { force: true }))); }
+          } catch (error) { syncFailure = { error }; throw error; }
+          finally {
+            try { await this.removeScratchFiles(native.paths); }
+            catch (cleanup) { throw syncFailure ? new AggregateError([syncFailure.error, cleanup], 'Navigator sync and temporary cleanup failed', { cause: syncFailure.error }) : cleanup; }
+          }
           conversation.store.set('native:provenance', { hashes: new Map(snapshot.hashes), sequence: native.sequence });
           signal.throwIfAborted();
           // Sync's push focus is transient: retain baselines, not disclosure/vector changes.
@@ -341,19 +361,23 @@ export class FoveaEngine {
         if (!transient) this.conversations.set(conversationKey, conversation);
         return packet;
       } catch (error) {
-        // Never reuse partially refreshed state or publish navigation after cancellation.
-        root.store.clear();
+        // Never reuse partially refreshed state or forget in-flight filesystem work.
+        primary = { error };
+        try { await this.clearRootStore(root); } catch (cleanup) { throw new AggregateError([error, cleanup], 'Navigator query and maintenance failed', { cause: error }); }
         delete root.snapshotId; delete root.snapshotHashes;
         throw error;
       } finally {
-        await rm(stage, { recursive: true, force: true });
+        const failures: unknown[] = [];
+        try { await this.removeScratchTree(stage); } catch (error) { failures.push(error); }
         if (signal.aborted) {
-          root.store.clear(); delete root.snapshotId; delete root.snapshotHashes;
+          try { await this.clearRootStore(root); } catch (error) { failures.push(error); }
+          delete root.snapshotId; delete root.snapshotHashes;
           this.preparedSync.delete(conversationKey);
           if (original.active || original.store.size) this.conversations.set(conversationKey, original);
           else this.conversations.delete(conversationKey);
-          signal.throwIfAborted();
+          failures.push(signal.reason);
         }
+        if (failures.length) throw new AggregateError([...(primary ? [primary.error] : []), ...failures], 'Navigator query/cleanup failed', { cause: primary?.error ?? failures[0] });
       }
     });
   }
@@ -362,13 +386,12 @@ export class FoveaEngine {
     if (!root) return;
     // A store belongs to exactly one physical root. No other root's caches or
     // semaphore are cleared, and pending per-root persistence timers are stopped.
-    const timers = root.store.get('build.ts:persistDebounce');
-    if (timers instanceof Map) for (const timer of timers.values()) clearTimeout(timer as NodeJS.Timeout);
-    root.store.clear(); root.hot = false; root.gap = true;
+    await this.clearRootStore(root);
+    root.hot = false; root.gap = true;
     delete root.snapshotId; delete root.snapshotHashes; delete root.head;
     for (const conversationKey of this.conversations.keys()) if (JSON.parse(conversationKey)[2] === key) this.conversations.delete(conversationKey);
     for (const conversationKey of this.preparedSync.keys()) if (JSON.parse(conversationKey)[2] === key) this.preparedSync.delete(conversationKey);
-    await rm(root.path, { recursive: true, force: true });
+    await this.removeScratchTree(root.path);
     if (remove) this.roots.delete(key);
   }
   /** Adapt only exact captured SHA-256 endpoints to core's SHA-1 fact IDs.
@@ -413,11 +436,12 @@ export class FoveaEngine {
     try {
       for (const [ownerOrigin, records] of byOwner) {
         const target = provenancePathFor(root.path, ownerOrigin);
-        result.paths.push(target);
         await writeAtomicTemp(target, JSON.stringify({ version: 1, root: root.path, owner: createHash('sha1').update(ownerOrigin).digest('hex').slice(0, 16), records }), 128_000);
+        await this.scratch!.captureFile(target);
+        result.paths.push(target);
       }
     } catch {
-      await Promise.all(result.paths.map(p => rm(p, { force: true })));
+      await this.removeScratchFiles(result.paths);
       result.paths = []; result.gap = true;
     }
     return result;
@@ -425,11 +449,43 @@ export class FoveaEngine {
   private cleanText(text: string): string {
     return text.replace(/full list saved to retained:[a-z]+/g, 'full list retained in result');
   }
-  async close(): Promise<void> {
-    if (!this.closed) { this.closed = true; this.lifetime.abort(new Error('Fovea engine closed')); }
-    await this.tail;
-    for (const key of [...this.roots.keys()]) await this.retireRoot(key, true);
-    this.roots.clear(); this.conversations.clear(); this.preparedSync.clear();
-    if (this.directory) await rm(this.directory, { recursive: true, force: true });
+  private async clearRootStore(root: RootState): Promise<void> {
+    const timers = root.store.get('build.ts:persistDebounce');
+    if (timers instanceof Map) for (const timer of timers.values()) clearTimeout(timer as NodeJS.Timeout);
+    const maintenance = root.store.get('maintenance') as { value?: { pending?: Promise<void> } } | undefined;
+    await maintenance?.value?.pending;
+    root.store.clear();
+  }
+  private async removeScratchTree(directory: string): Promise<void> {
+    try {
+      if (!this.scratch) throw new Error('Navigator scratch ownership unavailable; preserve evidence');
+      await this.scratch.removeTree(directory);
+    } catch (error) { this.cleanupFailure ??= error; throw error; }
+  }
+  private async removeScratchFiles(files: string[]): Promise<void> {
+    const failures: unknown[] = [];
+    for (const file of files) try {
+      if (!this.scratch) throw new Error('Navigator temporary ownership unavailable');
+      await this.scratch.removeFile(file);
+    } catch (error) { failures.push(error); }
+    if (failures.length) { this.cleanupFailure ??= failures[0]; throw new AggregateError(failures, 'Navigator temporary cleanup failed'); }
+  }
+  close(): Promise<void> {
+    if (this.closeTask) return this.closeTask;
+    this.closed = true;
+    this.closeTask = Promise.resolve().then(async () => {
+      const failures: unknown[] = this.cleanupFailure === undefined ? [] : [this.cleanupFailure];
+      try { await this.tail; } catch (error) { failures.push(error); }
+      for (const key of [...this.roots.keys()]) try { await this.retireRoot(key, true); } catch (error) { failures.push(error); }
+      this.conversations.clear(); this.preparedSync.clear();
+      try {
+        if (this.scratch) await this.scratch.close();
+        else if (this.directory) throw new Error('Navigator scratch ownership unavailable; preserve evidence');
+      } catch (error) { failures.push(error); }
+      if (this.cleanupFailure !== undefined && !failures.includes(this.cleanupFailure)) failures.unshift(this.cleanupFailure);
+      if (failures.length) throw new AggregateError(failures, 'Navigator scratch cleanup failed; retained evidence', { cause: failures[0] });
+    });
+    this.lifetime.abort(new Error('Navigator engine closed'));
+    return this.closeTask;
   }
 }

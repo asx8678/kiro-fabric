@@ -5,16 +5,14 @@ import type { FabricProvider } from "../src/protocol.js";
 import {
   FABRIC_APPROVAL_TIMEOUT_MS,
   FABRIC_COMPILER_TIMEOUT_MS,
-  FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
   FabricExecutionService,
   effectiveFabricTimeout,
-  exactActionTimeoutFloor,
-  exactHostActionReference,
 } from "../src/execution-service.js";
-import {
-  KIRO_MCP_DEADLINE_GRACE_MS,
-  kiroMcpOuterDeadlineMs,
-} from "../src/kiro/deadlines.js";
+import { kiroMcpOuterDeadlineMs } from "../src/kiro/deadlines.js";
+import { generateAgentProfile } from "../scripts/agent-profile.mjs";
+
+// Independently specified contractual grace; the production constant is private.
+const FABRIC_PROVIDER_TIMEOUT_GRACE_MS = 2_000;
 
 describe("deadline policy", () => {
   it("implements the configured maximum formula", () => {
@@ -23,22 +21,53 @@ describe("deadline policy", () => {
     expect(effectiveFabricTimeout(900, 100, 0, 250)).toBe(250);
   });
 
-  it("uses exact direct and tools.call action references rather than broad matching", () => {
-    expect(exactActionTimeoutFloor("mcp.$call", 120_000)).toBe(
-      120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
-    );
-    expect(exactActionTimeoutFloor("mcp.$tools", 120_000)).toBe(
-      120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
-    );
-    expect(exactActionTimeoutFloor("mcp.$describe", 120_000)).toBe(
-      120_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS,
-    );
-    expect(exactActionTimeoutFloor("mcp.$call.extra", 120_000)).toBe(0);
-    expect(exactActionTimeoutFloor("other.$call", 120_000)).toBe(0);
-    expect(exactHostActionReference("mcp.$call", {})).toBe("mcp.$call");
-    expect(exactHostActionReference("fabric.call", { ref: "mcp.$call", args: {} })).toBe("mcp.$call");
-    expect(exactHostActionReference("fabric.call", { ref: "mcp.$call.extra" })).toBe("mcp.$call.extra");
-    expect(exactHostActionReference("fabric.call", {})).toBeUndefined();
+  it("uses exact direct and tools.call action references rather than broad matching", async () => {
+    const registry = new ActionRegistry();
+    const call = { name: "$call", description: "fixture call", inputSchema: { type: "object", additionalProperties: true }, risk: "read" as const };
+    const extra = { ...call, name: "$call.extra" };
+    for (const name of ["mcp", "other"]) registry.register({
+      name,
+      description: "deadline fixture",
+      async list() { return [call, extra]; },
+      async describe(actionName) { return actionName === "$call" ? call : actionName === "$call.extra" ? extra : undefined; },
+      async invoke() { return "ok"; },
+    });
+    const config = normalizeFabricConfig({ executor: { timeoutMs: 1_000, maxTimeoutMs: 100_000 }, mcp: { callTimeoutMs: 1_000 } });
+    const service = new FabricExecutionService(registry, config, "/workspace");
+    const approver = { async approve() {} };
+    const floor = 1_000 + FABRIC_APPROVAL_TIMEOUT_MS * 2 + FABRIC_PROVIDER_TIMEOUT_GRACE_MS;
+    const measure = async (code: string) => {
+      const observed: number[] = [];
+      const result = await service.execute({ code, approver, onEffectiveTimeoutChange: value => { observed.push(value); } });
+      return { result, observed };
+    };
+    try {
+      // Prime the compiler once; each measured execution retains its own guest budget.
+      const ready = await service.execute({ code: "return true;", timeoutMs: 5_000, approver });
+      expect(ready.success, JSON.stringify(ready)).toBe(true);
+
+      const direct = await measure("await mcp.call({server:'fixture',tool:'x'}); return true;");
+      expect(direct.result.success, JSON.stringify(direct.result)).toBe(true);
+      expect(direct.result.effectiveTimeoutMs).toBe(floor);
+      expect(direct.observed).toEqual([1_000, floor]);
+
+      const nested = await measure("await tools.call({ref:'mcp.$call',args:{}}); return true;");
+      expect(nested.result.success, JSON.stringify(nested.result)).toBe(true);
+      expect(nested.result.effectiveTimeoutMs).toBe(floor);
+      expect(nested.observed).toEqual([1_000, floor]);
+
+      for (const ref of ["mcp.$call.extra", "other.$call"]) {
+        const nearby = await measure(`await tools.call({ref:${JSON.stringify(ref)},args:{}}); return true;`);
+        expect(nearby.result.success, JSON.stringify(nearby.result)).toBe(true);
+        expect(nearby.result.effectiveTimeoutMs).toBe(1_000);
+        expect(nearby.observed).toEqual([1_000]);
+      }
+
+      const missing = await measure("return await tools.call({args:{}});");
+      expect(missing.result.success).toBe(false);
+      expect(missing.result.effectiveTimeoutMs).toBe(1_000);
+      expect(missing.observed).toEqual([1_000]);
+    } finally { await service.close(); }
   });
 
   it("reports the largest floor observed through tools.call", async () => {
@@ -153,9 +182,15 @@ describe("deadline policy", () => {
 
   it("keeps the outer MCP envelope beyond compilation and the maximum guest deadline", () => {
     const guestMaximum = 900_000;
-    expect(KIRO_MCP_DEADLINE_GRACE_MS).toBeGreaterThan(0);
-    expect(kiroMcpOuterDeadlineMs(guestMaximum, FABRIC_COMPILER_TIMEOUT_MS)).toBe(
-      guestMaximum + FABRIC_COMPILER_TIMEOUT_MS + KIRO_MCP_DEADLINE_GRACE_MS,
-    );
+    const outer = kiroMcpOuterDeadlineMs(guestMaximum, FABRIC_COMPILER_TIMEOUT_MS);
+    expect(outer).toBe(912_000);
+    expect(outer).toBeGreaterThan(guestMaximum + FABRIC_COMPILER_TIMEOUT_MS);
+    const profile = generateAgentProfile({
+      nodePath: "/runtime/node", runtimeRoot: "/runtime/app", dataRoot: "/runtime/data",
+      skillPath: "/runtime/skills/SKILL.md",
+    });
+    const requestTimeout = profile.mcpServers.fabric.requestTimeout;
+    expect(requestTimeout).toBe(917_000);
+    expect(requestTimeout).toBeGreaterThan(outer);
   });
 });

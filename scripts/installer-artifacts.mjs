@@ -186,7 +186,12 @@ function treeMetadata(root) {
   while (pending.length) {
     const relative = pending.pop(), directory = path.join(root, relative), guard = privateDirectory(directory);
     entries.push({ path: relative, type: "directory", identity: cacheFileIdentity(directory) });
-    for (const name of readDirectoryBoundedSync(directory, BOUND - entries.length - pending.length).sort()) {
+    const names = readDirectoryBoundedSync(directory, BOUND - entries.length - pending.length).sort();
+    const lower = new Set(names.map(name => name.toLowerCase()));
+    // Valid hashes/receipts are not permission to remove repository metadata.
+    // This guard also runs again at the shared pre-removal boundary.
+    if (lower.has(".git") || (lower.has("head") && lower.has("objects") && (lower.has("refs") || lower.has("packed-refs")))) throw new Error("Repository metadata in cache; preserve it");
+    for (const name of names) {
       const rel = relative ? `${relative}/${name}` : name, file = path.join(root, rel), s = fs.lstatSync(file);
       if (s.isDirectory() && !s.isSymbolicLink()) pending.push(rel);
       else {

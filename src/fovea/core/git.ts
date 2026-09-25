@@ -233,7 +233,7 @@ export interface FileDiffHunks {
 }
 
 /** Per-file guard against adversarial/generated patches becoming seed work. */
-export const MAX_DIFF_HUNKS_PER_FILE = 200;
+const MAX_DIFF_HUNKS_PER_FILE = 200;
 const DIFF_MAX_BUFFER = 32 * 1024 * 1024;
 
 interface PendingDiff {
@@ -302,7 +302,7 @@ const boundedHunkLimit = (requested: number): number =>
  * fail-coarse per file: new/deleted/renamed/binary/malformed sections and files
  * above the hunk cap are retained as fallback records, never partial nuclei.
  */
-export const parseZeroContextDiff = (
+const parseZeroContextDiff = (
   patch: string,
   prefix = "",
   maxHunksPerFile = MAX_DIFF_HUNKS_PER_FILE,

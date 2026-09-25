@@ -13,7 +13,7 @@ import { compileSourceBinding } from '../../scripts/build-fovea-native.mjs';
 import { SourceAccess } from '../../src/fovea/source-access.js';
 import { openSourceDirectory, sourcePlatform, type SourcePlatform } from '../../src/fovea/source-platform.js';
 import {
-  createNativeDarwinSourceBinding, createNativeSourcePlatform,
+  createNativeSourcePlatform,
   type NativeSourceToken, type PosixSourceBinding,
 } from '../../src/fovea/source-platform-native.js';
 
@@ -58,7 +58,9 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform))('compiled POSIX
     expect(Object.keys(root)).toEqual([]);
     expect((root as unknown as { fd?: number }).fd).toBeUndefined();
     await native.close(root);
-    if (process.platform === 'linux') expect(() => createNativeDarwinSourceBinding(native)).toThrow('not compiled for Darwin');
+    // createNativeDarwinSourceBinding and the Darwin source were removed; the
+    // live invariant is that a foreign-platform binding is refused.
+    if (process.platform === 'linux') expect(() => createNativeSourcePlatform({ ...native, platform: 'darwin' } as PosixSourceBinding)).toThrow('invalid or foreign');
     expect(() => sourcePlatform('darwin')).toThrow('missing trusted native');
     const mismatched = { ...native, platform: 'other' } as unknown as PosixSourceBinding;
     expect(() => createNativeSourcePlatform(mismatched)).toThrow('invalid or foreign');

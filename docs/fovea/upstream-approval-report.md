@@ -1,15 +1,16 @@
 ### Before opening, please confirm
 
-- [x] I searched open and closed issues. Related scopes are listed below.
+- [ ] Recheck open and closed issues immediately before filing. Related scopes
+  from the earlier search are listed below; no issue has been submitted.
 
 ### Operating System
 
-macOS 27.2, arm64. Observed on 2026-09-21.
+macOS 27.2, arm64. Retested on 2026-09-25.
 
 ### Kiro Version
 
-`kiro-cli 2.22.1`, native TUI with `--v3` (the opt-in v3 engine inside the 2.x CLI).
-The official stable manifest also reports `2.22.1` when checked on 2026-09-21:
+`kiro-cli 2.24.0`, native TUI with `--v3` (the opt-in v3 engine inside the 2.x CLI).
+The official stable manifest also reported `2.24.0` when checked on 2026-09-25:
 https://prod.download.cli.kiro.dev/stable/latest/manifest.json
 No client update was performed. This is not a claim about every client version or the IDE.
 
@@ -24,8 +25,10 @@ No handler registered for method: _kiro/mcp/elicitation
 
 Fabric receives cancellation and correctly withholds the requested fixture edit.
 This was observed with a directly configured stdio MCP server, not a Power-bundled
-server. A companion native protocol probe records MCP protocol `2025-11-25` with
-client capabilities `{"elicitation":{"form":{},"url":{}}}`.
+server. The earlier 2026-09-21 companion protocol probe on CLI 2.22.1 recorded MCP
+protocol `2025-11-25` with client capabilities
+`{"elicitation":{"form":{},"url":{}}}`; that capability recording is historical,
+not a new 2.24.0 protocol capture.
 
 The server calls the standard MCP SDK `server.elicitInput` API with `mode:"form"`
 and a schema requiring one boolean property `approved` (default false). It does
@@ -36,10 +39,10 @@ native recording.
 
 The observed run used an actual Fabric stdio MCP server and an owned temporary
 workspace/profile/data store. It started native
-`kiro-cli chat --v3 --agent fovea-native-approval-probe --require-mcp-startup`
+`kiro-cli chat --v3 --agent PROBE_PROFILE --require-mcp-startup`
 and submitted one real Fabric invocation requesting a harmless exact fixture edit.
 Write/execute/network policies stayed `ask`; there was no blanket approval,
-response automation or native-tool fallback. The diagnostic drove the real TUI,
+approval-response automation or native-tool fallback. The diagnostic drove the real TUI,
 not a substitute ACP client, and never simulated a human choice.
 
 To reproduce the relevant protocol path in another MCP server:
@@ -79,6 +82,13 @@ The report deliberately does not rely on access to our checkout or private trace
 - The fixture remains byte-identical: `before-native-approval\n`.
 - No human accept or decline occurred. Native/diagnostic exit 0 means the diagnostic completed, not that approval succeeded.
 
+Separate 2.24.0 compatibility checks also failed to provide a working form:
+`chat --v2` returned an actual Fabric error saying form elicitation was not
+advertised (`unsupported`, `not_dispatched`, effect `none`); `chat --legacy-ui`
+produced a successful read followed by a failed approval in Fabric's trace, no
+form request, and an unchanged fixture. The legacy trace does not establish the
+specific v3 missing-handler error. No default engine or user policy was changed.
+
 ### Expected Behavior
 
 Render the requested form and return a genuine human accept/decline/cancel outcome.
@@ -93,7 +103,7 @@ would not fix the form-delivery contract.
   fresh current-version report. This report supplies a specific CLI v3 failure.
 - Related but not identical: https://github.com/kirodotdev/Kiro/issues/11385 concerns
   IDE Power-bundled MCP. This reproduction uses direct CLI MCP configuration.
-- Two independent local native runs observed the same handler error. Raw recordings,
+- Earlier 2.22.1 native runs and the fresh 2.24.0 v3 run observed the same handler error. Raw recordings,
   local paths, native conversation IDs, account details and credentials are not attached.
 - After a fix, the local human terminal matrix tests both choices and exact effects;
   this diagnostic itself does not qualify interactive approval or revocation.

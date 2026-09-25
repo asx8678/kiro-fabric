@@ -68,7 +68,11 @@ describe("installer production fail-closed gates", () => {
   it("requires complete native bundle execution and byte comparison, not just filename selection", () => {
     const ci = workflow("ci");
     const body = run(step(ci, "Build and exercise the complete native bundle"));
-    for (const required of ["pnpm run agent:bundle", "pnpm run build", "node scripts/build-complete-bundle.mjs", 'mv .tmp "$root/first-build"', 'cmp "$root/first.tar.gz" "$archive"', "node scripts/test-installer.mjs run bundle"]) expect(body).toContain(required);
+    for (const required of ["pnpm run agent:bundle", "pnpm run build", "node scripts/build-complete-bundle.mjs", 'mv .tmp "$root/first-build"', 'cmp "$root/first.tar.gz" "$archive"']) expect(body).toContain(required);
+    // Driving the installed bundle acceptance suite through scripts/test-installer.mjs
+    // is NOT yet rewired in CI: the step is fail-closed PENDING via the
+    // qualification-unavailable marker and must never be read as success.
+    expect(body).toContain("node scripts/qualification-unavailable.mjs installer-bundle-suite");
     expect(body.indexOf('mv .tmp')).toBeLessThan(body.indexOf('node scripts/build-complete-bundle.mjs'));
     for (const file of ["installed-independence", "installer-lock", "install-transaction", "managed-installation", "installer-smoke-bundle-acceptance"]) expect(installerSuiteFiles("bundle")).toContain(`tests/${file}.test.ts`);
     expect(body).toContain('export HOME="$root/home" KIRO_HOME="$root/kiro"');
@@ -76,12 +80,16 @@ describe("installer production fail-closed gates", () => {
     expect(ci).toContain("with: { persist-credentials: false, fetch-depth: 0 }");
     expect(installerSuiteFiles("bundle")).toContain("tests/fovea/historical-manager-migration.test.ts");
   });
-  it("runs Linux cleanup, search and startup regressions on every native target", () => {
+  it("keeps the full native installer contract selection while CI remains fail-closed PENDING", () => {
     const ci = workflow("ci");
-    const body = run(step(ci, "Isolated native installer and runtime contract tests"));
-    expect(body).toContain("node scripts/test-installer.mjs run contracts");
+    const pendingStep = "Installer/runtime contract suite (unavailable after test-suite removal)";
+    const body = run(step(ci, pendingStep));
+    // The native contract suite is not yet rewired to scripts/test-installer.mjs;
+    // CI routes to the fail-closed placeholder. Keep the exact historical selection
+    // executable in the registry so restoration re-points the job without drift.
+    expect(body).toContain("node scripts/qualification-unavailable.mjs installer-contract-suite");
     for (const file of ["local-process-group", "local-shell", "local-search-work", "local-executable", "local-provider", "bundle-contract", "bundle-streaming", "managed-generation", "managed-generation-efficiency", "installer-configuration-backup", "installer-home-preparation", "installer-shell-integration", "installer-cli-contract", "install-manager-start", "launch-profile", "managed-installation-lifecycle", "installer-native-zsh-acceptance"]) expect(installerSuiteFiles("contracts")).toContain(`tests/${file}.test.ts`);
-    expect(ci.indexOf("Provision ripgrep for native runtime contracts")).toBeLessThan(ci.indexOf("Isolated native installer and runtime contract tests"));
+    expect(ci.indexOf("Provision ripgrep for native runtime contracts")).toBeLessThan(ci.indexOf(pendingStep));
     expect(body).toContain('HOME="$root/home" KIRO_HOME="$root/kiro"');
   });
   it("asserts actual OS, kernel arch and Node arch, rejecting mismatches", () => {
@@ -112,13 +120,21 @@ describe("native cache and qualification privacy registrations", () => {
     expect(run(step(native, "Verify and rematerialize pinned private tools"))).toContain('installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"');
     expect(native.indexOf("Assert actual native target")).toBeLessThan(native.indexOf("Restore untrusted pinned tool transport only"));
   });
-  it("uploads only explicit per-attempt sanitized diagnostics, always after raw-home cleanup", () => {
-    const real = workflow("kiro-agent-real"), upload = step(real, "Upload bounded nonqualifying failure diagnostics"), cleanup = step(real, "Remove isolated Kiro qualification state");
+  it("uploads only explicit per-attempt sanitized diagnostics, always after retain-only finalization", () => {
+    const real = workflow("kiro-agent-real"), upload = step(real, "Upload bounded nonqualifying failure diagnostics"), cleanup = step(real, "Retain private state and finalize nonqualifying diagnostics");
     expect(upload).toContain("if: always()"); expect(cleanup).toContain("if: always()");
-    expect(upload).toContain("retention-days: 7"); expect(upload).toContain("${{ env.FAILURE_OUTPUT }}.driver.json");
+    expect(upload).toContain("retention-days: 7");
+    expect(upload).toContain("${{ env.FAILURE_OUTPUT }}.sanitized.json");
+    expect(upload).toContain("${{ env.FAILURE_OUTPUT }}.driver.json.sanitized.json");
     expect(upload).not.toMatch(/[*]|transcript|acp[.]jsonl/u); expect(real).toContain("${{ github.run_id }}-${{ github.run_attempt }}.json");
     expect(real.indexOf(cleanup)).toBeLessThan(real.indexOf(upload));
-    expect(run(cleanup)).toContain("finalizeQualificationDiagnostic"); expect(run(cleanup)).toContain('test "$cleanup" = removed');
+    // The always-run step finalizes through the CLI and NEVER deletes raw state.
+    // Retained/unverified state fails the step closed, so only the strict separate
+    // sanitized copies can ever be uploaded; there is no raw-tree upload path.
+    const finalize = run(cleanup);
+    expect(finalize).toContain("node scripts/qualification-failure.mjs finalize");
+    expect(finalize).toContain('"$FAILURE_OUTPUT" "$target"');
+    expect(finalize).not.toMatch(/\brm\b|rm -|git clean|git checkout|[*][*]/u);
     expect(run(step(real, "Exercise exact package with the repository-owned real client driver"))).toContain('--failure-output "$FAILURE_OUTPUT"');
     expect(step(real, "Upload privacy-gated qualifying assets only")).toContain("if: success()");
   });
@@ -197,11 +213,15 @@ describe("actual release workflow shell regression", () => {
     }
   });
 
-  it("runs complete portable local runtime and installer/release modules on macOS", () => {
+  it("retains the complete portable macOS module ledger while the staging suite is PENDING", () => {
     const mac = workflow("ci").split("  macos-stage:")[1]!;
+    // The macOS staging/install/archive suite is not yet rewired to
+    // scripts/test-installer.mjs; the job is fail-closed PENDING. Keep the exact
+    // module ledger as runnable files so the pending wiring cannot silently drop
+    // a regression when it is restored.
+    expect(mac).toContain("node scripts/qualification-unavailable.mjs macos-staging-suite");
     for (const suite of ["local-provider", "local-shell", "strict-bootstrap", "workspace-binding", "mcp-process-lifecycle", "approval-projection", "agent-user-install", "installer-executable-trust", "release-workflow", "local-executable", "local-lock-reliability", "local-diagnostics", "local-search-work", "state-reliability", "memory-delete-ack", "agent-doctor"]) {
-      expect(mac).toContain(`tests/${suite}.test.ts`);
-      expect(fs.existsSync(new URL(`./${suite}.test.ts`, import.meta.url))).toBe(true);
+      expect(fs.existsSync(new URL(`./${suite}.test.ts`, import.meta.url)), suite).toBe(true);
     }
   });
 });

@@ -12,7 +12,10 @@ function privateDirectory(directory: string): void {
       stat.uid !== process.getuid?.() || (stat.mode & 0o077) !== 0) fail();
 }
 
-/** Claim before output: retries/resume never append a second copy. The hook has
+/** @internal Live context implementation used by runFirstPromptHook. Direct
+ * fixture tests exercise exact claim/storage failures without replacing stdin
+ * or weakening the CLI's generic, non-disclosing error boundary. Not root-exported.
+ * Claim before output: retries/resume never append a second copy. The hook has
  * no delivery acknowledgement, so a crash after the claim can omit injection. */
 export function firstPromptContext(input: unknown, dataRoot: string): string {
   if (!input || typeof input !== "object" || Array.isArray(input)) return fail();

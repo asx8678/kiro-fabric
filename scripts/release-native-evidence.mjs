@@ -18,6 +18,9 @@ export function assertNativeHost(target, host) {
   }
 }
 
+/** @internal Spawn-result classifier used by collectNativeBundleEvidence at :58.
+ * Public evidence collection runs real host probes; failure/timed-out classification
+ * must be unit-testable without spawning. Not a root/package export. */
 export function checkProbeResult(name, result) {
   if (result.error || result.signal || result.status !== 0) {
     throw Error(`Native probe ${name} failed: ${result.error?.code ?? result.signal ?? result.status}`);
@@ -25,6 +28,9 @@ export function checkProbeResult(name, result) {
   return { name, exitCode: result.status, stdout: result.stdout.trim(), stderr: result.stderr.trim() };
 }
 
+/** @internal Archive identity check used by collectNativeBundleEvidence at :51.
+ * Public collection requires a real schema-2 bundle and host; the corrupt/truncated
+ * archive oracle needs direct access. Not a root/package export. */
 export function assertExactArchive(bytes, digest) {
   const parsed = parseBundleArchive(bytes);
   if (parsed.digest !== digest) throw Error('Archive does not match selected bundle');

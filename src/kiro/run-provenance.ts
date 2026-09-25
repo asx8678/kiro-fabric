@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
 
 /** Pure, fixed-shape provenance. No filesystem, Git, environment or clock access. */
-export const RUN_PROVENANCE_LIMITS = Object.freeze({ contentBytes: 1_048_576, entries: 32, totalBytes: 4_194_304, declarationJsonChars: 65_536 });
-export type RunProvenanceBytes = string | Uint8Array;
-export interface RunProvenanceContentInput { label?: unknown; content?: unknown }
-export interface RunProvenanceRepositoryInput { commit?: unknown; dirty?: unknown; dirtyEvidence?: unknown }
+const RUN_PROVENANCE_LIMITS = Object.freeze({ contentBytes: 1_048_576, entries: 32, totalBytes: 4_194_304, declarationJsonChars: 65_536 });
+interface RunProvenanceContentInput { label?: unknown; content?: unknown }
+interface RunProvenanceRepositoryInput { commit?: unknown; dirty?: unknown; dirtyEvidence?: unknown }
 export interface RunProvenanceConfiguredInput {
   guidanceMode?: unknown;
   profile?: unknown;

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { StateCommitAcknowledgementError, StateProvider } from "../src/providers/state-provider.js";
+import { StateProvider } from "../src/providers/state-provider.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import { causes, failLockRemoval } from "./state-fault-helpers.js";
 
@@ -11,6 +11,14 @@ const roots: string[] = [];
 const temporary = (): string => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "state-durability-")); roots.push(root); return root; };
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
 const posix = process.platform !== "win32";
+
+/** Structural narrowing for the internal acknowledgement class: the class is
+ * deliberately unexported, so these tests assert the stable public Error
+ * contract (name, committed marker, revision, durability, lock cleanup). */
+const acknowledgementError = (value: unknown): Error => {
+  if (!(value instanceof Error)) throw new Error("expected a state commit acknowledgement error");
+  return value;
+};
 
 /** Record fsync and rename events with fd classification (file vs directory
  * and inode identity) instead of brittle ordinal counts. */
@@ -70,10 +78,9 @@ describe("state publication durability barrier", () => {
       return sync(fd);
     });
     const spy = failBarrier();
-    const error = await provider.invoke("set", { key: "fixture", value: "new" }, context).catch(error => error as StateCommitAcknowledgementError) as StateCommitAcknowledgementError;
+    const error = acknowledgementError(await provider.invoke("set", { key: "fixture", value: "new" }, context).catch(error => error));
     spy.mockRestore();
-    expect(error).toBeInstanceOf(StateCommitAcknowledgementError);
-    expect(error).toMatchObject({ committed: true, revision: 2, durability: "unconfirmed" });
+    expect(error).toMatchObject({ name: "StateCommitAcknowledgementError", committed: true, revision: 2, durability: "unconfirmed" });
     expect(error.message).toContain("unconfirmed");
     expect(error.message).toContain("do not replay external effects");
     expect(fabricCommitAcknowledgement(error)).toEqual({ version: 1, operation: "set" });
@@ -128,10 +135,9 @@ describe("state publication durability barrier", () => {
     const provider = new StateProvider(root);
     const context = { cwd: root };
     failLockRemoval("injected lock removal failure");
-    const error = await provider.invoke("set", { key: "fixture", value: "v1" }, context).catch(error => error as StateCommitAcknowledgementError) as StateCommitAcknowledgementError;
+    const error = acknowledgementError(await provider.invoke("set", { key: "fixture", value: "v1" }, context).catch(error => error));
     vi.restoreAllMocks();
-    expect(error).toBeInstanceOf(StateCommitAcknowledgementError);
-    expect(error).toMatchObject({ committed: true, revision: 1, durability: "confirmed" });
+    expect(error).toMatchObject({ name: "StateCommitAcknowledgementError", committed: true, revision: 1, durability: "confirmed" });
     expect(error.message).toContain("read state before retrying");
     // The mutation itself is durable; only the acknowledgement failed.
     await expect(provider.invoke("get", { key: "fixture" }, context)).resolves.toMatchObject({ value: "v1", revision: 1 });
@@ -166,8 +172,8 @@ describe("state publication durability barrier", () => {
     // mutation reports publication with unconfirmed durability.
     const error = await provider.invoke("set", { key: "fixture", value: "v1" }, { cwd: root }).catch(error => error);
     spy.mockRestore();
-    expect(error).toBeInstanceOf(StateCommitAcknowledgementError);
-    expect(error).toMatchObject({ committed: true, revision: 1, durability: "unconfirmed" });
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ name: "StateCommitAcknowledgementError", committed: true, revision: 1, durability: "unconfirmed" });
     expect(JSON.parse(fs.readFileSync(path.join(root, "state.json"), "utf8"))).toMatchObject({ revision: 1 });
   });
 
@@ -210,10 +216,9 @@ describe("state publication durability barrier", () => {
       }
       return sync(fd);
     });
-    const error = await provider.setSerialized({ key: "k", value: { a: 1 }, text: `{"a":1}` }, context).catch(error => error as StateCommitAcknowledgementError) as StateCommitAcknowledgementError;
+    const error = acknowledgementError(await provider.setSerialized({ key: "k", value: { a: 1 }, text: `{"a":1}` }, context).catch(error => error));
     spy.mockRestore();
-    expect(error).toBeInstanceOf(StateCommitAcknowledgementError);
-    expect(error).toMatchObject({ committed: true, revision: 1, durability: "unconfirmed" });
+    expect(error).toMatchObject({ name: "StateCommitAcknowledgementError", committed: true, revision: 1, durability: "unconfirmed" });
     expect(JSON.parse(fs.readFileSync(path.join(root, "state.json"), "utf8"))).toMatchObject({ revision: 1 });
   });
 

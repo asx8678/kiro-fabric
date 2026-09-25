@@ -33,7 +33,8 @@ export async function rematerializeInstallerToolCache({ source, destination, pin
   if (fs.existsSync(destination)) throw new Error("CI cache destination already exists; preserve it");
   const temporary = path.join(path.dirname(destination), `.installer-cache-import-${randomBytes(12).toString("hex")}`);
   fs.mkdirSync(temporary, { mode: 0o700 });
-  try {
+  console.error("[fabric:task-root] " + JSON.stringify({ path: temporary, policy: "retain-if-unpublished" }));
+  {
     for (const directory of ["tools", "notices"]) fs.mkdirSync(path.join(temporary, directory), { mode: 0o700 });
     for (const member of members) {
       unchanged();
@@ -60,7 +61,7 @@ export async function rematerializeInstallerToolCache({ source, destination, pin
     fs.renameSync(temporary, destination);
     await verifyPrivateToolCache(destination, pins, target);
     return destination;
-  } finally { if (fs.existsSync(temporary)) fs.rmSync(temporary, { recursive: true, force: true }); }
+  }
 }
 
 export async function installerCiCache(action, target, transport, root = fileURLToPath(new URL("..", import.meta.url))) {

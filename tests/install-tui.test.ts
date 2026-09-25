@@ -79,7 +79,7 @@ describe("installer TUI CLI and private logging", () => {
       `Object.defineProperty(process.versions, "node", { value: ${JSON.stringify(process.versions.node)} });`,
       { HOME: home, KIRO_HOME: selection === "default" ? undefined : envHome, PATH: bin });
     expect(result.signal, result.stderr).toBeNull(); expect(result.status, result.stderr).toBe(0);
-    expect(result.stderr).toContain(`Kiro Fabric v${pkg.version} + Fovea`);
+    expect(result.stderr).toContain(`Kiro Fabric v${pkg.version} + Navigator`);
     expect(result.stderr).toContain(`Kiro home: ${expected}`);
     expect(result.stderr).toContain(path.join(expected, "agents/kiro-fabric.json"));
     expect(result.stderr).toContain(path.join(expected, "kiro-fabric/runtime/<generation>/resources"));

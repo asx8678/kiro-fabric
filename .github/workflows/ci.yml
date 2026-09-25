@@ -109,21 +109,23 @@ jobs:
       - name: Verify and rematerialize pinned private tools
         env: { TARGET: "${{ matrix.target }}" }
         run: node scripts/installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"
-      - name: Isolated native installer and runtime contract tests
+      - name: Installer/runtime contract suite (unavailable after test-suite removal)
         run: |
           set -euo pipefail
           umask 022
           root=$(mktemp -d "$RUNNER_TEMP/installer-contracts.XXXXXX")
-          trap 'rm -rf -- "$root"' EXIT
+          # May contain repositories or unknown child-created files: never recursively remove.
+          printf 'Task root retained (no automatic cleanup): %s\n' "$root" >&2
           mkdir "$root/home" "$root/kiro" "$root/tmp"
-          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" node scripts/test-installer.mjs run contracts
+          HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp" node scripts/qualification-unavailable.mjs installer-contract-suite
       - name: Build and exercise the complete native bundle
         env: { TARGET: "${{ matrix.target }}" }
         run: |
           set -euo pipefail
           umask 022
           root=$(mktemp -d "$RUNNER_TEMP/installer-bundle.XXXXXX")
-          trap 'rm -rf -- "$root"' EXIT
+          # May contain repositories or unknown child-created files: never recursively remove.
+          printf 'Task root retained (no automatic cleanup): %s\n' "$root" >&2
           mkdir "$root/home" "$root/kiro" "$root/tmp"
           export HOME="$root/home" KIRO_HOME="$root/kiro" TMPDIR="$root/tmp"
           pnpm run agent:bundle
@@ -139,7 +141,7 @@ jobs:
           node scripts/installer-ci-cache.mjs restore "$TARGET" "$TOOL_TRANSPORT"
           node scripts/build-complete-bundle.mjs
           cmp "$root/first.tar.gz" "$archive"
-          node scripts/test-installer.mjs run bundle
+          node scripts/qualification-unavailable.mjs installer-bundle-suite
       - name: Save verified pinned tool transport
         if: success() && steps.tool-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@5a3ec84eff668545956fd18022155c47e93e2684
@@ -173,8 +175,64 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Hermetic macOS local staging
         run: node scripts/assert-kiro-home-unchanged.mjs pnpm run agent:stage:local
-      - name: Focused macOS staging, install, and archive tests
-        run: pnpm exec vitest run tests/hermetic-stage.test.ts tests/agent-user-install.test.ts tests/package-boundary.test.ts tests/archive.test.ts tests/installer-executable-trust.test.ts tests/release-workflow.test.ts tests/local-provider.test.ts tests/local-shell.test.ts tests/strict-bootstrap.test.ts tests/workspace-binding.test.ts tests/mcp-process-lifecycle.test.ts tests/approval-projection.test.ts tests/local-executable.test.ts tests/local-lock-reliability.test.ts tests/local-diagnostics.test.ts tests/local-search-work.test.ts tests/state-reliability.test.ts tests/memory-delete-ack.test.ts tests/memory-lock-safety.test.ts tests/memory-acknowledgement.test.ts tests/agent-doctor.test.ts
+      - name: Focused macOS staging, install, and archive suite (unavailable after test-suite removal)
+        run: node scripts/qualification-unavailable.mjs macos-staging-suite
       - name: Verify staging left tracked build outputs reproducible
         run: test -z "$(git status --porcelain)"
       - run: git diff --check
+
+  local-dev-checks:
+    # Local-development checks only. This lane is explicitly NOT release or
+    # installer qualification; the release-grade and installer suites remain
+    # fail-closed behind scripts/qualification-unavailable.mjs and are never
+    # invoked here. It runs a fixed, honest subset that passes on the current
+    # tree: guidance check, typecheck, a fresh build, the project reference
+    # audit, and the offline baseline and focused lifecycle regressions.
+    name: Local development checks (NOT release qualification)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with: { persist-credentials: false, fetch-depth: 0 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with: { node-version: 24 }
+      - run: npm install --global pnpm@11.20.0
+      - name: Provision ripgrep
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes ripgrep
+          command -v rg
+          rg --version
+      - run: pnpm install --frozen-lockfile
+      - name: Create retained local-development root
+        id: local-dev-root
+        run: |
+          set -euo pipefail
+          umask 022
+          root=$(mktemp -d "$RUNNER_TEMP/local-dev-checks.XXXXXX")
+          # May contain repositories or unknown child-created files: never recursively remove.
+          printf 'Task root retained (no automatic cleanup): %s\n' "$root" >&2
+          mkdir "$root/tmp"
+          printf 'tmp=%s/tmp\n' "$root" >> "$GITHUB_OUTPUT"
+      - name: Guidance check
+        run: pnpm run guidance:check
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Fresh build
+        env:
+          TMPDIR: ${{ steps.local-dev-root.outputs.tmp }}
+        run: pnpm run build
+      - name: Project reference audit
+        run: node scripts/verify-project-references.mjs
+      - name: Offline baseline verification
+        env:
+          TMPDIR: ${{ steps.local-dev-root.outputs.tmp }}
+        run: node scripts/verify-offline.mjs baseline
+      - name: Focused lifecycle regressions (NOT release qualification)
+        env:
+          TMPDIR: ${{ steps.local-dev-root.outputs.tmp }}
+        run: pnpm run verify:lifecycle
+      - name: Focused locking, safety and contract regressions (NOT release qualification)
+        env:
+          TMPDIR: ${{ steps.local-dev-root.outputs.tmp }}
+        run: pnpm run verify:remediation

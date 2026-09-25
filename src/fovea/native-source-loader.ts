@@ -14,6 +14,8 @@ const METADATA = 'app/fovea/source-platform.json';
 
 /** Validate target and exact bytes BEFORE native code execution. Metadata itself
  * is authenticated by the same complete-generation inventory as JS and parser. */
+/** @internal Qualification-only: pre-dlopen artifact identity gate asserted
+ * directly by native-source-loader tests. Not a runtime/package API. */
 export function validateNativeSourceArtifact(metadata: unknown, bytes: Buffer, sourceSha256: string): void {
   const m = metadata as Record<string, unknown> | null;
   if (!m || typeof m !== 'object' || Array.isArray(m) ||
@@ -37,7 +39,7 @@ export async function loadManagedSourcePlatform(parser: ParserDescriptor, storag
     throw new SourcePlatformUnavailableError(process.platform, 'missing trusted generation-local native source binding');
   }
   const bundle = await validateBundle(parser.generationRoot);
-  if (bundle.root !== parser.generationRoot || bundle.manifest.schema !== 2 ||
+  if (bundle.root !== parser.generationRoot || ![2, 3].includes(bundle.manifest.schema) ||
       bundle.manifest.target !== `darwin-${process.arch}` ||
       await realpath(process.execPath) !== join(bundle.root, 'tools/node') ||
       parser.path !== join(bundle.root, 'tools/ast-grep') ||

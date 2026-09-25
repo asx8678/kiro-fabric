@@ -1,31 +1,15 @@
 import { defineConfig } from "vitest/config";
 import config from "./vitest.config.js";
 
-// Explicit source-focused development subset, not an acceptance/release gate.
-// Replace include rather than merge arrays: merging would retain the full glob.
+// RETIRED: the source-focused development subset was removed with the bulk
+// test-suite deletion; every name this config listed no longer exists. `test:fast`
+// now routes to scripts/qualification-unavailable.mjs (fail-closed). Kept as an
+// explicit empty selector so a stray `vitest --config vitest.fast.config.ts`
+// reports "no test files" instead of silently matching the full glob.
 export default defineConfig({
   ...config,
   test: {
     ...config.test,
-    include: [
-      "action-registry",
-      "action-registry-lifecycle",
-      "bounded-search",
-      "catalog-snapshot-store",
-      "compiler-cache",
-      "compiler-ownership",
-      "configuration",
-      "continuity-core",
-      "continuity-rendering",
-      "discovery-index",
-      "fabric-exec-contract",
-      "info-catalog",
-      "json-budget",
-      "local-line-index",
-      "local-read-many",
-      "projection-noise",
-      "schema-validation",
-      "workspace-binding",
-    ].map(name => `tests/${name}.test.ts`),
+    include: [],
   },
 });

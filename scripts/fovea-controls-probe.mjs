@@ -139,7 +139,7 @@ export function summarizeControlStream({ result, traces, marker, phase, code }) 
 export function summarizeControls({ runs, bundleUnchanged, fixtureUnchanged }) {
   const initial = runs.find(r => r.phase === 'initial'), resumed = runs.find(r => r.phase === 'resume');
   const p = initial?.completed ? initial.packet : null, q = resumed?.completed ? resumed.packet : null;
-  const unavailable = value => value?.ok === false && typeof value.error === 'string' && value.error.includes('Fovea result unavailable:');
+  const unavailable = value => value?.ok === false && typeof value.error === 'string' && /(?:Navigator|Fovea) result unavailable:/.test(value.error);
   const supported = value => value?.settingSupport?.['sync.ackClean'];
   const expectedConfig = p?.settingsBefore?.config ? { ...p.settingsBefore.config, sync: { ...p.settingsBefore.config.sync, ackClean: true, mode: 'hidden' }, tools: { ...p.settingsBefore.config.tools, defaultBudget: 1024 } } : null;
   const fixtureRead = seed => seed?.status === 'ok' && seed.reads?.some(r => r.path === 'controls.ts' && r.expectedSha256 === digest(CONTROL_SOURCE));
@@ -233,7 +233,7 @@ export async function main(argv = process.argv.slice(2), onReport = (_report, _r
       const prior = runs[0];
       if (phase === 'resume' && (!prior?.completed || !/^fr_[a-f0-9]{48}$/u.test(prior.packet?.resumeResultId))) break;
       const marker = phase + '-' + randomUUID(), code = scenario === 'controls' ? controlsProgram(marker, phase, prior?.packet?.resumeResultId) : extraControlProgram(marker, phase);
-      const prompt = 'Call only @fabric/fabric_exec exactly once with code ' + JSON.stringify(code) + ' and resultFormat json. These are disposable Fovea controls, with normal approval required. Do not retry, change policy, use native tools, delegate or use shell fallback. After the exact result, stop.';
+      const prompt = 'Call only @fabric/fabric_exec exactly once with code ' + JSON.stringify(code) + ' and resultFormat json. These are disposable Navigator controls, with normal approval required. Do not retry, change policy, use native tools, delegate or use shell fallback. After the exact result, stop.';
       write(phase + '-input.json', { code, resultFormat: 'json' }); write(phase + '-prompt.txt', prompt);
       const record = path.join(root, phase + '-acp.jsonl'), beforeTraces = new Set(traces().map(t => JSON.stringify(t)));
       const env = { ...process.env, KIRO_ACP_RECORD_PATH: record, KIRO_FABRIC_LAUNCH_WORKSPACE: workspace };

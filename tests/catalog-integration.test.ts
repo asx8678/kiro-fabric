@@ -5,7 +5,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 import type { Runtime, ServerDefinition } from "mcporter";
 import { describe, expect, it } from "vitest";
 import { ActionRegistry } from "../src/core/action-registry.js";
-import { FabricExecutionService, exactActionTimeoutFloor } from "../src/execution-service.js";
+import { FABRIC_APPROVAL_TIMEOUT_MS, FabricExecutionService } from "../src/execution-service.js";
 import { normalizeFabricConfig } from "../src/config.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { remoteRef, parseRemoteRef } from "../src/core/remote-identity.js";
@@ -218,10 +218,13 @@ describe("catalog integration through checked QuickJS and in-memory SDK", () => 
   it.each([0, 1, 999, 2_000_001])("rejects page budget %s before approval/contact and timeout extension", async maxBytes => {
     const f = await fixture(); let approvals = 0;
     try {
-      const r = await f.service.execute({code:`return await mcp.toolsPage({server:"fixture",maxBytes:${maxBytes}});`,approver:{async approve(){approvals++;}}});
+      const observed: number[] = [];
+      const r = await f.service.execute({code:`return await mcp.toolsPage({server:"fixture",maxBytes:${maxBytes}});`,approver:{async approve(){approvals++;}}, onEffectiveTimeoutChange: value => { observed.push(value); }});
       expect(r).toMatchObject({success:false,failure:{code:"catalog_page_budget",dispatchState:"not_dispatched",effectOutcome:"none"}});
       expect(approvals).toBe(0); expect(f.requests).toEqual([]);
-      expect(exactActionTimeoutFloor("mcp.$toolsPage",5000,{server:"fixture",maxBytes})).toBe(0);
+      // The rejected initial page never earns the MCP floor or extends the deadline.
+      expect(r.effectiveTimeoutMs).toBe(f.service.config.executor.timeoutMs);
+      expect(observed).toEqual([f.service.config.executor.timeoutMs]);
     } finally {await f.service.close();}
   });
   it("traverses every ranked tools.searchPage match beyond100 through checked guest without MCP contacts", async () => {
@@ -252,12 +255,41 @@ describe("catalog integration through checked QuickJS and in-memory SDK", () => 
       expect(f.requests).toHaveLength(2);
     }finally{await f.service.close();}
   },120_000);
-  it("classifies canonical remote and initial MCP pages, never continuations or malformed refs",()=>{
-    expect(exactActionTimeoutFloor(remoteRef("fixture","tool"),5000)).toBeGreaterThan(5000);
-    expect(exactActionTimeoutFloor("mcp.$toolsPage",5000,{server:"fixture"})).toBeGreaterThan(5000);
-    expect(exactActionTimeoutFloor("mcp.$toolsPage",5000,{cursor:"opaque"})).toBe(0);
-    expect(exactActionTimeoutFloor("mcp.$toolsPage",5000,{server:"fixture",cursor:"opaque"})).toBe(0);
-    expect(exactActionTimeoutFloor("mcp.remote/a/%61",5000)).toBe(0);
-    expect(parseRemoteRef(remoteRef(" a ","%2F/🦋"))).toEqual({server:" a ",tool:"%2F/🦋"});
+  it("classifies canonical remote and initial MCP pages, never continuations or malformed refs",async()=>{
+    const f = await fixture(6, "inventory " + "x".repeat(1600), 1000);
+    try {
+      const guestDefault = f.service.config.executor.timeoutMs;
+      const floor = f.service.config.mcp.callTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * 2 + 2_000;
+      // Warm the compiler so measured executions exclude cold start.
+      expect((await f.service.execute({ code: "return true;", timeoutMs: 5_000, approver: approve })).success).toBe(true);
+      const measure = async (code: string, payloads?: Record<string, string>) => {
+        const observed: number[] = [];
+        const result = await f.service.execute({ code, approver: approve, onEffectiveTimeoutChange: value => { observed.push(value); }, ...(payloads ? { payloads } : {}) });
+        return { result, observed };
+      };
+      // A canonical remote reference is an initial contact and earns the floor.
+      const remote = await measure('return await tools.call({ref:payloads.ref,args:{}});', { ref: remoteRef("fixture", "tool0") });
+      expect(remote.result.effectiveTimeoutMs).toBe(floor);
+      expect(remote.observed).toEqual([guestDefault, floor]);
+      // An initial MCP page earns the floor and returns a usable continuation cursor.
+      const initial = await measure('return await mcp.toolsPage({server:"fixture",limit:1});');
+      expect(initial.result.success, JSON.stringify(initial.result)).toBe(true);
+      expect(initial.result.effectiveTimeoutMs).toBe(floor);
+      expect(initial.observed).toEqual([guestDefault, floor]);
+      const cursor = (initial.result.value as CatalogPage<unknown>).nextCursor!;
+      expect(cursor).toBeTypeOf("string");
+      // Continuations and mixed server+cursor requests are not initial contacts.
+      for (const code of ['return await mcp.toolsPage({cursor:payloads.cursor});', 'return await mcp.toolsPage({server:"fixture",cursor:payloads.cursor});']) {
+        const continuation = await measure(code, { cursor });
+        expect(continuation.result.effectiveTimeoutMs).toBe(guestDefault);
+        expect(continuation.observed).toEqual([guestDefault]);
+      }
+      // A malformed remote reference is not an initial contact either.
+      const malformed = await measure('return await tools.call({ref:"mcp.remote/a/%61",args:{}});');
+      expect(malformed.result.effectiveTimeoutMs).toBe(guestDefault);
+      expect(malformed.observed).toEqual([guestDefault]);
+      // Percent-encoded and Unicode remote identity round-trips exactly.
+      expect(parseRemoteRef(remoteRef(" a ", "%2F/🦋"))).toEqual({ server: " a ", tool: "%2F/🦋" });
+    } finally { await f.service.close(); }
   });
 });

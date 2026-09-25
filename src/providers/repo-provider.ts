@@ -6,7 +6,7 @@ import { REPO_ACTION_DESCRIPTORS, validImpactBase } from "./repo-contract.js";
  * analysis engine. Approval/validation/audit stay in the existing registry. */
 export class FoveaProvider implements FabricProvider {
   readonly name = "repo";
-  readonly description = "Native Fovea repository navigation (advisory, not source/read or correctness evidence)";
+  readonly description = "Native Navigator repository navigation (advisory, not source/read or correctness evidence)";
   readonly requirements = { verifiedWorkspace: true, settlement: true };
   #closed = false;
   constructor(readonly client: Pick<FoveaBoundClient, "rootId" | "observer" | "invoke" | "close">) {}
@@ -14,7 +14,7 @@ export class FoveaProvider implements FabricProvider {
   async list(): Promise<FabricActionDescriptor[]> { return structuredClone(REPO_ACTION_DESCRIPTORS); }
   async describe(actionName: string): Promise<FabricActionDescriptor | undefined> { return structuredClone(REPO_ACTION_DESCRIPTORS.find(d => d.name === actionName)); }
   async invoke(actionName: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {
-    if (this.#closed) throw new Error("Fovea binding released");
+    if (this.#closed) throw new Error("Navigator binding released");
     const descriptor = REPO_ACTION_DESCRIPTORS.find(d => d.name === actionName);
     if (!descriptor) throw new Error("Unknown repo action");
     const invalid = schemaValidationMessage(descriptor.inputSchema, args);

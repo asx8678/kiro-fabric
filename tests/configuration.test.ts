@@ -79,14 +79,41 @@ describe("Agent-only configuration", () => {
     const tight = normalizeFabricConfig({ executor: { timeoutMs: 500, maxTimeoutMs: 500 } });
     expect(tight.executor.maxTimeoutMs).toBe(500);
     expect(tight.mcp.callTimeoutMs).toBe(500);
-    expect(tight.web.searchTimeoutMs).toBe(500);
-    expect(tight.web.openTimeoutMs).toBe(500);
-    const explicit = normalizeFabricConfig({ executor: { timeoutMs: 500, maxTimeoutMs: 500 }, mcp: { callTimeoutMs: 20_000 }, web: { searchTimeoutMs: 20_000 } });
+    expect((tight as { web?: unknown }).web).toBeUndefined();
+    const explicit = normalizeFabricConfig({ executor: { timeoutMs: 500, maxTimeoutMs: 500 }, mcp: { callTimeoutMs: 20_000 } });
     expect(explicit.mcp.callTimeoutMs).toBe(500);
-    expect(explicit.web.searchTimeoutMs).toBe(500);
+    expect((explicit as { web?: unknown }).web).toBeUndefined();
     const generous = normalizeFabricConfig({ executor: { timeoutMs: 5_000, maxTimeoutMs: 900_000 } });
     expect(generous.mcp.callTimeoutMs).toBe(120_000);
-    expect(generous.web.searchTimeoutMs).toBe(45_000);
+    expect((generous as { web?: unknown }).web).toBeUndefined();
+  });
+
+  it("rejects every removed web/browser configuration section without rewriting files", () => {
+    const removed = [
+      { web: {} },
+      { web: { enabled: false } },
+      { web: { searchTimeoutMs: 20_000 } },
+      { web: { openTimeoutMs: 20_000 } },
+      { browser: {} },
+      { browser: { enabled: false } },
+    ];
+    for (const input of removed) expect(() => normalizeFabricConfig(input)).toThrow(/no longer supported/);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-config-browser-"));
+    const file = path.join(root, "config.json");
+    try {
+      const bytes = JSON.stringify({ web: { searchTimeoutMs: 20_000 }, approvals: { write: "allow" }, privacy: { mode: "restricted-web" } });
+      fs.writeFileSync(file, bytes, { mode: 0o600 });
+      expect(() => loadFabricConfig(file)).toThrow(/no longer supported/);
+      // Byte-preserving rejection: the file is never rewritten.
+      expect(fs.readFileSync(file, "utf8")).toBe(bytes);
+      // Removing only the removed section preserves approvals and privacy settings.
+      const retained = JSON.stringify({ approvals: { write: "allow" }, privacy: { mode: "restricted-web" } });
+      fs.writeFileSync(file, retained, { mode: 0o600 });
+      const loaded = loadFabricConfig(file);
+      expect(loaded.approvals.write).toBe("allow");
+      expect(loaded.privacy.mode).toBe("restricted-web");
+      expect(fs.readFileSync(file, "utf8")).toBe(retained);
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it("caps configurable memory limits at the enforced storage bounds", () => {

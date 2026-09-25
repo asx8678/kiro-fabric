@@ -119,9 +119,12 @@ describe("real catalog authority across outer MCP host lifecycle", () => {
     expect(shared.isError).toBe(true);
     expect(shared.content[0].text).toMatch(/bound or revoked/);
     // A conflicting owner fails closed for BOTH clients, never silently rebinds.
+    // The rejected replacement revokes the shared runtime, so the original owner
+    // now observes the terminal closed-service contract rather than a cursor error.
     const oldOwner = await old.call(resume, cursor);
     expect(oldOwner.isError).toBe(true);
-    expect(oldOwner.content[0].text).toMatch(/catalog_cursor_unavailable|Catalog cursor unavailable/);
+    expect(oldOwner.content[0].text).toMatch(/Fabric execution service is closed/);
+    expect(oldOwner.content[0].text).not.toMatch(/catalog_cursor_unavailable/);
     const b = await fixture(), fresh = await b.host(true);
     const crossClient = await fresh.call(resume, cursor);
     expect(crossClient.isError).toBe(true);
@@ -130,6 +133,8 @@ describe("real catalog authority across outer MCP host lifecycle", () => {
     await old.server.close();
     const revoked = await replacement.call(resume, cursor);
     expect(revoked.isError).toBe(true);
-    expect(revoked.content[0].text).toMatch(/bound or revoked/);
+    // The replacement's fallback factory still returns its retired instance;
+    // the runtime-ownership guard refuses it before catalog authorization.
+    expect(revoked.content[0].text).toMatch(/Runtime factory returned an already retired MCP runtime/);
   }, 30_000);
 });

@@ -4,7 +4,6 @@ import type { FoveaBoundClient } from "../fovea/host.js";
 import { ReviewProvider } from "../providers/review-provider.js";
 import { ProbeProvider } from "../providers/probe-provider.js";
 import type { ManagedSearchExecutable } from "../providers/local-executable.js";
-import { WebProvider, type BrowserHarnessExecutable } from "../providers/web-provider.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
   DEFAULT_FABRIC_CONFIG,
@@ -22,6 +21,7 @@ import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js"
 import { KiroMcpProvider } from "./mcp-provider.js";
 import { KiroMemoryProvider } from "./memory-provider.js";
 import { KiroPowerArtifactsProvider } from "./power/artifacts-provider.js";
+import { FABRIC_RUNTIME_PROVIDER_NAMES } from "./provider-inventory.js";
 
 export interface KiroRuntimeOptions {
   cwd: string;
@@ -36,7 +36,6 @@ export interface KiroRuntimeOptions {
   managedSearch?: ManagedSearchExecutable;
   /** Borrowed host-owned analysis lease; provider disposal never closes its engine. */
   foveaClient?: FoveaBoundClient;
-  browserHarnessExecutable?: BrowserHarnessExecutable;
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
@@ -84,18 +83,6 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");
-  if (config.web.enabled) {
-    try {
-      registry.register(new WebProvider({
-        ...(options.browserHarnessExecutable ? { executable: options.browserHarnessExecutable } : { executablePath: config.web.command }),
-        searchEngine: config.web.searchEngine,
-        searchTimeoutMs: config.web.searchTimeoutMs,
-        openTimeoutMs: config.web.openTimeoutMs,
-      }));
-    } catch (error) {
-      registry.markUnavailable("web", error instanceof Error ? error.message : "browser-harness-js is unavailable");
-    }
-  } else registry.markUnavailable("web", "disabled by configuration");
   if (options.memoryRoot && config.memory.enabled) {
     registry.register(new KiroMemoryProvider({
       cwd: options.cwd,
@@ -114,15 +101,36 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       maxResultBytes: Math.floor(Math.min(config.executor.maxNestedResultChars, config.executor.maxOutputChars) * 0.8),
     }));
   } else registry.markUnavailable("continuity", config.continuity.enabled ? "verified workspace binding is required" : "disabled by configuration");
+  // Fail closed if the documented current inventory and the mounted registry
+  // ever diverge. This is an internal consistency guard; it does not change
+  // which providers mount, their order, or their requirements policy.
+  const mountedNames = registry.providers().map((provider) => provider.name).sort();
+  const inventoryNames = [...FABRIC_RUNTIME_PROVIDER_NAMES].sort();
+  if (JSON.stringify(mountedNames) !== JSON.stringify(inventoryNames)) {
+    throw new Error(`runtime provider inventory drift: mounted=[${mountedNames.join(",")}] expected=[${inventoryNames.join(",")}]`);
+  }
   const service = new FabricExecutionService(registry, config, options.cwd);
   if (options.catalogBinding) service.bindCatalog(options.catalogBinding);
+  let closing: Promise<void> | undefined;
   return {
     service,
     registry,
     artifacts,
     providers: () => registry.providers(),
-    async close() {
-      try { await service.close(); } finally { artifacts.close(); }
-    },
+    close() {
+      if (closing) return closing;
+      let resolve!: () => void;
+      let reject!: (error: unknown) => void;
+      closing = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+      // Start service revocation synchronously, but publish the shared promise
+      // first. Artifact disposal remains after the actual service drain.
+      void (async () => {
+        const failures: unknown[] = [];
+        try { await service.close(); } catch (error) { failures.push(error); }
+        try { artifacts.close(); } catch (error) { failures.push(error); }
+        if (failures.length) throw new AggregateError(failures, "Kiro runtime shutdown failed");
+      })().then(resolve, reject);
+      return closing;
+    }
   };
 };

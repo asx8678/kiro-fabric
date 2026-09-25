@@ -63,7 +63,7 @@ export function declarationText(value: unknown): string {
   if (typeof value !== "string" || !value.trim() || Buffer.byteLength(value, "utf8") > MAX_TEXT_BYTES || Buffer.from(value, "utf8").toString("utf8") !== value) return invalid();
   return value;
 }
-export function parseFact(value: unknown): ContinuityFact {
+function parseFact(value: unknown): ContinuityFact {
   const fact = exactObject(value, ["kind", "text"]);
   if (!FACT_KINDS.includes(fact.kind as ContinuityFactKind)) return invalid();
   return { kind: fact.kind as ContinuityFactKind, text: declarationText(fact.text) };

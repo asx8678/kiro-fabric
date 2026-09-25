@@ -12,7 +12,7 @@ import { COMPLETE_GATES, completeQualificationSigningBytes, validateCompleteGate
 export function completeQualificationRequest(metadataBytes, evidence) {
   const metadata = validateReleaseMetadata(JSON.parse(metadataBytes.toString('utf8')));
   if (!metadataBytes.equals(Buffer.from(canonical(metadata) + '\n'))) throw Error('Noncanonical release signing metadata');
-  if (evidence.size !== COMPLETE_GATES.length) throw Error('Four native evidence gates required');
+  if (evidence.size !== COMPLETE_GATES.length) throw Error('All complete qualification evidence gates required');
   const gates = COMPLETE_GATES.map(gate => {
     const bytes = evidence.get(gate); if (!Buffer.isBuffer(bytes)) throw Error(`Missing ${gate} evidence`);
     validateCompleteGateEvidence(JSON.parse(bytes.toString('utf8')), gate, metadata);

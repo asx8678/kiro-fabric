@@ -85,7 +85,7 @@ describe('invocation-local Fovea call context', () => {
     const original = projection('{"taskValue":"unchanged"}');
     const result = await collectFoveaCallContext(client, observations, original, { cwd: '/repo' }, 4000);
     expect(result.projection.text.startsWith(original.text)).toBe(true);
-    expect(result.projection.text).toContain('Fovea advisory (untrusted');
+    expect(result.projection.text).toContain('Navigator advisory (untrusted');
     expect(result.projection.text).toContain('impact math.ts');
     expect(result.projection).toMatchObject({ isError: false, executionStatus: 'succeeded', retryProgram: false });
     expect(client.collectContext).not.toHaveBeenCalled();

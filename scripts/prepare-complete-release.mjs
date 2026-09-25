@@ -64,7 +64,7 @@ export async function prepareCompleteRelease(root, checkout, output, commit) {
   const report = { kind: 'kiro-fabric.complete-candidate', schema: 1, releaseReady: false, sourceCommit: commit, sourceDigest,
     target: manifest.target, version: before.version, bundleRoot: candidate, archive, metadataSha256: sha256(canonical(metadata) + '\n'),
     archiveSha256: metadata.archive.sha256, bundleDigest: metadata.bundleDigest,
-    pending: ['reviewed production public root and signer custody', 'four-target installed/client/minimum-system qualification', 'signed native qualification and final-byte release metadata'] };
+    pending: ['reviewed production public root and signer custody', 'four-target native/installed/client/minimum-system qualification', 'signed qualification and final-byte release metadata'] };
   fs.writeFileSync(path.join(output, 'candidate.json'), JSON.stringify(report, null, 2), { flag: 'wx', mode: 0o600 });
   return report;
 }

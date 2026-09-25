@@ -11,14 +11,19 @@ import {
 const MAX_PACKAGE_FILES = 500;
 const MAX_PACKAGE_BYTES = 64 * 1024 * 1024;
 // Pin the reviewed product authority, including the closed guidance inventory.
-const HISTORICAL_AGENT_PRODUCT_SHA256 = "d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9";
 const AGENT_PRODUCT_SHA256 = "03709859804c014f43678d4e5aa5ae4dc4926d09cdbabd1b24b846d8f4be39de";
+const PRODUCT_RESOURCE_ERAS = {
+  // pre-fovea product
+  "d09991a9c7fe5fe32104c21cfae7e4c35229fe2d50cbc4aef3f9a57b20a392e9": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md"],
+  // fovea-era product, no browser pack
+  "03709859804c014f43678d4e5aa5ae4dc4926d09cdbabd1b24b846d8f4be39de": ["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md", "skills/fabric-exec/references/fovea.md"],
+  // Obsolete browser product authorities are intentionally not admitted.
+};
 const SCRIPT_FILES = [
   "agent-profile.mjs",
   "install-agent-user.mjs",
   "validate-agent-package.mjs",
 ];
-const STANDALONE_SCRIPT_FILES = [...SCRIPT_FILES, "filesystem-boundary.mjs"];
 const ROOT_ENTRIES = ["agent-product.json", "package.json", "runtime", "scripts", "skills"];
 const normalize = (value) => value.replaceAll("\\", "/");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
@@ -196,7 +201,7 @@ const validateClosure = (root, fovea = false) => {
   }
   if (fovea) {
     for (const name of ["fovea/engine-entry.js", "kiro/fovea-hook.js", "fovea/component.json", "fovea/upstream.json", "fovea/UPSTREAM-LICENSE.txt", "fovea/ast-grep-LICENSE.txt"]) {
-      if (!seen.has(name) || !fs.statSync(path.join(runtime, name)).size) fail(`Fovea asset missing: ${name}`);
+      if (!seen.has(name) || !fs.statSync(path.join(runtime, name)).size) fail(`Navigator asset missing: ${name}`);
     }
     validateNativeSourceClosure(runtime, closure, seen);
     if (!Array.isArray(closure.vendoredComponents) || !closure.vendoredComponents.some(component => component.name === "fovea-vendored-core")) fail("Fovea attribution missing");
@@ -243,14 +248,15 @@ export const validateAgentPackage = (input) => {
 
   const product = jsonFile(root, "agent-product.json");
   const productHash = hash(fs.readFileSync(path.join(root, "agent-product.json")));
-  const fovea = productHash === AGENT_PRODUCT_SHA256;
-  if (!fovea && productHash !== HISTORICAL_AGENT_PRODUCT_SHA256) {
+  const expectedResources = PRODUCT_RESOURCE_ERAS[productHash];
+  if (productHash !== AGENT_PRODUCT_SHA256 && !expectedResources) {
     fail("agent product authority digest drifted");
   }
+  const fovea = expectedResources && expectedResources.includes("skills/fabric-exec/references/fovea.md");
   if (product.schemaVersion !== 1 || product.product !== "kiro-fabric-agent" ||
       product.entrypoint !== "src/kiro/mcp-entry.ts" || product.outputBundle !== "dist/kiro-agent-closure" ||
       JSON.stringify(product.tools) !== JSON.stringify(FABRIC_TOOLS) ||
-      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(["skills/fabric-exec/SKILL.md", "skills/fabric-exec/references/api.md", "skills/fabric-exec/references/recipes.md", "skills/fabric-exec/references/workflow.md", "skills/fabric-exec/references/review.md", ...(fovea ? ["skills/fabric-exec/references/fovea.md"] : [])])) {
+      JSON.stringify(product.bundledAgentResources) !== JSON.stringify(expectedResources)) {
     fail("agent product contract drifted");
   }
 
@@ -263,25 +269,36 @@ export const validateAgentPackage = (input) => {
 
   const scriptFiles = walkPackage(path.join(root, "scripts"))
     .map((file) => normalize(path.relative(path.join(root, "scripts"), file)));
-  // Historical packages have the reviewed three-script closure. New packages
-  // add exactly one builtin-only implementation, never an arbitrary src tree.
-  const hasBoundary = scriptFiles.includes("filesystem-boundary.mjs");
-  const expectedScripts = hasBoundary ? STANDALONE_SCRIPT_FILES : SCRIPT_FILES;
+  // Historical packages have the reviewed three-script closure; the boundary
+  // variant adds filesystem-boundary.mjs; the W5 variant additionally carries
+  // the exact installer-lock/pinned-recovery implementation closure. Admission
+  // derives helpers from the shipped installer and rejects partial sets,
+  // unexpected files and any ../src checkout dependency.
+  const installerText = fs.readFileSync(path.join(root, "scripts/install-agent-user.mjs"), "utf8");
+  const helperDeps = { "filesystem-boundary.mjs": [], "installer-lock.mjs": ["pinned-recovery.mjs"], "pinned-recovery.mjs": [] };
+  const requiredHelpers = new Set();
+  if (installerText.includes("./filesystem-boundary.mjs")) requiredHelpers.add("filesystem-boundary.mjs");
+  if (installerText.includes("./installer-lock.mjs")) { requiredHelpers.add("installer-lock.mjs"); requiredHelpers.add("pinned-recovery.mjs"); }
+  const expectedScripts = [...SCRIPT_FILES, ...Object.keys(helperDeps).filter((name) => requiredHelpers.has(name))];
   assertExactNames(scriptFiles, expectedScripts, "installer script");
   assertExactNames(fs.readdirSync(path.join(root, "scripts")), expectedScripts, "installer script root");
-  const installerText = fs.readFileSync(path.join(root, "scripts/install-agent-user.mjs"), "utf8");
-  if (!hasBoundary && installerText.includes('./filesystem-boundary.mjs')) fail("installer dependency filesystem-boundary.mjs is missing");
-  if (installerText.includes('../src/installation/filesystem-boundary.mjs')) fail("installer depends on an unavailable source checkout");
-  if (hasBoundary) {
-    const boundaryText = fs.readFileSync(path.join(root, "scripts/filesystem-boundary.mjs"), "utf8");
-    for (const match of boundaryText.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)["']([^"']+)["']/gu)) {
-      if (!match[1].startsWith("node:")) fail("filesystem boundary is not a standalone builtin-only implementation");
+  if (installerText.includes("../src/")) fail("installer depends on an unavailable source checkout");
+  for (const name of requiredHelpers) {
+    const text = fs.readFileSync(path.join(root, "scripts", name), "utf8");
+    if (text.includes("../src/")) fail(`staged helper depends on an unavailable source checkout: ${name}`);
+    for (const match of text.matchAll(/(?:from\s*|import\s*\(\s*|import\s*)["']([^"']+)["']/gu)) {
+      const specifier = match[1];
+      if (specifier.startsWith("node:")) continue;
+      if (specifier.startsWith("./") && helperDeps[name].includes(specifier.slice(2)) && requiredHelpers.has(specifier.slice(2))) continue;
+      fail(`staged helper ${name} has an unsupported import: ${specifier}`);
     }
   }
   assertExactNames(fs.readdirSync(path.join(root, "skills")), ["fabric-exec"], "skills root");
   const skillFiles = walkPackage(path.join(root, "skills", "fabric-exec"))
     .map((file) => normalize(path.relative(path.join(root, "skills", "fabric-exec"), file)));
   assertExactNames(skillFiles, ["SKILL.md", "references/api.md", "references/recipes.md", "references/workflow.md", "references/review.md", ...(fovea ? ["references/fovea.md"] : [])], "skill");
+
+  if (fs.existsSync(path.join(root, "runtime/browser"))) fail("obsolete browser runtime is not supported");
 
   const skill = snapshotTree(path.join(root, "skills", "fabric-exec"));
   assertExactNames(skill.directories.map((entry) => entry.path), [".", "references"], "skill directory");
@@ -312,17 +329,21 @@ export const validateInstalledAgentProfile = (profilePath, options) => {
   const expected = generateAgentProfile(options);
   if (JSON.stringify(profile) !== JSON.stringify(expected)) fail("installed profile differs from the generated contract");
   const installRoot = fs.realpathSync(options.installRoot);
-  for (const [label, target] of Object.entries({
-    runtimeRoot: options.runtimeRoot,
-    dataRoot: options.dataRoot,
-    skillPath: options.skillPath,
-  })) {
+  const containedTargets = { runtimeRoot: options.runtimeRoot, dataRoot: options.dataRoot, skillPath: options.skillPath };
+  for (const [label, target] of Object.entries(containedTargets)) {
     if (!path.isAbsolute(target) || !isContained(installRoot, path.resolve(target))) fail(`${label} escapes the owned global installation`);
   }
   const runtimeEntry = path.join(options.runtimeRoot, "kiro", "mcp-entry.js");
   for (const [label, target] of Object.entries({ nodePath: options.nodePath, runtimeEntry, skillPath: options.skillPath })) {
     const targetStats = fs.lstatSync(target);
     if (!targetStats.isFile() || targetStats.isSymbolicLink()) fail(`${label} does not resolve to a regular installed file`);
+  }
+  for (const resource of profile.resources ?? []) {
+    if (typeof resource !== "string" || !resource.startsWith("skill://")) continue;
+    const target = resource.slice("skill://".length);
+    if (!path.isAbsolute(target) || !isContained(installRoot, path.resolve(target))) fail("skill resource escapes the owned global installation");
+    const targetStats = fs.lstatSync(target);
+    if (!targetStats.isFile() || targetStats.isSymbolicLink() || targetStats.nlink !== 1) fail("skill resource is not a regular owned file");
   }
   const nodeStats = fs.statSync(options.nodePath);
   if (process.platform !== "win32" && (nodeStats.mode & 0o111) === 0) fail("nodePath is not executable");

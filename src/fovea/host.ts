@@ -86,7 +86,7 @@ export class FoveaHost {
    * Unlike binding.close/reset this forgets session settings and adopted trust.
    * The caller owns lifecycle authority and must not regrant a retired epoch. */
   retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
-    if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Fovea retirement owner");
+    if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Navigator retirement owner");
     this.#lifetime.signal.throwIfAborted();
     const key = JSON.stringify([conversationId, conversationEpoch]);
     const pending = this.#retirements.get(key);
@@ -107,19 +107,32 @@ export class FoveaHost {
   }
   #conversation(lease: FoveaLease): { configuration: FoveaConfiguration; trustedRules: Map<string, string>; leases: Set<FoveaLease> } {
     const key = JSON.stringify([lease.conversationId, lease.conversationEpoch]);
-    if (this.#retirements.has(key)) throw new Error("Fovea conversation retirement pending");
+    if (this.#retirements.has(key)) throw new Error("Navigator conversation retirement pending");
     let state = this.#conversations.get(key);
     if (!state) {
       // Retain controls across workspace-provider replacement, never inherit
       // them into another conversation/epoch or evict a live owner's choices.
-      if (this.#conversations.size >= 128) throw new Error("Fovea conversation control capacity reached");
+      if (this.#conversations.size >= 128) throw new Error("Navigator conversation control capacity reached");
       state = { configuration: new FoveaConfiguration(this.options.configFile), trustedRules: new Map(), leases: new Set() };
       this.#conversations.set(key, state);
     }
     return state;
   }
-  async close(): Promise<void> {
-    this.#closeTask ??= (async () => { this.#lifetime.abort(new Error("Fovea host shutdown")); this.#leases.close(); this.#scheduler.close(); this.#results.clear(); this.#calls.clear(); await this.#journalTail; await this.#journal; await this.#process?.close(); this.#conversations.clear(); this.#retirements.clear(); })();
+  close(): Promise<void> {
+    if (this.#closeTask) return this.#closeTask;
+    const failures: unknown[] = [];
+    this.#closeTask = Promise.resolve().then(async () => {
+      for (const operation of [() => this.#journalTail, () => this.#journal, () => this.#process?.close()]) {
+        try { await operation(); } catch (error) { failures.push(error); }
+      }
+      this.#conversations.clear(); this.#retirements.clear();
+      this.#observed.clear(); this.#preparations.clear();
+      if (failures.length) throw new AggregateError(failures, 'Navigator host cleanup failed', { cause: failures[0] });
+    });
+    // Install shared ownership before abort listeners can reenter close.
+    for (const operation of [() => this.#lifetime.abort(new Error('Navigator host shutdown')), () => this.#leases.close(), () => this.#scheduler.close(), () => this.#results.clear(), () => this.#calls.clear()]) {
+      try { operation(); } catch (error) { failures.push(error); }
+    }
     return this.#closeTask;
   }
   #observation(lease: FoveaLease): { paths: Set<string>; dirty: boolean; gap: boolean; operations: number } {
@@ -166,7 +179,7 @@ export class FoveaHost {
   }
   async #collectContext(lease: FoveaLease, context: FabricInvocationContext, maxChars: number, nextPrompt = false): Promise<FoveaDeliveryClaim | undefined> {
     this.#check(lease, {}, context);
-    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Fovea delivery budget");
+    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Navigator delivery budget");
     // A host capability is required at the call site. Visible-only here: an
     // unqualified hidden mode must not silently become visible output.
     const config = this.#conversation(lease).configuration.read(lease.worktreeId).config;
@@ -186,7 +199,7 @@ export class FoveaHost {
   }
   async #collectCallContext(lease: FoveaLease, files: string[], context: FabricInvocationContext, maxChars: number, sampled = false): Promise<FoveaDeliveryClaim | undefined> {
     this.#check(lease, {}, context);
-    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Fovea delivery budget");
+    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Navigator delivery budget");
     const config = this.#conversation(lease).configuration.read(lease.worktreeId).config;
     if (config.sync.mode !== "enabled" || !this.#process || this.#scheduler.busy || maxChars < 160) return undefined;
     if (!Array.isArray(files) || files.length < 1 || files.length > 16) return undefined;
@@ -216,7 +229,7 @@ export class FoveaHost {
       this.#calls.analyzed(lease.rootId, this.#process.generation);
     } catch {
       if (!lease.signal.aborted && !this.#lifetime.signal.aborted) this.#calls.failed(lease.rootId);
-      throw new Error("Fovea call context unavailable");
+      throw new Error("Navigator call context unavailable");
     }
     this.#check(lease, {}, context);
     const body = typeof value.text === "string" ? value.text.slice(0, 8_192) : "";
@@ -249,14 +262,14 @@ export class FoveaHost {
   #check(lease: FoveaLease, args: Record<string, unknown>, context: FabricInvocationContext): void { this.#lifetime.signal.throwIfAborted(); context.signal?.throwIfAborted(); context.deadline?.throwIfExpired(); this.#leases.check(lease, args.rootId); }
   async #invoke(lease: FoveaLease, operation: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
     this.#check(lease, args, context);
-    if (operation === "retireConversation") throw new Error("Private Fovea host operation");
-    for (const key of ["commitPreparationId", "nativeProvenance", "trustedRulesSha256"]) if (key in args) throw new Error("Private Fovea host argument");
+    if (operation === "retireConversation") throw new Error("Private Navigator host operation");
+    for (const key of ["commitPreparationId", "nativeProvenance", "trustedRulesSha256"]) if (key in args) throw new Error("Private Navigator host argument");
     await this.#journalTail;
     this.#check(lease, args, context);
     const controls = this.#conversation(lease), configuration = controls.configuration;
     if (operation === "status") {
       const state = this.#observed.get(lease.rootId), config = configuration.read(lease.worktreeId);
-      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
+      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, cleanup: this.#process?.cleanup ?? null, retainedScratchGenerations: this.#process?.retainedScratchGenerations ?? 0, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
     }
     if (operation === "adoptRules") {
       if (typeof args.expectedSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedSha256)) throw new Error("Rule adoption requires exact local.read SHA-256");
@@ -268,7 +281,7 @@ export class FoveaHost {
           (document.rules !== undefined && (!Array.isArray(document.rules) || document.rules.length > 32)) ||
           (document.fileRoutes !== undefined && (!Array.isArray(document.fileRoutes) || document.fileRoutes.length > 32))) throw new Error("Invalid bounded declarative rule document");
       this.#check(lease, args, context);
-      if (!controls.trustedRules.has(lease.worktreeId) && controls.trustedRules.size >= 32) throw new Error("Fovea conversation rule trust capacity reached");
+      if (!controls.trustedRules.has(lease.worktreeId) && controls.trustedRules.size >= 32) throw new Error("Navigator conversation rule trust capacity reached");
       controls.trustedRules.set(lease.worktreeId, source.snapshot.file.sha256);
       return { schemaVersion: 1, adopted: true, sha256: source.snapshot.file.sha256, scope: "conversation-epoch exact canonical worktree and content", sourceMutation: false, note: "Rules were already published through normal local writes; only exact-content analysis trust changed" };
     }
@@ -276,12 +289,14 @@ export class FoveaHost {
     if (operation === "configure") return configuration.update(args.config, args.scope as "session" | "project" | "global", String(args.expectedRevision), lease.worktreeId) as unknown as Record<string, unknown>;
     if (operation === "result") return this.#results.page(this.#owner(lease), String(args.resultId), args.cursor as string | undefined, args.maxChars as number | undefined);
     if (operation === "searchResult") return this.#results.search(this.#owner(lease), String(args.resultId), String(args.query), args.limit as number | undefined);
-    if (!this.#process) throw new FabricRepairError("Fovea analysis unavailable: no admitted generation-matched parser", { code: "provider_error", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: `repo.${operation}` });
+    if (!this.#process) throw new FabricRepairError("Navigator analysis unavailable: no admitted generation-matched parser", { code: "provider_error", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: `repo.${operation}` });
     const signals = [lease.signal, this.#lifetime.signal, ...(context.signal ? [context.signal] : [])], signal = AbortSignal.any(signals);
     return this.#scheduler.run(signal, async () => {
       this.#check(lease, args, context);
       if (operation === "reload") {
-        await this.#process!.restart(); configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay(); this.#calls.clear();
+        await this.#process!.restart();
+        this.#check(lease, args, context); // Close/retirement may have revoked publication during restart.
+        configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay(); this.#calls.clear();
         return { schemaVersion: 1, restarted: true, scope: "process-wide", invalidates: "all engine navigation and retained results; not a session reset", codeTransition: "same generation only; update and restart session for new code" };
       }
       const { rootId: _rootId, ...parameters } = args;
@@ -315,7 +330,7 @@ export class FoveaHost {
         const resultId = this.#results.put(this.#owner(lease), value);
         const packet: Record<string, unknown> = { schemaVersion: 1, advisory: true, resultId, rootId: lease.rootId, status: value.status, sourceSnapshotId: value.sourceSnapshotId, graphGeneration: value.graphGeneration, text: value.text, estimatedTokens: value.estimatedTokens, coverage: value.coverage, reads: value.reads, truncated: value.truncated, ...(typeof value.focusId === "string" ? { focusId: value.focusId } : {}), ...(typeof value.focusRevision === "number" ? { focusRevision: value.focusRevision } : {}) };
         const error = schemaValidationMessage(REPO_NAVIGATION_SCHEMA, packet);
-        if (error) throw new Error(`Fovea navigation contract: ${error}`);
+        if (error) throw new Error(`Navigator navigation contract: ${error}`);
         fabricJsonText(packet, Math.min(context.maxResultChars ?? 128_000, 128_000));
         return packet;
       }
@@ -337,7 +352,7 @@ export class FoveaHost {
         this.#preparations.delete(lease.rootId); // Clean baseline is independent of older, still-pending notices.
         return { ...value, deliveryState: "not-required", delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
       }
-      if (!record(value)) throw new Error("Fovea returned invalid control response");
+      if (!record(value)) throw new Error("Navigator returned invalid control response");
       return value;
     });
   }

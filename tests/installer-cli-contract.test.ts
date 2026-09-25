@@ -5,8 +5,11 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { MANAGER_COMMANDS, MANAGER_OPTIONS, managerHelp, parseManagerArguments } from "../scripts/installer-cli-contract.mjs";
-import { installCompleteGeneration } from "../scripts/managed-installation.mjs";
+import { MANAGER_COMMANDS, managerHelp, parseManagerArguments } from "../scripts/installer-cli-contract.mjs";
+import { installCompleteGeneration, inspectCompleteInstallation } from "../scripts/managed-installation.mjs";
+import { readTransaction } from "../scripts/install-transaction.mjs";
+import { validateBundle } from "../scripts/bundle-contract.mjs";
+import { snapshotStagingScope, assertStagingScopeUnchanged } from "../scripts/verification/staging-preservation-snapshot.mjs";
 import { createConfigurationBackup } from "../scripts/installer-configuration-backup.mjs";
 import { runManager } from "../scripts/install-manager.mjs";
 import { fixture as bundleFixture } from "./bundle-fixture.js";
@@ -46,7 +49,9 @@ describe("central installer CLI behavior", () => {
     for (const [command, spec] of Object.entries(MANAGER_COMMANDS)) {
       expect(parseManagerArguments([command, "--help"]).command).toBe(command);
       expect(managerHelp(command).commands[command]).toEqual(spec);
-      for (const [name, option] of Object.entries(MANAGER_OPTIONS)) {
+      for (const [name, option] of Object.entries(help.options)) {
+        expect(option, `registered option ${name}`).toBeDefined();
+        if (!option) throw new Error(`Missing registered option ${name}`);
         if (!spec.options.includes(name)) expect(() => parseManagerArguments([command, "--help", option.flag, ...(option.value ? ["/fixture"] : [])])).toThrow();
       }
     }
@@ -109,14 +114,45 @@ describe("central installer CLI behavior", () => {
     for (let attempt = 0; attempt < 2; attempt++) expect(jsonResult(f.run(["recover", "--yes", "--json"]))).toMatchObject({ outcome: "noop", recovered: false, committed: false, recoveryRequired: false });
     expect(fs.existsSync(f.kiroHome)).toBe(false);
   });
-  it("replays a verified pending transaction offline without creating a new backup or requiring Kiro", async () => {
+  it("fences a live-owner pending transaction offline without changing evidence or creating a backup", async () => {
     const f = fixture(), bundle = await bundleFixture(); roots.push(bundle);
-    await expect(installCompleteGeneration(bundle, { kiroHome: f.kiroHome, provenance: "source", validateCandidate: async () => {}, onPhase: (phase: string) => { if (phase === "journal-synced") throw new Error("fixture interrupted activation"); } })).rejects.toThrow("fixture interrupted activation");
-    expect(fs.existsSync(path.join(f.kiroHome, "kiro-fabric/.transactions/active.json"))).toBe(true);
-    const recovered = jsonResult(f.run(["recover", "--yes", "--json"]));
-    expect(recovered, JSON.stringify(recovered)).toMatchObject({ outcome: "recovered", recovered: true, recoveryRequired: false, dataPreserved: true });
-    expect(fs.existsSync(path.join(f.kiroHome, "kiro-fabric/backups"))).toBe(false);
-    expect(jsonResult(f.run(["recover", "--yes", "--json"]))).toMatchObject({ outcome: "noop", recovered: false });
+    const expected = await validateBundle(bundle);
+    let reached = false;
+    const failure = await installCompleteGeneration(bundle, {
+      kiroHome: f.kiroHome, provenance: "source", validateCandidate: async () => {},
+      onPhase: (phase: string) => {
+        if (phase === "journal-synced") { reached = true; throw new Error("fixture interrupted activation"); }
+      },
+    }).then(() => null, error => error);
+    expect(reached).toBe(true);
+    expect(failure).toMatchObject({ message: "fixture interrupted activation", committed: false, recoveryRequired: true });
+    const base = path.join(f.kiroHome, "kiro-fabric"), journal = readTransaction(f.kiroHome);
+    expect(journal).not.toBeNull();
+    if (!journal) throw new Error("Expected the verified pending transaction");
+    for (const name of ["profile", "launcher", "releaseState", "manifest"]) expect(journal.controls[name].before).toBeNull();
+    const plannedOwner = JSON.parse(Buffer.from(journal.controls.manifest.after, "base64").toString("utf8"));
+    expect(plannedOwner).toMatchObject({ transactionId: journal.transactionId, currentRuntime: expected.digest });
+    const candidate = JSON.parse(fs.readFileSync(path.join(base, ".transactions/candidate.json"), "utf8"));
+    expect(candidate).toMatchObject({ transactionId: journal.transactionId, manifest: { digest: expected.digest } });
+    expect((await validateBundle(path.join(base, "runtime", expected.digest))).digest).toBe(expected.digest);
+    expect(JSON.parse(fs.readFileSync(path.join(base, ".install.lock/owner.json"), "utf8")).pid).toBe(process.pid);
+    expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("recovery-required");
+    for (const file of [path.join(f.kiroHome, "agents/kiro-fabric.json"), path.join(base, "install-owner.json"), path.join(base, "bin/kiro-fabric")]) expect(fs.existsSync(file)).toBe(false);
+    // Representative data is seeded only after interruption; both refusals must
+    // preserve it alongside the real journal, generation and live-owner gate.
+    fs.writeFileSync(path.join(base, "data/fabric/cli-recovery-sentinel"), "retain failed activation data", { flag: "wx", mode: 0o600 });
+    const before = snapshotStagingScope(f.home);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const refused = jsonResult(f.run(["recover", "--yes", "--json"]));
+      expect(refused).toMatchObject({ outcome: "failed", exitCode: 6, committed: false, dataPreserved: true,
+        error: "another Kiro Fabric installation mutation is in progress" });
+      expect(refused.recovered).not.toBe(true);
+      assertStagingScopeUnchanged(before, snapshotStagingScope(f.home), `offline recovery refusal ${attempt}`);
+      expect(readTransaction(f.kiroHome)).toEqual(journal);
+      // Busy-error projection is not a global assertion that recovery is absent.
+      expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe("recovery-required");
+      expect(fs.existsSync(path.join(base, "backups"))).toBe(false);
+    }
   });
   it.each([false, true])("forwards source-home exclusions to real backup and discloses later failure (sourceRoot supplied=%s)", supplied => {
     const f = fixture(), bin = path.join(f.root, "bin"); fs.mkdirSync(bin, { mode: 0o700 }); fs.mkdirSync(f.kiroHome, { mode: 0o755 }); fs.chmodSync(f.kiroHome, 0o755);

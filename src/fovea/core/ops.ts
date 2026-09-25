@@ -1,4 +1,4 @@
-import { owned, context, privateTmpdir } from "./context.js";
+import { owned, context, privateTmpdir, coreDisplayName, coreToolName } from "./context.js";
 import { createHash } from "node:crypto";
 // Derived from pi-fovea b594483868d27b7eb37a9b185c59ce812f8a9c01 (MIT); see UPSTREAM-LICENSE.txt.
 // The four operations. Each is: resolve seeds -> diffuse -> reveal within
@@ -20,8 +20,6 @@ import { effectiveWeight, expectationResiduals, type CoChangeHistory } from "./c
 import type { EdgeEvidence, Graph, NodeKind, NodeRec } from "./types.js";
 import { ensureState, explainPathCoverage } from "./state.js";
 import type { RepoState } from "./state.js";
-export { ensureState, ensureStateBackground, evictState, getInflight, getState } from "./state.js";
-export type { RepoState } from "./state.js";
 
 export interface OpResult {
   text: string;
@@ -79,24 +77,6 @@ const extractionDetails = (state: RepoState): Record<string, unknown> => ({
   extractionGenerated: state.extraction.generated,
 });
 
-/** Compact status text from the authoritative discovery ledger. */
-export const coverageSummary = (details: Record<string, unknown>): string => {
-  const report = details.coverage as Partial<RepoState["discovery"]> | undefined;
-  const indexed = Number(report?.indexedFiles ?? details.files ?? 0);
-  if (!report) return `${indexed} indexed files`;
-  const supported = Number(report.supportedFilesSeen ?? indexed);
-  const parts = [`${indexed}/${supported} supported files selected (${report.source ?? "unknown"}/${report.recording ?? "unknown"})`];
-  if (report.unsupportedFilesSeen) parts.push(`${report.unsupportedFilesSeen} unsupported`);
-  if (report.excludedEntriesSeen) parts.push(`${report.excludedEntriesSeen} excluded`);
-  if (report.capped) parts.push(report.omittedSupported === null
-    ? `!more omitted at cap ${report.maxFiles}`
-    : `!${report.omittedSupported ?? 0} omitted at cap ${report.maxFiles}`);
-  if (report.closedBoundariesSeen) parts.push(`!${report.closedBoundariesSeen} boundaries closed`);
-  if (report.unreadableDirectoriesSeen) parts.push(`!${report.unreadableDirectoriesSeen} directories unreadable`);
-  if (report.unavailableFilesSeen) parts.push(`!${report.unavailableFilesSeen} listed files unavailable`);
-  return parts.join(", ");
-};
-
 const looksLikeRepoPath = (query: string): boolean => {
   const value = query.trim();
   return !value.startsWith("/") && (value.startsWith("@") || value.startsWith("./") || value.includes("/") || /\.[A-Za-z0-9]+$/.test(value));
@@ -104,7 +84,7 @@ const looksLikeRepoPath = (query: string): boolean => {
 
 // Seed resolution.
 
-export interface SeedSuggestion {
+interface SeedSuggestion {
   index: number;
   name: string;
   file: string;
@@ -113,7 +93,7 @@ export interface SeedSuggestion {
   score: number;
 }
 
-export interface SeedResolution {
+interface SeedResolution {
   seeds: number[];
   note: string;
   suggestions: SeedSuggestion[];
@@ -210,7 +190,7 @@ const focusScope = (options: FocusOptions): ((node: NodeRec) => boolean) => {
     (!language || node.lang.toLowerCase() === language) && (!kind || node.kind === kind);
 };
 
-export const resolveSeeds = (state: RepoState, query: string, options: FocusOptions = {}): SeedResolution => {
+const resolveSeeds = (state: RepoState, query: string, options: FocusOptions = {}): SeedResolution => {
   const g = state.graph;
   const matches = focusScope(options);
   const allows = (idx: number): boolean => matches(g.nodes[idx]!);
@@ -363,7 +343,7 @@ const seedVector = (n: number, seeds: number[]): Float64Array => {
  * whole cascade stays one diffusion. Never returns a file that is itself
  * being seeded, and old joints (age >> half-life) decay to ~0 and drop out.
  */
-export const historySeedWeights = (
+const historySeedWeights = (
   seedFiles: ReadonlySet<string>,
   _graph: Readonly<Graph>,
   history: CoChangeHistory,
@@ -429,7 +409,7 @@ export const sketch = async (root: string, budget?: number, ensured?: RepoState)
   let vmax = 0;
   for (let i = 0; i < field.length; i++) if (field[i]! > vmax) vmax = field[i]!;
   if (vmax <= 0) {
-    const text = `fovea sketch: empty graph (no supported files matched)${extractionSuffix(state)}`;
+    const text = `${coreDisplayName()} sketch: empty graph (no supported files matched)${extractionSuffix(state)}`;
     return { text, tokens: tokenEstimate(text), details: { files: 0, ...extractionDetails(state) } };
   }
 
@@ -525,7 +505,7 @@ export const sketch = async (root: string, budget?: number, ensured?: RepoState)
     ? `${productionAnchorIdx.length} production anchors · ${testAnchorIdx.length} test/fixture anchors collapsed`
     : `${productionAnchorIdx.length} anchors`;
   const fit = revealGroups(groups, {
-    header: `fovea sketch · ${g.files.length} files · ${g.nodes.length} symbols · ${anchorSummary}${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} sketch · ${g.files.length} files · ${g.nodes.length} symbols · ${anchorSummary}${extractionSuffix(state)}`,
     budget: B,
     overflowTo: overflowArtifact("sketch", `${root}|sketch`),
   });
@@ -568,8 +548,8 @@ export const focus = async (
         return `  ? ${node.name} — ${formatNodeLocation(node)} — ${node.sig}`;
       });
       const guidance = suggestions.length
-        ? "Retry fovea_focus with one of these names, a route path (/api/...), or a file path."
-        : "Try a symbol name, a route path (/api/...), or a file path. Run fovea_sketch for the map silhouette first.";
+        ? `Retry ${coreToolName('focus')} with one of these names, a route path (/api/...), or a file path.`
+        : `Try a symbol name, a route path (/api/...), or a file path. Run ${coreToolName('sketch')} for the map silhouette first.`;
       const coverageGaps = requestedCoverage
         .filter((entry) => entry.status !== "indexed")
         .map((entry) => `! ${entry.path ?? entry.requested}: ${entry.reason}.`);
@@ -578,7 +558,7 @@ export const focus = async (
         ...(state.extraction.failed.length
           ? [`! ${state.extraction.failed.length} files failed extraction; matches may be incomplete.`]
           : []),
-        `fovea focus "${query}": ${note}.`,
+        `${coreDisplayName()} focus "${query}": ${note}.`,
         ...(nearby.length ? ["Nearby symbols:", ...nearby] : []),
         guidance,
       ].join("\n");
@@ -625,7 +605,7 @@ export const focus = async (
     ? new Set(g.nodes.filter(focusScope(options)).map((node) => node.id))
     : undefined;
   const fit = revealFoveated(g, field, {
-    header: `fovea focus "${query}" · ${note}${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} focus "${query}" · ${note}${extractionSuffix(state)}`,
     include: scopedIds,
     disclosed: session.disclosed,
     seeds,
@@ -664,7 +644,7 @@ export const dwell = async (root: string, factor?: number, budget?: number, ensu
   if (session.seeds.length && (session.generation !== state.generation || (session.tk.length > 0 && session.tk[0]?.length !== g.nodes.length))) {
     const previousGeneration = session.generation || "unknown";
     clearSessionFocus(session);
-    const text = `fovea dwell: focus expired because the graph changed (${previousGeneration} → ${state.generation}). Call fovea_focus again; no stale vector was applied.`;
+    const text = `${coreDisplayName()} dwell: focus expired because the graph changed (${previousGeneration} → ${state.generation}). Call ${coreToolName('focus')} again; no stale vector was applied.`;
     return {
       text,
       tokens: tokenEstimate(text),
@@ -672,7 +652,7 @@ export const dwell = async (root: string, factor?: number, budget?: number, ensu
     };
   }
   if (!session.seeds.length) {
-    const text = "fovea dwell: no focus yet. Call fovea_focus with a symbol, feature id, route, or file first; dwell then deepens that field.";
+    const text = `${coreDisplayName()} dwell: no focus yet. Call ${coreToolName('focus')} with a symbol, feature id, route, or file first; dwell then deepens that field.`;
     return { text, tokens: tokenEstimate(text), details: { seeds: 0, ...extractionDetails(state) } };
   }
   if (!session.tk.length) {
@@ -693,7 +673,7 @@ export const dwell = async (root: string, factor?: number, budget?: number, ensu
     ? new Set(g.nodes.filter(focusScope(scope)).map((node) => node.id))
     : undefined;
   const fit = revealFoveated(g, field, {
-    header: `fovea dwell · context widened ${Number((to / from).toFixed(1))}× · new results${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} dwell · context widened ${Number((to / from).toFixed(1))}× · new results${extractionSuffix(state)}`,
     include: scopedIds,
     disclosed: session.disclosed,
     seeds: session.seeds,
@@ -844,7 +824,7 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
       .filter((entry) => entry.status !== "indexed")
       .map((entry) => `\n! ${entry.path ?? entry.requested}: ${entry.reason}.`)
       .join("");
-    const text = `fovea impact: no seed files (repo clean or paths unknown). Pass files: [...] or symbols: [...] for a what-if cascade.${gaps}`;
+    const text = `${coreDisplayName()} impact: no seed files (repo clean or paths unknown). Pass files: [...] or symbols: [...] for a what-if cascade.${gaps}`;
     const fit = revealGroups([], { header: text, budget: B });
     return {
       text: fit.text,
@@ -1052,7 +1032,7 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
   const groups: GroupLine[] = [...anchorHits, ...fileGroups];
   const seedNames = seeds.slice(0, 5).map((i) => g.nodes[i]!.file).join(", ");
   const fit = revealGroups(groups, {
-    header: `fovea impact · changed: ${seedNames}${seeds.length > 5 ? ", …" : ""} · likely review order${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} impact · changed: ${seedNames}${seeds.length > 5 ? ", …" : ""} · likely review order${extractionSuffix(state)}`,
     budget: B,
     overflowTo: overflowArtifact("impact", `${root}|${(args.files ?? []).join(",")}`),
   });
@@ -1101,6 +1081,3 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
     },
   };
 };
-
-// For tests and benches: token estimate passthrough.
-export const estimateTokens = tokenEstimate;

@@ -42,14 +42,6 @@ export interface FabricMcpConfig {
   callTimeoutMs: number;
 }
 
-export interface FabricWebConfig {
-  enabled: boolean;
-  command: string;
-  searchEngine: "google" | "bing";
-  searchTimeoutMs: number;
-  openTimeoutMs: number;
-}
-
 export interface FabricMemoryConfig {
   enabled: boolean;
   maxEntries: number;
@@ -83,16 +75,22 @@ export interface FabricTracingConfig {
   enabled: boolean;
 }
 
+type FabricPrivacyMode = "standard" | "restricted-web";
+
+interface FabricPrivacyConfig {
+  mode: FabricPrivacyMode;
+}
+
 export interface FabricConfig {
   executor: FabricExecutorConfig;
   approvals: FabricApprovalConfig;
   mcp: FabricMcpConfig;
-  web: FabricWebConfig;
   memory: FabricMemoryConfig;
   state: FabricStateConfig;
   continuity: FabricContinuityConfig;
   artifacts: FabricArtifactsConfig;
   tracing: FabricTracingConfig;
+  privacy: FabricPrivacyConfig;
 }
 
 const QUICKJS_MAX_MEMORY_LIMIT_BYTES = 0xffff_ffff;
@@ -128,13 +126,6 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     disableOAuth: true,
     callTimeoutMs: 120_000,
   },
-  web: {
-    enabled: false,
-    command: "browser-harness-js",
-    searchEngine: "google",
-    searchTimeoutMs: 45_000,
-    openTimeoutMs: 45_000,
-  },
   memory: { enabled: true, maxEntries: 128, maxValueChars: 16_000 },
   state: {
     enabled: true,
@@ -150,6 +141,9 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     ttlMs: 3_600_000,
   },
   tracing: { enabled: false },
+  // Retain the opt-in restricted-web policy after browser removal: it blocks
+  // unmediated shell/MCP paths rather than silently relaxing existing policy.
+  privacy: { mode: "standard" },
 };
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -169,8 +163,6 @@ const callTimeout = (value: unknown, fallback: number, maximum: number): number 
   integer(value, Math.min(fallback, maximum), Math.min(1_000, maximum), maximum);
 const bool = (value: unknown, fallback: boolean): boolean =>
   typeof value === "boolean" ? value : fallback;
-const boundedString = (value: unknown, fallback: string, maximum: number): string =>
-  typeof value === "string" && value.trim().length > 0 && !value.includes("\0") && value.length <= maximum ? value : fallback;
 const approval = (value: unknown, fallback: FabricApprovalMode): FabricApprovalMode =>
   value === "allow" || value === "ask" || value === "deny" ? value : fallback;
 
@@ -180,14 +172,23 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxConcurrentExecutions", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
-  web: ["enabled", "command", "searchEngine", "searchTimeoutMs", "openTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
   continuity: ["enabled", "captureFailureOutput", "maxTasks", "maxTaskBytes", "maxTotalBytes", "maxSummaryBytes"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"],
+  privacy: ["mode"],
 };
+const assertNoRemovedProviders = (root: Record<string, unknown>): void => {
+  for (const section of ["web", "browser"]) {
+    if (Object.hasOwn(root, section)) {
+      throw new Error(`configuration section '${section}' is no longer supported: Browser Harness was removed; remove the '${section}' section while preserving privacy and approval settings. Configuration was not rewritten.`);
+    }
+  }
+};
+
 const assertFileConfigSections = (root: Record<string, unknown>): void => {
+  assertNoRemovedProviders(root);
   for (const [section, raw] of Object.entries(root)) {
     if (section === "schemaVersion") continue;
     const allowed = FILE_CONFIG_KEYS[section];
@@ -252,16 +253,20 @@ export const normalizeFabricConfig = (
   defaults: FabricConfig = DEFAULT_FABRIC_CONFIG,
 ): FabricConfig => {
   const root = record(input) ?? {};
+  assertNoRemovedProviders(root);
   const executor = record(root.executor) ?? {};
   const approvals = record(root.approvals) ?? {};
   const mcp = record(root.mcp) ?? {};
-  const web = record(root.web) ?? {};
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
   const continuity = record(root.continuity) ?? {};
   const continuityDefaults = defaults.continuity ?? DEFAULT_FABRIC_CONFIG.continuity;
   const artifacts = record(root.artifacts) ?? {};
   const tracing = record(root.tracing) ?? {};
+  const privacy = record(root.privacy) ?? {};
+  if (privacy.mode !== undefined && privacy.mode !== "standard" && privacy.mode !== "restricted-web") {
+    throw new Error("config privacy.mode must be \"standard\" or \"restricted-web\"");
+  }
   const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 900_000);
   const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, timeoutMs, 900_000);
   const resultFormat = executor.resultFormat === "json" || executor.resultFormat === "text" || executor.resultFormat === "auto"
@@ -297,13 +302,6 @@ export const normalizeFabricConfig = (
       disableOAuth: bool(mcp.disableOAuth, defaults.mcp.disableOAuth),
       callTimeoutMs: callTimeout(mcp.callTimeoutMs, defaults.mcp.callTimeoutMs, maxTimeoutMs),
     },
-    web: {
-      enabled: bool(web.enabled, defaults.web.enabled),
-      command: boundedString(web.command, defaults.web.command, 4_096),
-      searchEngine: web.searchEngine === "google" || web.searchEngine === "bing" ? web.searchEngine : defaults.web.searchEngine,
-      searchTimeoutMs: callTimeout(web.searchTimeoutMs, defaults.web.searchTimeoutMs, maxTimeoutMs),
-      openTimeoutMs: callTimeout(web.openTimeoutMs, defaults.web.openTimeoutMs, maxTimeoutMs),
-    },
     memory: {
       enabled: bool(memory.enabled, defaults.memory.enabled),
       maxEntries: integer(memory.maxEntries, defaults.memory.maxEntries, 1, 128),
@@ -331,6 +329,9 @@ export const normalizeFabricConfig = (
     },
     tracing: {
       enabled: bool(tracing.enabled, defaults.tracing.enabled),
+    },
+    privacy: {
+      mode: (privacy.mode as FabricPrivacyMode | undefined) ?? defaults.privacy.mode,
     },
   };
 };

@@ -1,10 +1,16 @@
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
-import { installerSuiteFiles, requireNativeInstallerShell, runInstallerTests } from "../scripts/test-installer.mjs";
+import { INSTALLER_SUITES, installerSuiteFiles, requireNativeInstallerShell, runInstallerTests } from "../scripts/test-installer.mjs";
 
 describe("executable installer/native acceptance registry", () => {
   it("registers every orchestration seam and only existing unique tests", () => {
+    expect(Object.keys(INSTALLER_SUITES)).toEqual(["contracts", "bundle"]);
+    expect(Object.isFrozen(INSTALLER_SUITES)).toBe(true);
+    for (const [suite, names] of Object.entries(INSTALLER_SUITES)) {
+      expect(Object.isFrozen(names)).toBe(true);
+      expect(installerSuiteFiles(suite)).toEqual(names.map(name => `tests/${name}.test.ts`));
+    }
     const files = installerSuiteFiles();
     expect(new Set(files).size).toBe(files.length);
     for (const name of ["installer-configuration-backup", "installer-home", "installer-home-preparation", "installer-shell-integration", "installer-cli-contract", "install-manager-start", "install-manager-lifecycle", "launch-profile", "agent-launch-context", "managed-installation-lifecycle", "installer-directory-identity", "source-frontend-acceptance", "installer-smoke-acceptance", "qualification-failure-acceptance"]) expect(files).toContain(`tests/${name}.test.ts`);
@@ -16,6 +22,7 @@ describe("executable installer/native acceptance registry", () => {
   });
   it("lists the exact executable selection and forwards nonzero test exits", () => {
     const list = spawnSync(process.execPath, ["scripts/test-installer.mjs", "list", "contracts"], { encoding: "utf8", timeout: 10000 });
+    expect(list.error).toBeUndefined();
     expect(list.status, list.stderr).toBe(0); expect(list.stdout.trim().split("\n")).toEqual(installerSuiteFiles("contracts"));
     const run = vi.fn((_command: string, _argv: string[]) => ({ status: 19 }));
     expect(runInstallerTests(["run", "contracts"], { run })).toBe(19);

@@ -40,7 +40,6 @@ import {
   extractLiterals,
   extractSymbols,
 } from "./extract.js";
-import { assembleGraphWithIndex as assembleGraph } from "./graph.js";
 import {
   anchorScanPlan,
   anchorsFromScan,
@@ -51,9 +50,8 @@ import {
 import { aggregateFiles, harvestFile, promote, type FileSigs } from "./discover.js";
 import { makeFileSource } from "./source.js";
 import { extractProtocolAnchors } from "./protocols.js";
-import type { CallSite, Graph, ImportSite, LiteralSite, SymbolRec } from "./types.js";
+import type { CallSite, ImportSite, LiteralSite, SymbolRec } from "./types.js";
 import type { AnchorDraft } from "./anchors.js";
-import type { JoinIndex } from "./join.js";
 
 export interface FileFacts {
   sha1: string;
@@ -160,7 +158,7 @@ const supported = (f: string, routeRes?: RegExp[]): boolean => {
 const MINIFIED_LINE_CHARS = 4_000;
 const GENERATED_NAME_RE = /\.(?:min|bundle)\.(?:[cm]?js|[cm]?ts|jsx|tsx|mjs|cjs)$/i;
 
-export const isGeneratedSource = (rel: string, text: string): boolean => {
+const isGeneratedSource = (rel: string, text: string): boolean => {
   if (GENERATED_NAME_RE.test(rel)) return true;
   if (text.length < MINIFIED_LINE_CHARS) return false;
   for (let i = 0; i < text.length; ) {
@@ -394,12 +392,6 @@ export const discoverFiles = async (
   };
 };
 
-export const listFiles = async (
-  root: string,
-  routeRes?: RegExp[],
-  enrolled: ReadonlySet<string> = NO_BOUNDARIES,
-): Promise<string[]> => (await discoverFiles(root, routeRes, enrolled)).files;
-
 interface FileMeta { size: number; mtime: number }
 
 const statFile = async (root: string, rel: string): Promise<FileMeta | undefined> => {
@@ -525,6 +517,8 @@ interface CacheLine {
   generated?: (true) | undefined;
 }
 
+/** @internal Qualification-only: on-disk fact-cache path derivation asserted
+ * by batching/cache-order tests. Not a runtime/package API. */
 export const cachePathFor = (root: string): string =>
   joinPath(tmpdir(), `pi-fovea-${createHash("sha1").update(root).digest("hex").slice(0, 16)}.json`);
 
@@ -581,6 +575,8 @@ const loadDiskStore = async (root: string): Promise<FactStore | undefined> => {
 
 const persistDebounce = owned('build.ts:persistDebounce', () => new Map<string, ReturnType<typeof setTimeout>>());
 
+/** @internal Qualification-only: allow qualification tests to force a cache
+ * write without waiting on the debounce timer. Not a runtime/package API. */
 export const persistFacts = async (store: FactStore): Promise<void> => {
   const header = JSON.stringify({
     fovea: CACHE_VERSION,
@@ -1138,11 +1134,3 @@ export const refreshFacts = async (
     },
   };
 };
-
-export interface GraphAssembly { graph: Graph; joinIndex: JoinIndex }
-
-export const assembleGraphWithIndex: (
-  root: string,
-  files: string[],
-  factsMap: Map<string, FileFacts> | Record<string, FileFacts>,
-) => Promise<GraphAssembly> = assembleGraph;

@@ -25,7 +25,7 @@ jobs:
         with: { node-version: 24 }
       - name: Initialize nonqualifying safe diagnostic
         run: |
-          node --input-type=module -e 'import {qualificationFailureRecorder} from "./scripts/qualification-failure.mjs"; qualificationFailureRecorder(process.argv[1],"wrapper").flush()' "$FAILURE_OUTPUT"
+          node scripts/qualification-failure.mjs initialize "$FAILURE_OUTPUT"
       - run: npm install --global pnpm@11.20.0
       - name: Verify runner-provisioned ripgrep
         run: |
@@ -47,17 +47,13 @@ jobs:
           KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
           KIRO_CLI_PATH: ${{ vars.KIRO_CLI_PATH }}
         run: pnpm run certify:agent:real -- --archive .tmp/kiro-fabric-agent.tar.gz --commit "${{ github.sha }}" --work-root "$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/real-client.json" --failure-output "$FAILURE_OUTPUT"
-      - name: Remove isolated Kiro qualification state
+      - name: Retain private state and finalize nonqualifying diagnostics
         if: always()
         run: |
+          # No deletion or raw-tree upload. Retained/unverified private state fails
+          # this step, so qualifying assets cannot be uploaded as successful.
           target="$RUNNER_TEMP/kiro-fabric-real-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          cleanup=removed
-          case "$target" in
-            "$RUNNER_TEMP"/kiro-fabric-real-*) rm -rf -- "$target" || cleanup=failed ;;
-            *) echo "refusing unsafe cleanup target" >&2; cleanup=failed ;;
-          esac
-          node --input-type=module -e 'import fs from "node:fs"; import {finalizeQualificationDiagnostic} from "./scripts/qualification-failure.mjs"; for (const [index, file] of process.argv.slice(2).entries()) if (index === 0 || fs.existsSync(file)) finalizeQualificationDiagnostic(file, process.argv[1])' "$cleanup" "$FAILURE_OUTPUT" "$FAILURE_OUTPUT.driver.json"
-          test "$cleanup" = removed
+          node scripts/qualification-failure.mjs finalize "$FAILURE_OUTPUT" "$target"
       - name: Upload privacy-gated qualifying assets only
         if: success()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -76,5 +72,5 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
           path: |
-            ${{ env.FAILURE_OUTPUT }}
-            ${{ env.FAILURE_OUTPUT }}.driver.json
+            ${{ env.FAILURE_OUTPUT }}.sanitized.json
+            ${{ env.FAILURE_OUTPUT }}.driver.json.sanitized.json

@@ -105,7 +105,11 @@ Only after both live approvals and verified effects succeed should the local set
 ```sh
 # Rebuild after changing canonical bundled guidance; include generated source.
 pnpm run build
-pnpm exec vitest run tests/guidance.test.ts tests/strict-bootstrap.test.ts
+# Historical: this report predates the test-suite removal, so tests/guidance.test.ts
+# and tests/strict-bootstrap.test.ts no longer exist. Current local checks are
+# `pnpm run check:local` and `pnpm run verify:offline baseline|installer`.
+# Retained for the historical record only:
+# pnpm exec vitest run tests/guidance.test.ts tests/strict-bootstrap.test.ts
 bash ./install.sh --source --kiro-home "$HOME/.kiro" --yes --non-interactive --json
 "$HOME/.kiro/kiro-fabric/bin/kiro-fabric" doctor --json
 kiro-cli agent validate --path "$HOME/.kiro/agents/kiro-fabric.json"

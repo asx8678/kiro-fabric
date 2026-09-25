@@ -1,4 +1,4 @@
-import { owned } from "./context.js";
+import { owned, coreDisplayName, coreToolName } from "./context.js";
 // Derived from pi-fovea b594483868d27b7eb37a9b185c59ce812f8a9c01 (MIT); see UPSTREAM-LICENSE.txt.
 // Turn-sync is continuous repository intelligence for the active agent loop.
 // Before agent start and after each assistant turn it compares extracted facts
@@ -666,7 +666,7 @@ export const sync = async (
   const origin = provenance?.kind === "current-session"
     ? "current session"
     : provenance?.kind === "other-session"
-      ? "another Fovea-enabled session"
+      ? `another ${coreDisplayName('Fovea')}-enabled session`
       : provenance?.kind === "mixed"
         ? "mixed sessions or mutation paths"
         : "unattributed mutation path";
@@ -722,8 +722,8 @@ export const sync = async (
   }
   if (!embedded && (!pushFocus || focusTarget)) {
     lines.push(focusTarget
-      ? `Next: fovea_focus ${JSON.stringify(focusTarget)} to see what it now connects to.`
-      : "Next: fovea_sketch for the updated silhouette.");
+      ? `Next: ${coreToolName('focus')} ${JSON.stringify(focusTarget)} to see what it now connects to.`
+      : `Next: ${coreToolName('sketch')} for the updated silhouette.`);
   }
   lines.push(actionLine);
   while (lines.length > 3 && Math.ceil(lines.join("\n").length / 4) > params.budget) {

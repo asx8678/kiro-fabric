@@ -70,6 +70,7 @@ class ReviewSourceQuotaError extends Error {}
 export class ReviewProvider implements FabricProvider {
   readonly name = "review";
   readonly description = "Optional ephemeral review ledger; structural evidence accounting, not a semantic judge";
+  readonly requirements = { verifiedWorkspace: true, settlement: true };
   readonly #root: string;
   readonly #reader: (path: string, context: FabricInvocationContext) => string;
   readonly #now: () => number;

@@ -8,9 +8,14 @@ const harness = vi.hoisted(() => ({
   executeResult: undefined as any,
   artifactError: undefined as Error | undefined,
   artifactWrites: [] as string[],
+  artifactRead: undefined as undefined | ((id: string) => string),
   prepareMutation: undefined as undefined | ((request: any, signal?: AbortSignal) => Promise<any>),
   commits: [] as any[],
   identity: "<unbound>",
+  bound: false,
+  bindingRootId: "root-1",
+  artifactRevokes: 0,
+  artifactCloses: 0,
   runtimeCreates: 0,
   prepareRuntime: undefined as undefined | (() => Promise<any>),
   runtimeCloses: 0,
@@ -65,6 +70,52 @@ vi.mock("../src/kiro/power/data-paths.js", async (importOriginal) => ({
   prepareKiroPowerDataPaths: (root: string) => ({ root, config: root, configFile: `${root}/config.json`, mcpConfig: `${root}/mcp.json`, projects: `${root}/projects`, artifacts: `${root}/artifacts` }),
   prepareKiroPowerProjectPaths: () => ({ artifacts: "/artifacts", memory: "/memory", memoryNamespace: "ns", state: "/state" }),
 }));
+// The host owns retention independently of the workspace runtime. Replace the
+// real lazy owner (which would create a private store under the test's /data
+// root) with an in-memory owner exposing the exact write/read/has/revoke/close
+// surface. This keeps the old /data artifact mock from reaching the host
+// filesystem while still exercising the real projection/retention boundary.
+vi.mock("../src/kiro/artifact-owner.js", () => ({
+  createKiroArtifactOwner: (_loadOptions: () => unknown) => {
+    const files = new Map<string, string>();
+    let counter = 0, revoked = false;
+    const assertOpen = () => { if (revoked) throw new Error("artifact owner is retired"); };
+    harness.artifactRead = id => {
+      assertOpen();
+      const content = files.get(id);
+      if (content === undefined) throw new Error("artifact is unavailable or expired");
+      return content;
+    };
+    const unavailable = (): never => { throw new Error("artifact is unavailable or expired"); };
+    return {
+      access: {
+        read(id: string, offset = 0, limit = 12_000) {
+          assertOpen();
+          const content = files.get(id);
+          if (content === undefined) return unavailable();
+          const text = content.slice(offset, offset + limit);
+          return { id, text, offset, nextOffset: offset + text.length, totalChars: content.length, done: offset + text.length >= content.length };
+        },
+        checkpoint(content: string) {
+          assertOpen();
+          const id = `ka_${(++counter).toString(16).padStart(48, "0")}`;
+          files.set(id, content);
+          return id;
+        },
+      },
+      write(content: string, _protectedIds: readonly string[] = []) {
+        assertOpen();
+        harness.artifactWrites.push(content);
+        if (harness.artifactError) throw harness.artifactError;
+        files.set("artifact-safe", content);
+        return "artifact-safe";
+      },
+      has(id: string) { return !revoked && files.has(id); },
+      revoke() { revoked = true; harness.artifactRevokes += 1; },
+      close() { revoked = true; harness.artifactCloses += 1; return Promise.resolve(); },
+    };
+  },
+}));
 vi.mock("../src/kiro/power/workspace-binding.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/kiro/power/workspace-binding.js")>();
   return { ...actual, KiroPowerWorkspaceBinding: class {
@@ -72,10 +123,10 @@ vi.mock("../src/kiro/power/workspace-binding.js", async (importOriginal) => {
     bindingSource() { return undefined; }
     workspaceObservation() { return { status: "unbound" as const }; }
     updateClientRoots() {}
-    status() { return { status: "unbound" as const, requiresSelection: false }; }
+    status() { return harness.bound ? { status: "bound" as const, rootId: harness.bindingRootId } : { status: "unbound" as const, requiresSelection: false }; }
     list() { return { ...this.status(), roots: [] }; }
     prepareMutation(request: any, signal?: AbortSignal) { return harness.prepareMutation?.(request, signal) ?? Promise.resolve(request); }
-    commitMutation(mutation: any) { harness.commits.push(mutation); harness.identity = JSON.stringify(mutation); return { status: "committed" }; }
+    commitMutation(mutation: any) { harness.commits.push(mutation); harness.identity = JSON.stringify(mutation); harness.bound = mutation.action !== "detach"; return { status: "committed" }; }
   } };
 });
 
@@ -114,6 +165,7 @@ beforeEach(() => {
   harness.executeResult = baseResult("ok"); harness.artifactError = undefined; harness.artifactWrites.length = 0;
   harness.prepareMutation = undefined; harness.commits.length = 0; harness.identity = "<unbound>";
   harness.runtimeCreates = 0; harness.prepareRuntime = undefined; harness.runtimeCloses = 0; harness.temporarilyUnavailable = false;
+  harness.bound = false; harness.artifactRevokes = 0; harness.artifactCloses = 0; harness.artifactRead = undefined;
   harness.retirements.length = 0;
 });
 afterEach(() => vi.restoreAllMocks());
@@ -140,12 +192,27 @@ describe("outer-host catalog authorization and synchronous revocation", () => {
     if(cause==="close"){
       transition=f.server.close();
       expect(f.instance.service.invalidateCatalogs).toHaveBeenCalledTimes(1);
-    } else if(cause==="workspace-switch") transition=call(f.handler,"fabric_workspace",{action:"detach"});
+    } else if(cause==="workspace-switch") {
+      // A genuine bound -> detach transition changes identity and must revoke.
+      harness.bound = true;
+      transition=call(f.handler,"fabric_workspace",{action:"detach"});
+    }
     else {harness.temporarilyUnavailable=true;transition=harness.handlers.get(RootsListChangedNotificationSchema)!({});}
     await vi.waitFor(()=>expect(f.instance.service.invalidateCatalogs).toHaveBeenCalled());
     expect(harness.runtimeCloses).toBe(0);
     held.resolve(baseResult("settled")); await execution; await transition;
     expect(harness.runtimeCloses).toBe(1); await f.server.close();
+  });
+
+  it("does not revoke catalogs for a detach that keeps the binding identity", async () => {
+    const f = await create();
+    // Unbound -> detach leaves workspace identity provably unchanged.
+    const response = await call(f.handler, "fabric_workspace", { action: "detach" });
+    expect(response.isError).toBeUndefined();
+    expect(f.instance.service.invalidateCatalogs).not.toHaveBeenCalled();
+    expect(harness.runtimeCloses).toBe(0);
+    expect(harness.commits).toEqual([{ action: "detach" }]);
+    await f.server.close();
   });
 });
 
@@ -214,6 +281,46 @@ describe("actual MCP CallTool handler projection behavior", () => {
     expect(projections()[0]!.data).toEqual({ visibleChars: response.content[0].text.length, visibleBytes: Buffer.byteLength(response.content[0].text), isError: retentionFails, overflowed: true, artifactRetained: retained });
     expect(JSON.stringify(harness.events)).not.toMatch(/秘密|PRIVATE|return secret/);
     await server.close();
+  });
+
+  it("retains overflow output through the host artifact owner, not the workspace runtime", async () => {
+    const { server, handler, instance } = await create();
+    const runtimeWrite = vi.spyOn(instance.artifacts, "write");
+    harness.executeResult = baseResult("x".repeat(200));
+    const response = await call(handler, "fabric_exec", { code: "return 1", resultFormat: "text" });
+    expect(response.structuredContent).toMatchObject({ executionStatus: "succeeded", deliveryStatus: "artifact", retryProgram: false, artifactId: "artifact-safe" });
+    // Exactly one host-owner write; the replaceable runtime never retains output.
+    expect(harness.artifactWrites).toHaveLength(1);
+    expect(runtimeWrite).not.toHaveBeenCalled();
+    await server.close();
+  });
+
+  it("keeps host-owned retained artifacts across a workspace switch and retires the owner with the server", async () => {
+    const created: ReturnType<typeof runtime>[] = [];
+    harness.prepareRuntime = async () => { const next = runtime(); created.push(next); return next; };
+    const f = await create(false);
+    harness.bound = true;
+    harness.executeResult = baseResult("z".repeat(200));
+    const first = await call(f.handler, "fabric_exec", { code: "return 1", resultFormat: "text" });
+    expect(first.structuredContent).toMatchObject({ deliveryStatus: "artifact", artifactId: "artifact-safe" });
+    expect(harness.artifactWrites).toHaveLength(1);
+    // A genuine bound -> detach switch retires the runtime, not the host owner.
+    const switched = await call(f.handler, "fabric_workspace", { action: "detach" });
+    expect(switched.isError).toBeUndefined();
+    expect(harness.runtimeCloses).toBe(1);
+    expect(harness.artifactCloses).toBe(0);
+    expect(harness.artifactRevokes).toBe(0);
+    expect(harness.artifactRead!("artifact-safe")).toBe("z".repeat(200));
+    // The owner still acquires after the workspace runtime was replaced.
+    harness.executeResult = baseResult("q".repeat(200));
+    const second = await call(f.handler, "fabric_exec", { code: "return 2", resultFormat: "text" });
+    expect(second.structuredContent).toMatchObject({ deliveryStatus: "artifact", artifactId: "artifact-safe" });
+    expect(harness.artifactWrites).toHaveLength(2);
+    expect(created).toHaveLength(2);
+    expect(created[0]).not.toBe(created[1]);
+    await f.server.close();
+    expect(harness.artifactCloses).toBe(1);
+    expect(() => harness.artifactRead!("artifact-safe")).toThrow("artifact owner is retired");
   });
 });
 

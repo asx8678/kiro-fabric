@@ -79,7 +79,7 @@ stays unavailable. Full native Kiro integration and public release remain
   Old management cannot inspect a retained schema-2 generation after rollback;
   use trusted new management code, without deleting newer user data.
 - **Platform and final release verification:** current work/results are tracked
-  in [remaining-work.md](remaining-work.md). No macOS, signed public-release,
+  in the remaining-work note (archived in Git history). No macOS, signed public-release,
   native-TUI or complete-parity qualification is implied by source tests.
 
 ## Historical commands and results (conversation-control revision)

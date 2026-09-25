@@ -60,7 +60,7 @@ export interface KiroMemoryBinding<T extends JsonValue = JsonValue> {
 }
 
 /** Publication succeeded, but interruption or owned-lock cleanup prevented a reliable acknowledgement. */
-export class KiroMemoryCommitAcknowledgementError extends Error {
+class KiroMemoryCommitAcknowledgementError extends Error {
   readonly committed = true;
   readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { readonly version: 1; readonly operation: "set" | "delete" };
   constructor(readonly operation: "set" | "delete", readonly key: string, options: ErrorOptions) {

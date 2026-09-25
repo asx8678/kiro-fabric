@@ -19,7 +19,7 @@ For bounded ranges, `local.read` returns whole lines. `truncated:true` may only 
 
 ## Discover then read
 
-For standard/review code tasks, apply the standing Fovea workflow first; this recipe fills unresolved source/coverage gaps or handles unavailable analysis. Known paths can use focusRead or readMany after navigation; do not repeat current navigation merely to run a recipe. When the search term and context size are already justified, locate and read matching windows in one program. Merge overlaps and preserve search scope; zero hits is only absence within that scope. Yield for model judgment when selecting causes or fixes, not merely to copy paths into a read. readMany defaults to 32000 aggregate JSON chars (maxChars up to 40000, clamped to runtime budgets); lower it when also returning substantial search results. Never concatenate continuation pages past the visible cap.
+For standard/review code tasks, apply the standing Navigator workflow first; this recipe fills unresolved source/coverage gaps or handles unavailable analysis. Known paths can use focusRead or readMany after navigation; do not repeat current navigation merely to run a recipe. When the search term and context size are already justified, locate and read matching windows in one program. Merge overlaps and preserve search scope; zero hits is only absence within that scope. Yield for model judgment when selecting causes or fixes, not merely to copy paths into a read. readMany defaults to 32000 aggregate JSON chars (maxChars up to 40000, clamped to runtime budgets); lower it when also returning substantial search results. Never concatenate continuation pages past the visible cap.
 
 ```ts
 // Recipe: discover then read without a model round trip

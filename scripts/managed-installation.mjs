@@ -8,8 +8,9 @@ import { checkReleaseAdmission } from './release-trust.mjs';
 import { generateAgentProfile } from './agent-profile.mjs';
 import { readGenerationProfiles, retainGenerationProfile } from './installer-profile-store.mjs';
 import { captureDirectoryIdentity, assertDirectoryIdentity, validateDirectoryIdentity } from './installer-directory-identity.mjs';
-import { acquireInstallationLock, inspectInstallationLock } from './installer-lock.mjs';
+import { inspectInstallationLock, acquireInstallationExclusion } from './installer-lock.mjs';
 import { transactionPaths, readControl, readTransaction, syncDirectory, recoverInstallTransaction, activateInstallTransaction } from './install-transaction.mjs';
+import { readDirectoryBoundedSync } from './filesystem-boundary.mjs';
 
 const HASH=/^[a-f0-9]{64}$/, TX=/^[a-f0-9]{32}$/;
 const OWNER='kiro-fabric-agent-user-install';
@@ -18,6 +19,8 @@ const digest=value=>value===null?null:s.hash(value);
 const exact=(v,keys)=>{if(!v||Object.getPrototypeOf(v)!==Object.prototype||Object.keys(v).sort().join()!==[...keys].sort().join())throw Error('invalid ownership fields');};
 const mkdir=dir=>s.ensureDirectory(dir,{private:true,parentPrivate:false},[]);
 function home(input,opts={}) { return resolveKiroHome(opts.env??{},opts.userHome??homedir(),{kiroHome:input}); }
+/** @internal Live launcher generator, exported for launcher byte-identity oracles only.
+ * It remains the exact generator committed during activation; no default changed. */
 export function completeGenerationLauncher(name) {
  if(!HASH.test(name))throw Error('invalid launcher generation');
  return Buffer.from('#!/bin/sh\nset -eu\nunset NODE_OPTIONS NODE_PATH NODE_REPL_EXTERNAL_MODULE NODE_EXTRA_CA_CERTS NODE_TLS_REJECT_UNAUTHORIZED NODE_V8_COVERAGE NODE_REDIRECT_WARNINGS NODE_COMPILE_CACHE OPENSSL_CONF OPENSSL_MODULES SSL_CERT_FILE SSL_CERT_DIR LD_PRELOAD LD_LIBRARY_PATH LD_AUDIT LD_DEBUG LD_DEBUG_OUTPUT LD_PROFILE LD_ORIGIN_PATH DYLD_INSERT_LIBRARIES DYLD_LIBRARY_PATH DYLD_FRAMEWORK_PATH DYLD_FALLBACK_LIBRARY_PATH DYLD_FALLBACK_FRAMEWORK_PATH DYLD_ROOT_PATH DYLD_IMAGE_SUFFIX DYLD_VERSIONED_LIBRARY_PATH DYLD_VERSIONED_FRAMEWORK_PATH ENV BASH_ENV CDPATH\ncase "$0" in */*) bindir=${0%/*} ;; *) printf "%s\n" "invoke the installed launcher by its exact path" >&2; exit 1 ;; esac\nbase=$(CDPATH= cd -P -- "$bindir/.." && pwd -P)\nexec "$base/runtime/'+name+'/tools/node" "$base/runtime/'+name+'/manager/install-manager.mjs" "$@"\n');
@@ -48,15 +51,20 @@ function validateOwner(o,p,kiroHome) {
  if(!seen.has(o.currentRuntime)||(o.previousRuntime!==null&&!seen.has(o.previousRuntime)))throw Error('missing active generation');
  return o;
 }
+// Legacy Agent ownership schema 3 is distinct from obsolete bundle schema 3.
+// Authenticate and preserve these inert shared resources; never load or stage them.
 function legacyNames(legacy,p) {
  if(!legacy)return [];
  exact(legacy,['manifestBase64','evidence']);
  const raw=Buffer.from(legacy.manifestBase64,'base64');if(raw.toString('base64')!==legacy.manifestBase64||raw.length>4*1024*1024)throw Error('invalid legacy evidence');
- const m=JSON.parse(raw.toString());if(m.owner!==OWNER||![1,2].includes(m.schemaVersion))throw Error('invalid legacy owner');
+ const m=JSON.parse(raw.toString());if(m.owner!==OWNER||![1,2,3].includes(m.schemaVersion))throw Error('invalid legacy owner');
  const e=legacy.evidence;
  if(m.schemaVersion===1){exact(e,['skillRoot','skillTree','runtimeRoot','runtimeTree']);if(e.skillRoot!==path.join(p.skills,'fabric-exec')||e.runtimeRoot!==path.join(p.runtime,m.packageDigest)||!HASH.test(m.packageDigest))throw Error('invalid legacy paths');s.assertSameTree(e.skillRoot,e.skillTree,'preserved legacy skill');s.assertSameTree(e.runtimeRoot,e.runtimeTree,'preserved uncertain legacy runtime');return [m.packageDigest];}
- exact(e,['skill','runtimeGenerations']);if(JSON.stringify(e.skill)!==JSON.stringify(m.skill)||JSON.stringify(e.runtimeGenerations)!==JSON.stringify(m.runtimeGenerations)||!Array.isArray(e.runtimeGenerations)||e.runtimeGenerations.length>256)throw Error('invalid legacy inventories');
- s.assertSameTree(path.join(p.skills,'fabric-exec'),e.skill,'legacy skill');for(const r of e.runtimeGenerations){if(!HASH.test(r.name))throw Error('invalid legacy generation');s.assertSameTree(path.join(p.runtime,r.name),r.tree,'legacy runtime');}return e.runtimeGenerations.map(r=>r.name);
+ exact(e,m.schemaVersion===3?['skill','runtimeGenerations','browser']:['skill','runtimeGenerations']);if(JSON.stringify(e.skill)!==JSON.stringify(m.skill)||JSON.stringify(e.runtimeGenerations)!==JSON.stringify(m.runtimeGenerations)||!Array.isArray(e.runtimeGenerations)||e.runtimeGenerations.length>256)throw Error('invalid legacy inventories');
+ if(m.schemaVersion===3&&JSON.stringify(e.browser)!==JSON.stringify(m.browser))throw Error('invalid legacy browser inventories');
+ s.assertSameTree(path.join(p.skills,'fabric-exec'),e.skill,'legacy skill');for(const r of e.runtimeGenerations){if(!HASH.test(r.name))throw Error('invalid legacy generation');s.assertSameTree(path.join(p.runtime,r.name),r.tree,'legacy runtime');}
+ if(m.schemaVersion===3&&e.browser){s.assertSameTree(path.join(p.skills,'browser-harness'),e.browser.skill,'legacy browser skill');s.assertSameTree(path.join(p.base,'docs/browser-evidence'),e.browser.evidence,'legacy browser evidence');}
+ return e.runtimeGenerations.map(r=>r.name);
 }
 function releaseState(p,owner,raw=readControl(p.releaseState)) {
  if(digest(raw)!==owner.releaseStateSha256)throw Error('modified release state');if(!raw)return null;
@@ -72,7 +80,7 @@ export async function inspectCompleteInstallation(kiroHome,{verifyGenerations=tr
  if(s.lstat(p.journal)||s.lstat(path.join(p.base,'.transactions/candidate.json')))return {owner:null,paths:p,generations:[],status:'recovery-required'};
  const raw=readControl(p.manifest);
  if(!raw){if(s.lstat(p.profile)||s.lstat(p.launcher)||s.lstat(p.releaseState)||s.lstat(path.join(p.base,'profile-snapshots'))||(s.lstat(p.runtime)&&fs.readdirSync(p.runtime).length))throw Error('unowned installation targets');return {owner:null,paths:p,generations:[],status:'absent'};}
- const parsed=JSON.parse(raw.toString());if(parsed.schemaVersion!==3){const legacy=s.readLegacyInstallation(kiroHome);return {owner:null,paths:p,generations:[],status:'legacy',legacy};}
+ const parsed=JSON.parse(raw.toString());if(parsed.schemaVersion!==3||!Object.hasOwn(parsed,'installationId')){const legacy=s.readLegacyInstallation(kiroHome);return {owner:null,paths:p,generations:[],status:'legacy',legacy};}
  const owner=validateOwner(parsed,p,kiroHome),oldNames=legacyNames(owner.legacy,p);
  if(!raw.equals(bytes(owner)))throw Error('noncanonical ownership bytes');
  for(const dir of [p.base,p.runtime,p.data,path.join(p.data,'fabric'),path.dirname(p.launcher),path.dirname(p.journal)]){s.assertSafeDirectory(dir,{private:true});if((fs.lstatSync(dir).mode&0o7777)!==0o700)throw Error('managed directory mode must be 0700');}
@@ -106,7 +114,29 @@ function discardCandidateTree(root,m) {
  if(!s.lstat(root))return;s.assertSafeDirectory(root,{private:true});
  const expected=new Map([...m.inventory,{path:'bundle-manifest.json',mode:0o600,size:Buffer.byteLength(canonical(m)+'\n'),sha256:s.hash(canonical(m)+'\n')}].map(r=>[r.path,r]));
  const files=[],dirs=[];
- const walk=(rel)=>{const dir=path.join(root,rel);s.assertSafeDirectory(dir,{private:true});if((fs.lstatSync(dir).mode&0o7777)!==0o700)throw Error('candidate directory mode');for(const n of fs.readdirSync(dir)){const r=rel?rel+'/'+n:n,target=path.join(root,r),st=s.lstat(target);if(st.isDirectory()&&!st.isSymbolicLink()){if(![...expected.keys()].some(candidateName=>candidateName.startsWith(r+'/')))throw Error('foreign candidate directory');walk(r);}else{const e=expected.get(r);if(!e||!st.isFile()||st.isSymbolicLink()||st.nlink!==1||(st.mode&0o7777)!==e.mode||st.size!==e.size||s.hash(fs.readFileSync(target))!==e.sha256)throw Error('recovery-required: conflicting candidate bytes');s.assertSafeFile(target);files.push(target);}}dirs.push(dir);};
+ // A manifest proves observed contents, not permission to remove a repository.
+ // Complete this bounded preflight before the first unlink/rmdir. Preserve the
+ // candidate and marker on refusal; do not rewrite the recorded inventory.
+ const repositoryRefusal=()=>{throw Error('recovery-required: repository-bearing candidate preserved: '+root);};
+ if(path.resolve(root).split(path.sep).some(part=>part.toLowerCase()==='.git'))repositoryRefusal();
+ const walk=(rel)=>{
+  const dir=path.join(root,rel);s.assertSafeDirectory(dir,{private:true});
+  if((fs.lstatSync(dir).mode&0o7777)!==0o700)throw Error('candidate directory mode');
+  const names=readDirectoryBoundedSync(dir,expected.size+1),folded=new Set(names.map(n=>n.toLowerCase()));
+  if(folded.has('.git')||(folded.has('head')&&folded.has('objects')&&(folded.has('refs')||folded.has('packed-refs'))))repositoryRefusal();
+  for(const n of names){
+   const r=rel?rel+'/'+n:n,target=path.join(root,r),st=s.lstat(target);
+   if(st.isDirectory()&&!st.isSymbolicLink()){
+    if(![...expected.keys()].some(candidateName=>candidateName.startsWith(r+'/')))throw Error('foreign candidate directory');
+    walk(r);
+   }else{
+    const e=expected.get(r);
+    if(!e||!st.isFile()||st.isSymbolicLink()||st.nlink!==1||(st.mode&0o7777)!==e.mode||st.size!==e.size||s.hash(fs.readFileSync(target))!==e.sha256)throw Error('recovery-required: conflicting candidate bytes');
+    s.assertSafeFile(target);files.push(target);
+   }
+  }
+  dirs.push(dir);
+ };
  walk('');for(const f of files)fs.unlinkSync(f);for(const d of dirs)fs.rmdirSync(d);syncDirectory(path.dirname(root));
 }
 async function recoverCandidate(p) {
@@ -131,6 +161,8 @@ async function publishGeneration(bundle,p,transactionId,onPhase,validateCandidat
  await onPhase('before-copy:'+r.path);const source=path.join(bundle.root,r.path),destination=path.join(stage,r.path);mkdir(path.dirname(destination));const data=await readRegular(source,r.size);if(data.length!==r.size||s.hash(data)!==r.sha256)throw Error('source changed while copying');fs.writeFileSync(destination,data,{flag:'wx',mode:r.mode});await onPhase('copied-bytes:'+r.path);const fd=fs.openSync(destination,'r');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}syncDirectory(path.dirname(destination));await onPhase('copied:'+r.path);
  }
  await validateBundle(stage);await validateBundle(bundle.root);
+ // Recheck generation-bound profile paths before candidate validation.
+ validateGenerationProfile(p,bundle.digest,profile);
  await onPhase('before-candidate-validation');await validateCandidate(stage,{profile:JSON.parse(profile.toString()),kiroHome:path.dirname(p.base),dataRoot:p.data});await onPhase('candidate-validated');
  await validateBundle(stage);await validateBundle(bundle.root);
  if(retained){await recoverCandidate(p);return await validateBundle(bundle.root);}
@@ -147,7 +179,7 @@ function validateRecoveryEvidence(kiroHome,p) {
  const known=new Set();let legacy=false;
  const verify=(raw,profile,launcher,trust)=>{
   if(!raw)return;
-  const o=JSON.parse(raw.toString());if(o.schemaVersion!==3){legacy=true;return;}
+  const o=JSON.parse(raw.toString());if(o.schemaVersion!==3||!Object.hasOwn(o,'installationId')){legacy=true;return;}
   validateOwner(o,p,kiroHome);
   if(!raw.equals(bytes(o))||digest(profile)!==o.profileSha256||digest(launcher)!==o.launcherSha256||o.launcherSha256!==s.hash(completeGenerationLauncher(o.currentRuntime)))throw Error('recovery-required: invalid generation control binding');
   if(o.status==='active')validateGenerationProfile(p,o.currentRuntime,profile);
@@ -161,9 +193,21 @@ function validateRecoveryEvidence(kiroHome,p) {
    verify(control('manifest'),control('profile'),control('launcher'),control('releaseState'));
   }
  }else verify(current,readControl(p.profile),readControl(p.launcher,0o700),readControl(p.releaseState));
- if(selected?.schemaVersion===3)readGenerationProfiles(p,validateOwner(selected,p,kiroHome),{validateOwner,validateProfile:validateGenerationProfile});
+ if(selected?.schemaVersion===3&&Object.hasOwn(selected,'installationId'))readGenerationProfiles(p,validateOwner(selected,p,kiroHome),{validateOwner,validateProfile:validateGenerationProfile});
  if(candidate){known.add(candidate.manifest.digest);known.add('.candidate-'+candidate.transactionId);}
  if(!legacy&&s.lstat(p.runtime))for(const name of fs.readdirSync(p.runtime))if(!known.has(name))throw Error('recovery-required: foreign runtime evidence preserved');
+}
+// Preserve both error identities and structured recovery fields without letting
+// an enumerable Error.name/cause/errors overwrite the aggregate's envelope.
+function combineInstallationFailures(failures, message) {
+ const result = new AggregateError(failures, message, { cause: failures[0] });
+ for (const failure of failures) {
+  if (!failure || typeof failure !== 'object') continue;
+  for (const [key, value] of Object.entries(failure)) {
+   if (!['name', 'message', 'stack', 'cause', 'errors'].includes(key)) result[key] = value;
+  }
+ }
+ return result;
 }
 async function mutate(kiroHome,opts,action,{initialize=true}={}) {
  kiroHome=home(kiroHome,opts);const p=transactionPaths(kiroHome),onPhase=opts.onPhase??(()=>{}),transactionId=randomBytes(16).toString('hex');
@@ -173,7 +217,8 @@ async function mutate(kiroHome,opts,action,{initialize=true}={}) {
  if(initialize){mkdir(kiroHome);mkdir(p.base);}else{s.assertSafeDirectory(p.base,{private:true});}
  const lockEvidence=inspectInstallationLock(p.base);
  const recover=preliminary.status!=='absent'||(lockEvidence.status==='stale'&&TX.test(lockEvidence.owner?.transactionId));
- const release=acquireInstallationLock(p.base,{recover,transactionId,onPhase});
+ const release=acquireInstallationExclusion(p.base,{recover,transactionId,onPhase});
+ let retainGate=false,operationFailed=false,operationError;
  try {
   validateRecoveryEvidence(kiroHome,p);
   const transaction=await recoverInstallTransaction(kiroHome,{onPhase}),candidate=await recoverCandidate(p);
@@ -184,25 +229,43 @@ async function mutate(kiroHome,opts,action,{initialize=true}={}) {
   return await action(state,{p,transactionId,onPhase,kiroHome,recovery});
  }
  catch(error){
+  operationFailed=true;operationError=error;
   if(JSON.parse(readControl(p.manifest)?.toString()??'null')?.transactionId===transactionId){error.committed=true;if(error.recoveryRequired===undefined)error.recoveryRequired=true;}
   else if(error.committed===undefined)error.committed=false;
   // A failed candidate can leave valid replay evidence before owner publication.
   // Report that state even though activation has not committed. Never erase it here.
-  if(s.lstat(p.journal)||s.lstat(candidatePath(p)))error.recoveryRequired=true;
+  if(s.lstat(p.journal)||s.lstat(candidatePath(p))){error.recoveryRequired=true;retainGate=true;}
   throw error;
  }
- finally {try{release();}catch(error){error.committed=JSON.parse(readControl(p.manifest)?.toString()??'null')?.transactionId===transactionId;error.recoveryRequired=true;throw error;}}
+ finally {
+  try { release({retainLegacyGate:retainGate}); }
+  catch(cleanup){
+   // A cleanup failure must not replace the activation failure or its recovery
+   // metadata. Keep the actual errors (and their causes) available to callers.
+   const error=operationFailed
+    ? combineInstallationFailures([operationError,cleanup],'Installation operation and lock release failed')
+    : cleanup;
+   try { error.committed=JSON.parse(readControl(p.manifest)?.toString()??'null')?.transactionId===transactionId; }
+   catch(observation){
+    // Losing the ownership observation cannot erase either failure or imply
+    // rollback. Preserve the previous commit status, if one was established.
+    throw Object.assign(combineInstallationFailures([error,observation],'Installation failure and commit observation failed'),{recoveryRequired:true});
+   }
+   error.recoveryRequired=true;
+   throw error;
+  }
+ }
 }
 function nextOwner(state,p,kiroHome,transactionId,name,manifestSha256) {
  const old=state.owner,records=old?[...old.runtimeGenerations]:[];if(!records.some(r=>r.name===name)){if(records.length>=256)throw Error('generation capacity reached; nothing removed');records.push({name,manifestSha256});}
  const o={schemaVersion:3,owner:OWNER,installationId:old?.installationId??randomBytes(16).toString('hex'),kiroHome,dataRoot:p.data,status:'active',currentRuntime:name,previousRuntime:old?(old.currentRuntime===name?old.previousRuntime:old.currentRuntime):null,runtimeGenerations:records,profileSha256:s.hash(bytes(profileFor(p,name))),launcherSha256:s.hash(completeGenerationLauncher(name)),releaseStateSha256:old?.releaseStateSha256??null,transactionId};
  if(old?.legacy)o.legacy=old.legacy;
- if(state.legacy){const r=state.legacy;o.legacy={manifestBase64:r.bytes.toString('base64'),evidence:r.legacy??{skill:r.manifest.skill,runtimeGenerations:r.manifest.runtimeGenerations}};}
+ if(state.legacy){const r=state.legacy;o.legacy={manifestBase64:r.bytes.toString('base64'),evidence:r.legacy??{skill:r.manifest.skill,runtimeGenerations:r.manifest.runtimeGenerations,...(r.manifest.schemaVersion===3?{browser:r.manifest.browser}: {})}};}
  return o;
 }
 function resultAliases(owner,p,noop=false) {
  const manifest=owner?JSON.parse(readControl(path.join(p.runtime,owner.currentRuntime,'bundle-manifest.json')).toString()):null;
- return {outcome:noop?'noop':owner?.status==='retired'?'retired':'activated',version:manifest?.version??null,generation:owner?.currentRuntime??null,dataRoot:p.data,warnings:owner?.legacy?['Legacy runtime and shared skills remain at their exact paths; legacy starts cannot be fenced.']:[]};
+ return {outcome:noop?'noop':owner?.status==='retired'?'retired':'activated',version:manifest?.version??null,generation:owner?.currentRuntime??null,dataRoot:p.data,warnings:owner?.legacy?['Legacy runtime and shared resources remain at their exact paths; legacy starts cannot be fenced.']:[]};
 }
 async function commit(state,ctx,o,trust,profile=o.status==='retired'?null:bytes(profileFor(ctx.p,o.currentRuntime))) {
  const {p,transactionId,onPhase,kiroHome}=ctx;

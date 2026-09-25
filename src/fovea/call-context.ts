@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { FoveaOutbox, type FoveaDeliveryClaim } from "./delivery.js";
 
-export const FOVEA_CALL_COLD_MS = 6_000;
+const FOVEA_CALL_COLD_MS = 6_000;
 export const FOVEA_CALL_WARM_MS = 750;
 // Leave room for the worker's bounded cancellation cleanup and mandatory output.
 export const FOVEA_CALL_RESERVE_MS = 2_000;

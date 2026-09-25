@@ -420,12 +420,3 @@ export class FabricCompilerPool {
     })();
   }
 }
-
-// Standalone callers retain the existing API, with independent bounded ownership.
-let standaloneCompilerPool = new FabricCompilerPool();
-export const shutdownFabricCompilerWorker = async (): Promise<void> => {
-  const previous = standaloneCompilerPool;
-  standaloneCompilerPool = new FabricCompilerPool();
-  await previous.close();
-};
-export const typeCheckFabricCodeInWorker = (request: FabricCompilerRequest, options: FabricCompilerWorkerOptions = {}): Promise<FabricTypeCheckResult> => standaloneCompilerPool.check(request, options);

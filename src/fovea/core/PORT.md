@@ -17,6 +17,25 @@ parser resolution, environment configuration, or shared temporary caches.
 `CoreContext.artifactLabel` is an explicit rendering dependency: the direct
 core default retains original artifact labels for exact differential testing;
 production engine injects retained-result labels and returns bounded full text.
+`CoreContext.displayName` and `toolName` similarly inject Navigator and `repo.*`
+labels before budget fitting. Direct-core defaults preserve upstream output for
+exact differential testing. Internal-only helpers are private; obsolete wrappers
+(`hasAstGrep`, `listFiles`, the build-module graph alias and ops-module state/token
+re-exports) were removed after tracing native callers. Their active async/parser,
+discovery, graph, state and rendering implementations remain unchanged. The
+uncalled `coverageSummary` formatter was also removed; active coverage reporting
+(`coverageDetails` / `extractionSuffix`) remains intact.
+
+### Dead-code analysis boundary
+
+Knip follows production engine imports rather than treating every core module as
+an independent entrypoint. Six explicit reference seams remain: `heat.ts`
+(numerical oracle), `provenance.ts` (mutation-journal reference writers),
+`session.ts`, `state.ts`, `sync.ts` (direct-core lifecycle/warming controls), and
+`temp-storage.ts` (preview maintenance). These preserve intentional upstream
+reference interfaces, not a claim that every export has a native runtime caller.
+Public package exports and dynamically registered offline cases are also retained.
+Do not restore the blanket `core/*.ts` exemption to silence future findings.
 
 ## Engine contract
 

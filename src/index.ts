@@ -10,6 +10,12 @@ export {
   type KiroRuntime,
   type KiroRuntimeOptions,
 } from "./kiro/runtime.js";
+export {
+  FABRIC_RUNTIME_PROVIDER_INVENTORY,
+  FABRIC_RUNTIME_PROVIDER_NAMES,
+  FABRIC_RUNTIME_PROVIDER_REQUIREMENTS,
+  type FabricProviderInventoryEntry,
+} from "./kiro/provider-inventory.js";
 export { FabricRepairError, FabricCompilerTimeoutError } from "./core/repair-error.js";
 export type { KiroArtifactReadResult } from "./kiro/artifacts.js";
 export type { KiroArtifactCheckpointResult } from "./kiro/power/artifacts-provider.js";
@@ -41,8 +47,6 @@ export type { AcpProbeTransport, AcpProbeFrame, AcpCapabilityProbeOptions, AcpCa
 export { buildRunProvenance, parseRunProvenanceDeclaration } from "./kiro/run-provenance.js";
 export type { RunProvenanceInput, RunProvenanceConfiguredInput, RunProvenanceObservedInput, RunProvenanceManifest } from "./kiro/run-provenance.js";
 export { ProbeProvider, ProbeRunExitError } from "./providers/probe-provider.js";
-export { WebProvider, browserHarnessEnvironment, resolveBrowserHarnessExecutable, verifyBrowserHarnessExecutable } from "./providers/web-provider.js";
-export type { BrowserHarnessExecutable, WebOpenOutput, WebSearchOutput, WebSearchResult } from "./providers/web-provider.js";
 export { PROBE_ACTION_DESCRIPTORS, PROBE_GUEST_DECLARATIONS } from "./providers/probe-contract.js";
 export { REVIEW_GUEST_DECLARATIONS } from "./providers/review-contract.js";
 export type * from "./providers/review-contract.js";
@@ -61,8 +65,11 @@ export type {
   FabricToolAnnotations,
   FabricFailureMetadata,
   FabricCheckpointHandle,
+  FabricArtifactAccess,
+  FabricArtifactReadResult,
   FabricInvocationContext,
   FabricProvider,
+  FabricProviderRequirements,
   FabricProviderStatus,
   ResolvedFabricAction,
   ObservedFabricAction,
@@ -74,7 +81,6 @@ export type {
   FabricArtifactsConfig,
   FabricExecutorConfig,
   FabricMcpConfig,
-  FabricWebConfig,
   FabricMemoryConfig,
   FabricConfig,
   /** @deprecated Use FabricConfig. */

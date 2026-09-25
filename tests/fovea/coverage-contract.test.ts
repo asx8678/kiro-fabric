@@ -5,13 +5,26 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import ts from 'typescript';
-import { FoveaEngine, type NavigationResult } from '../../src/fovea/engine.js';
-import { captureSourceSnapshot } from '../../src/fovea/source-access.js';
+import { FoveaEngine, type EngineResult } from '../../src/fovea/engine.js';
+import { SourceAccess } from '../../src/fovea/source-access.js';
+import { sourcePlatform } from '../../src/fovea/source-platform.js';
 import { boundResultDetails } from '../../src/fovea/core/result-budget.js';
-import { REPO_ACTION_DESCRIPTORS, REPO_COVERAGE_SCHEMA, REPO_GUEST_DECLARATIONS, REPO_NAVIGATION_SCHEMA, type RepoCoverage } from '../../src/providers/repo-contract.js';
+import { REPO_ACTION_DESCRIPTORS, REPO_GUEST_DECLARATIONS, REPO_NAVIGATION_SCHEMA, type RepoCoverage } from '../../src/providers/repo-contract.js';
 import { validateSchemaValue } from '../../src/schema-validation.js';
 import { typeCheckFabricCode } from '../../src/runtime/type-checker.js';
 import { fabricGuestDeclarations } from '../../src/runtime/guest-types.js';
+
+// NavigationResult is module-private in src/fovea/engine.ts; recover the exact
+// structural type from the public EngineResult union without re-exporting it.
+type NavigationResult = Extract<EngineResult, { status: 'ok' | 'no-match' }>;
+
+// REPO_COVERAGE_SCHEMA is now module-private; the public REPO_NAVIGATION_SCHEMA
+// embeds the identical schema via structuredClone(REPO_COVERAGE_SCHEMA).
+const REPO_COVERAGE_SCHEMA = REPO_NAVIGATION_SCHEMA.coverage as Record<string, unknown>;
+
+// The standalone captureSourceSnapshot wrapper was removed; every call goes
+// through the public SourceAccess method on a fresh platform.
+const captureAccess = (): SourceAccess => new SourceAccess(sourcePlatform());
 
 const parser = { path: resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
 const directories: string[] = [];
@@ -150,21 +163,21 @@ describe.skipIf(process.platform !== 'linux')('native source and navigation cove
     await writeFile(join(root, 'note.txt'), 'unsupported');
     await mkdir(join(root, '.fovea')); await mkdir(join(root, 'node_modules'));
     await symlink('/etc/passwd', join(root, 'escape.ts'));
-    const snapshot = await captureSourceSnapshot(root, storage, undefined, { maxFileBytes: 128 });
+    const snapshot = await captureAccess().captureSourceSnapshot(root, storage, undefined, { maxFileBytes: 128 });
     valid({ source: snapshot.coverage });
     expect(snapshot.coverage).toMatchObject({ sourceFiles: 1, sourceBytes: 23, capped: false, projectRules: 'untrusted-skipped',
       counts: { excluded: 1, oversized: 1, unsupported: 1, untrustedProjectRules: 1, unavailableOrSymlink: 1 } });
     const cappedStorage = join(storage, 'capped'); await mkdir(cappedStorage);
-    const capped = await captureSourceSnapshot(root, cappedStorage, undefined, { maxFiles: 1 });
+    const capped = await captureAccess().captureSourceSnapshot(root, cappedStorage, undefined, { maxFiles: 1 });
     valid({ source: capped.coverage }); expect(capped.coverage.capped).toBe(true);
   });
 
   it('admits the warm snapshot-reuse marker on the navigation coverage contract', async () => {
     const { root, storage } = await fixture();
     await writeFile(join(root, 'stable.ts'), 'export const stable = 1;\n');
-    const first = await captureSourceSnapshot(root, storage, undefined, {});
+    const first = await captureAccess().captureSourceSnapshot(root, storage, undefined, {});
     const reusedStorage = join(storage, 'reused'); await mkdir(reusedStorage);
-    const second = await captureSourceSnapshot(root, reusedStorage, undefined, { previous: { id: first.id, root: first.root, hashes: first.hashes } });
+    const second = await captureAccess().captureSourceSnapshot(root, reusedStorage, undefined, { previous: { id: first.id, root: first.root, hashes: first.hashes } });
     expect(second.coverage.reusedPreviousSnapshot).toBe(true);
     valid({ source: second.coverage });
   });

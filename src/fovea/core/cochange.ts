@@ -43,9 +43,9 @@ const DAY_MS = 86_400_000;
 
 /** Wall-clock half-life (days) of a co-change pair. Past joint work cools
  * with exponential decay; FOVEA_COCHANGE_HALF_LIFE_DAYS tunes how fast. */
-export const COCHANGE_HALF_LIFE_DAYS = envInt("FOVEA_COCHANGE_HALF_LIFE_DAYS", 30, 1, 3650);
+const COCHANGE_HALF_LIFE_DAYS = envInt("FOVEA_COCHANGE_HALF_LIFE_DAYS", 30, 1, 3650);
 
-export interface CoChangePartner {
+interface CoChangePartner {
   /** Partner file (repo-relative), the other end of the history bond. */
   partner: string;
   /** Base conductance from count + Jaccard, BEFORE recency decay. */
@@ -70,7 +70,7 @@ export type CoChangeHistory = Map<string, CoChangePartner[]>;
  * half-life, ~0 once the work is ancient. Same geometric family as the sync
  * memory decay (mu <- 0.7 mu); the heat kernel's own e^{-tL} is the decay of
  * the diffusing field itself. */
-export const recencyFactor = (ageDays: number): number =>
+const recencyFactor = (ageDays: number): number =>
   Math.pow(0.5, ageDays / COCHANGE_HALF_LIFE_DAYS);
 
 /** Effective seeding weight of a pair whose newest joint commit is ageDays
@@ -80,7 +80,7 @@ export const effectiveWeight = (baseW: number, ageDays: number): number =>
 
 /** Base conductance: Jaccard-tilted confidence, mildly compressed by count so
  * a pair changed 40 times beats one changed twice without swampg the graph. */
-export const scorePair = (n: number, soloA: number, soloB: number): number => {
+const scorePair = (n: number, soloA: number, soloB: number): number => {
   const union = soloA + soloB - n;
   if (union <= 0) return 0;
   const jaccard = n / union;

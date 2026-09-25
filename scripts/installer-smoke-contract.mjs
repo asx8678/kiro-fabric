@@ -1,4 +1,7 @@
 // Installer/backend acceptance only: not authenticated Kiro qualification.
+/** @internal Exact smoke program. Production installerSmokeInput at :8 embeds it and
+ * smokeCandidate sends it; acceptance tests must typecheck and assert the identical
+ * source, and no public accessor returns the code text. Not a root/package export. */
 export const installerSmokeCode = `
 const read = await local.read({ path: "probe.txt", limit: 1 });
 const search = await local.grep({ pattern: payloads.needle, path: ".", literal: true, limit: 2 });

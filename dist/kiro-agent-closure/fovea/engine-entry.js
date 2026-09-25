@@ -17,22 +17,266 @@ import {
   sourceLimit,
   sourcePlatform,
   validateProvenanceJournal
-} from "../chunks/chunk-MFCZZWZZ.js";
-import "../chunks/chunk-OLJUXTSO.js";
+} from "../chunks/chunk-UBHRBX4G.js";
+import "../chunks/chunk-U22TRE4R.js";
 import "../chunks/chunk-WZ4PGM3F.js";
 import "../chunks/chunk-AE4E2KSU.js";
 
 // src/fovea/engine.ts
 import { createHash as createHash10, randomUUID as randomUUID2 } from "node:crypto";
-import { mkdir as mkdir2, mkdtemp, lstat as lstat4, realpath as realpath2, rename as rename2, rm, writeFile as writeFile3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, join as join10, resolve as resolve5 } from "node:path";
+import { mkdir as mkdir2, lstat as lstat5, realpath as realpath3, writeFile as writeFile3 } from "node:fs/promises";
+
+// src/fovea/scratch-owner.ts
+import fs from "node:fs";
+import { lstat, mkdtemp, opendir, realpath, rename, rmdir, unlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+var MAX_ENTRIES = 5e4;
+var MAX_DEPTH = 66;
+var generatedFile = /^(?:managed-parser|git|source-platform\.node|pi-fovea-(?:(?:cochange-)?[a-f0-9]{16}\.json|(?:focus|dwell|impact|sketch)-[a-f0-9]{8}\.txt|provenance-[a-f0-9]{16}-[a-f0-9]{16}\.json|scan-[1-9][0-9]*-[a-f0-9-]{36}\.yml)(?:\.tmp-[1-9][0-9]*-[a-f0-9-]{36})?)$/u;
+var absent = (error) => error.code === "ENOENT";
+var privateNode = (s) => typeof process.getuid === "function" && s.uid === process.getuid() && (s.mode & 63) === 0 && !s.isSymbolicLink();
+var sameDirectory = (a, b) => privateNode(b) && b.isDirectory() && a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs && a.mode === b.mode && a.uid === b.uid && a.gid === b.gid;
+var sameFile = (a, b) => privateNode(b) && b.isFile() && b.nlink === 1 && a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs && a.mode === b.mode && a.uid === b.uid && a.gid === b.gid && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
+var FoveaScratchOwner = class {
+  constructor(storageRoot, limits = {}) {
+    this.storageRoot = storageRoot;
+    if (!isAbsolute(storageRoot) || fs.realpathSync(storageRoot) !== storageRoot) throw new Error("Navigator scratch parent must be canonical");
+    this.#anchor = fs.lstatSync(storageRoot);
+    if (!privateNode(this.#anchor) || !this.#anchor.isDirectory()) throw new Error("Navigator scratch parent must be private and owned");
+    this.#maxEntries = Math.min(MAX_ENTRIES, Math.max(1, limits.maxEntries ?? MAX_ENTRIES));
+    this.#maxDepth = Math.min(MAX_DEPTH, Math.max(1, limits.maxDepth ?? MAX_DEPTH));
+  }
+  storageRoot;
+  #anchor;
+  #trees = /* @__PURE__ */ new Map();
+  #files = /* @__PURE__ */ new Map();
+  #maxEntries;
+  #maxDepth;
+  #failure;
+  #closed = false;
+  #closing;
+  directory;
+  #admit() {
+    if (this.#closed || this.#failure) throw new Error("Navigator scratch owner closed or cleanup uncertain", { cause: this.#failure });
+  }
+  async #parent() {
+    if (!sameDirectory(this.#anchor, await lstat(this.storageRoot)) || await realpath(this.storageRoot) !== this.storageRoot) throw new Error("Navigator scratch parent identity changed; retain evidence");
+  }
+  #below(file) {
+    if (!this.directory) throw new Error("Navigator scratch has no owned directory");
+    const p = relative(this.directory, file);
+    if (p === ".." || p.startsWith(`..${sep}`) || isAbsolute(p)) throw new Error("Navigator scratch path is outside its owner");
+  }
+  async #root() {
+    await this.#parent();
+    if (!this.directory) throw new Error("Navigator scratch unavailable");
+    const expected = this.#trees.get(this.directory);
+    if (!expected || !sameDirectory(expected, await lstat(this.directory)) || await realpath(this.directory) !== this.directory) throw new Error("Navigator scratch identity changed; retain evidence");
+  }
+  async createRoot(signal) {
+    this.#admit();
+    signal?.throwIfAborted();
+    await this.#parent();
+    signal?.throwIfAborted();
+    if (this.directory) throw new Error("Navigator scratch already allocated");
+    const directory = await mkdtemp(join(this.storageRoot, "engine-"));
+    this.directory = directory;
+    this.#trees.set(directory, void 0);
+    this.#trees.set(directory, await lstat(directory));
+    await this.#root();
+    signal?.throwIfAborted();
+    return directory;
+  }
+  async createStage(signal) {
+    this.#admit();
+    await this.#root();
+    signal?.throwIfAborted();
+    const directory = await mkdtemp(join(this.directory, "snapshot-"));
+    this.#trees.set(directory, void 0);
+    this.#trees.set(directory, await lstat(directory));
+    await this.#root();
+    signal?.throwIfAborted();
+    return directory;
+  }
+  async moveStage(from, to) {
+    this.#admit();
+    this.#below(from);
+    this.#below(to);
+    await this.#root();
+    const expected = this.#trees.get(from);
+    if (!expected || dirname(from) !== this.directory || dirname(to) !== this.directory || !/^root-[a-f0-9-]{36}$/u.test(basename(to)) || !sameDirectory(expected, await lstat(from))) throw new Error("Navigator snapshot move lacks ownership");
+    try {
+      await lstat(to);
+      throw new Error("Navigator snapshot destination exists; retain replacement");
+    } catch (error) {
+      if (!absent(error)) throw error;
+    }
+    await rename(from, to);
+    this.#trees.delete(from);
+    this.#trees.set(to, expected);
+    if (!sameDirectory(expected, await lstat(to))) throw new Error("Navigator moved snapshot changed; retain evidence");
+  }
+  async captureFile(file) {
+    this.#admit();
+    this.#below(file);
+    await this.#root();
+    if (dirname(file) !== this.directory || !generatedFile.test(basename(file))) throw new Error("Navigator generated file is outside its owned layout");
+    const stat5 = await lstat(file);
+    if (!privateNode(stat5) || !stat5.isFile() || stat5.nlink !== 1) throw new Error("Navigator generated file identity unsafe");
+    this.#files.set(file, stat5);
+  }
+  async removeFile(file) {
+    const expected = this.#files.get(file);
+    if (!expected) throw new Error("Navigator temporary file is not owned");
+    await this.removeTemporary(file, expected);
+  }
+  /** Live-instance housekeeping only; never scans another generation. */
+  async removeTemporary(file, expected, available = () => true) {
+    try {
+      if (!available()) return false;
+      this.#below(file);
+      await this.#root();
+      if (dirname(file) !== this.directory || !generatedFile.test(basename(file))) throw new Error("Navigator temporary file is outside its owned layout");
+      await this.#names(this.directory);
+      let current2;
+      try {
+        current2 = await lstat(file);
+      } catch (error) {
+        if (!absent(error)) throw error;
+        if (this.#files.has(file)) throw new Error("Navigator captured file disappeared; cleanup unconfirmed", { cause: error });
+        return false;
+      }
+      if (!available()) return false;
+      const captured = this.#files.get(file);
+      if (captured && !sameFile(captured, current2)) throw new Error("Navigator captured file changed; retain replacement");
+      if (!privateNode(current2) || !current2.isFile() || current2.nlink !== 1) throw new Error("Navigator temporary identity unsafe; retain evidence");
+      if (!sameFile(expected, current2)) return false;
+      await unlink(file);
+      this.#files.delete(file);
+      return true;
+    } catch (error) {
+      this.#failure ??= error;
+      throw error;
+    }
+  }
+  async #names(directory, visit) {
+    const names = [];
+    const stream = await opendir(directory);
+    for await (const entry of stream) {
+      if (names.length >= this.#maxEntries) throw new Error("Navigator scratch inspection entry bound; retain tree");
+      if (entry.name.toLowerCase() === ".git") throw new Error("Navigator scratch contains Git metadata; retain tree");
+      visit?.();
+      names.push(entry.name);
+    }
+    if (names.includes("HEAD") && names.includes("objects")) throw new Error("Navigator scratch contains a bare repository; retain tree");
+    return names.sort();
+  }
+  async removeTree(directory) {
+    try {
+      await this.#removeTree(directory);
+    } catch (error) {
+      this.#failure ??= error;
+      throw error;
+    }
+  }
+  async #removeTree(directory) {
+    this.#below(directory);
+    await this.#parent();
+    let stat5;
+    try {
+      stat5 = await lstat(directory);
+    } catch (error) {
+      if (!absent(error)) throw error;
+      if (this.#trees.has(directory)) throw new Error("Navigator owned scratch disappeared; cleanup unconfirmed", { cause: error });
+      return;
+    }
+    await this.#root();
+    if (directory !== this.directory) await this.#names(this.directory);
+    const expected = this.#trees.get(directory);
+    if (!expected || !sameDirectory(expected, stat5)) throw new Error("Navigator scratch tree identity unavailable/changed; retain tree");
+    let inspected = 1;
+    const seen2 = /* @__PURE__ */ new Set();
+    const scan = async (file, depth) => {
+      if (depth > this.#maxDepth) throw new Error("Navigator scratch inspection bound; retain tree");
+      const s = await lstat(file);
+      if (!privateNode(s) || !s.isDirectory() && (!s.isFile() || s.nlink !== 1)) throw new Error("Navigator scratch contains unsafe identity/type/link; retain tree");
+      seen2.add(file);
+      const captured = this.#files.get(file);
+      if (captured && !sameFile(captured, s)) throw new Error("Navigator captured file changed; retain tree");
+      const held = this.#trees.get(file);
+      if (this.#trees.has(file) && (!held || !sameDirectory(held, s))) throw new Error("Navigator owned subtree was replaced; retain tree");
+      if (s.isDirectory() && file !== this.directory && dirname(file) === this.directory && !this.#trees.has(file)) throw new Error("Navigator unowned top-level directory; retain tree");
+      const node = { path: file, stat: s };
+      if (s.isDirectory()) {
+        node.children = [];
+        for (const name of await this.#names(file, () => {
+          if (++inspected > this.#maxEntries) throw new Error("Navigator scratch inspection entry bound; retain tree");
+        })) {
+          const next = join(file, name);
+          if (file === this.directory && !this.#trees.has(next) && !generatedFile.test(name)) throw new Error("Navigator scratch contains unknown top-level content; retain tree");
+          node.children.push(await scan(next, depth + 1));
+        }
+      }
+      return node;
+    };
+    const tree = await scan(directory, 0);
+    for (const claimed of [...this.#trees.keys(), ...this.#files.keys()]) {
+      const p = relative(directory, claimed);
+      if (p !== ".." && !p.startsWith(`..${sep}`) && !isAbsolute(p) && !seen2.has(claimed)) throw new Error("Navigator owned scratch disappeared; retain remaining evidence");
+    }
+    const check = async (node) => {
+      const current2 = await lstat(node.path);
+      if (node.children ? !sameDirectory(node.stat, current2) : !sameFile(node.stat, current2)) throw new Error("Navigator scratch changed during cleanup; retain remainder");
+    };
+    const remove = async (node, parents) => {
+      await this.#root();
+      if (directory !== this.directory) await this.#names(this.directory);
+      for (const parent of parents) await check(parent);
+      await check(node);
+      if (node.children) {
+        const names = await this.#names(node.path);
+        if (names.join("\0") !== node.children.map((child) => basename(child.path)).join("\0")) throw new Error("Navigator scratch membership changed; retain remainder");
+        for (const child of node.children) await remove(child, [...parents, node]);
+        await this.#root();
+        for (const parent of parents) await check(parent);
+        await check(node);
+        await rmdir(node.path);
+        this.#trees.delete(node.path);
+      } else {
+        await unlink(node.path);
+        this.#files.delete(node.path);
+      }
+    };
+    await remove(tree, []);
+  }
+  close() {
+    if (this.#closing) return this.#closing;
+    this.#closed = true;
+    this.#closing = Promise.resolve().then(async () => {
+      const failures2 = this.#failure === void 0 ? [] : [this.#failure];
+      try {
+        if (this.directory) await this.removeTree(this.directory);
+      } catch (error) {
+        if (!failures2.includes(error)) failures2.push(error);
+      }
+      if (this.#failure !== void 0 && !failures2.includes(this.#failure)) failures2.unshift(this.#failure);
+      if (failures2.length) throw new AggregateError(failures2, "Navigator scratch cleanup uncertainty retained", { cause: failures2[0] });
+    });
+    return this.#closing;
+  }
+};
+
+// src/fovea/engine.ts
+import { isAbsolute as isAbsolute7, join as join11, resolve as resolve5 } from "node:path";
 
 // src/fovea/core/context.ts
 import { AsyncLocalStorage } from "node:async_hooks";
 var coreContext = new AsyncLocalStorage();
+var coreDisplayName = (fallback = "fovea") => coreContext.getStore()?.displayName ?? fallback;
+var coreToolName = (operation) => coreContext.getStore()?.toolName?.(operation) ?? `fovea_${operation}`;
 function context() {
   const value = coreContext.getStore();
-  if (!value) throw new Error("Fovea core requires an explicit engine context");
+  if (!value) throw new Error("Navigator core requires an explicit engine context");
   return value;
 }
 var privateTmpdir = () => context().storageRoot;
@@ -75,11 +319,11 @@ var safeEnvironment = () => ({
 
 // src/fovea/core/ops.ts
 import { createHash as createHash5 } from "node:crypto";
-import { join as join5, posix as posix3 } from "node:path";
+import { join as join6, posix as posix3 } from "node:path";
 
 // src/fovea/core/git.ts
 import { execFile } from "node:child_process";
-import { posix, join } from "node:path";
+import { posix, join as join2 } from "node:path";
 import { stat } from "node:fs/promises";
 
 // src/fovea/core/asyncutil.ts
@@ -222,7 +466,7 @@ var gitRelativePath = (path, prefix) => {
 var gitProbe = async (root) => {
   let prefix = await gitPrefix(root);
   if (prefix === void 0) return void 0;
-  const marker = await stat(join(root, ".git")).then((info) => info.isFile() || info.isDirectory(), () => false);
+  const marker = await stat(join2(root, ".git")).then((info) => info.isFile() || info.isDirectory(), () => false);
   const overridden = false;
   if (prefix === "" !== marker || overridden) {
     gitPrefixes.delete(root);
@@ -377,8 +621,8 @@ var parseZeroContextDiff = (patch, prefix = "", maxHunksPerFile = MAX_DIFF_HUNKS
     const decoded = decodeGitPath(raw);
     if (decoded === void 0 || decoded === "/dev/null") return void 0;
     const repoPath = side && decoded.startsWith(`${side}/`) ? decoded.slice(2) : decoded;
-    const relative6 = gitRelativePath(repoPath, prefix);
-    return relative6 ? posix.normalize(relative6) : void 0;
+    const relative7 = gitRelativePath(repoPath, prefix);
+    return relative7 ? posix.normalize(relative7) : void 0;
   };
   const merge = (path, hunks, fallback) => {
     const previous = result.get(path);
@@ -668,8 +912,8 @@ var forwardHeat = (csr, a, t) => {
 // src/fovea/core/temp-storage.ts
 import { randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, openSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { lstat, open, opendir, rename, unlink } from "node:fs/promises";
-import { join as join2 } from "node:path";
+import { lstat as lstat2, open, opendir as opendir2, rename as rename2 } from "node:fs/promises";
+import { join as join3 } from "node:path";
 var MiB = 1024 * 1024;
 var HOUR = 36e5;
 var JOURNAL_TTL_MS = 7 * 24 * HOUR;
@@ -708,15 +952,14 @@ var dead = (pid) => {
 };
 var removeUnchanged = async (path, snapshot2) => {
   try {
-    if (active.has(path) || !same(snapshot2, await lstat(path)) || active.has(path)) return false;
-    await unlink(path);
-    return true;
+    if (active.has(path) || !same(snapshot2, await lstat2(path)) || active.has(path)) return false;
+    return await context().cleanupTemporary?.(path, snapshot2, () => !active.has(path)) ?? false;
   } catch {
     return false;
   }
 };
 var openTempRead = async (path, maxBytes = CACHE_FILE_MAX_BYTES) => {
-  const before = await lstat(path);
+  const before = await lstat2(path);
   if (!owned2(before) || before.size > maxBytes) throw new Error("Unsafe or oversized temporary file");
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
@@ -749,7 +992,7 @@ var sweep = async (directory, now, dryRun = false) => {
   const removed = [];
   const remove = async (path, stat5) => {
     try {
-      const eligible = dryRun ? !active.has(path) && same(stat5, await lstat(path)) && !active.has(path) : await removeUnchanged(path, stat5);
+      const eligible = dryRun ? !active.has(path) && same(stat5, await lstat2(path)) && !active.has(path) : await removeUnchanged(path, stat5);
       if (eligible) removed.push(path);
       return eligible;
     } catch {
@@ -757,7 +1000,7 @@ var sweep = async (directory, now, dryRun = false) => {
     }
   };
   const groups = { cache: [], spill: [] };
-  const dir = await opendir(directory);
+  const dir = await opendir2(directory);
   for await (const item of dir) {
     const name = item.name;
     const kind = cacheName.test(name) ? "cache" : spillName.test(name) ? "spill" : void 0;
@@ -766,9 +1009,9 @@ var sweep = async (directory, now, dryRun = false) => {
     const scan = scanName.exec(name);
     const pid = scan ? Number(scan[1]) : partial && (cacheName.test(partial[1]) || spillName.test(partial[1]) || journalName.test(partial[1])) ? Number(partial[2]) : void 0;
     if (!kind && !journal && pid === void 0) continue;
-    const path = join2(directory, name);
+    const path = join3(directory, name);
     try {
-      const stat5 = await lstat(path);
+      const stat5 = await lstat2(path);
       if (!owned2(stat5)) continue;
       if (kind) {
         groups[kind].push({ path, stat: stat5 });
@@ -819,7 +1062,7 @@ var maintainTempStorage = (directory = privateTmpdir(), now = Date.now()) => {
 };
 var checkTarget = async (path) => {
   try {
-    if (!owned2(await lstat(path))) throw new Error("Unsafe temporary target");
+    if (!owned2(await lstat2(path))) throw new Error("Unsafe temporary target");
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
   }
@@ -846,7 +1089,7 @@ var writeAtomicTemp = async (target, content, maxBytes = CACHE_FILE_MAX_BYTES) =
       await handle.close();
     }
     await checkTarget(target);
-    await rename(temporary, target);
+    await rename2(temporary, target);
   } finally {
     if (snapshot2) await removeUnchanged(temporary, snapshot2);
     release();
@@ -891,7 +1134,7 @@ var writeSpill = (target, text) => {
   }
 };
 var withScanRuleFile = async (text, run2) => {
-  const path = join2(privateTmpdir(), `pi-fovea-scan-${process.pid}-${randomUUID()}.yml`);
+  const path = join3(privateTmpdir(), `pi-fovea-scan-${process.pid}-${randomUUID()}.yml`);
   void maintainTempStorage();
   const handle = await open(path, "wx", 384);
   let snapshot2;
@@ -986,7 +1229,7 @@ var revealFoveated = (g, field, opts) => {
   let vmax = 0;
   for (let i = 0; i < field.length; i++) if (field[i] > vmax) vmax = field[i];
   if (vmax <= 0) {
-    return { text: `${opts.header ?? "fovea"}
+    return { text: `${opts.header ?? coreDisplayName()}
 (nothing matched the current graph)`, tokens: 0, shown: 0, suppressed: 0, litTotal: 0, candidateOmitted: 0, truncated: false, revealedIds: [], revealed: [] };
   }
   const seedSet = new Set(opts.seeds ?? []);
@@ -1077,14 +1320,14 @@ var revealFoveated = (g, field, opts) => {
   const glowLines = [...glowCounts.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).map(([file, c]) => `  ~ +${c} more in ${file}`);
   const items = [...lines, ...glowLines];
   const individual = lines.length;
-  const header = `${opts.header ?? "fovea"}${suppressed ? ` \xB7 ${suppressed} prior results omitted` : ""}`;
+  const header = `${opts.header ?? coreDisplayName()}${suppressed ? ` \xB7 ${suppressed} prior results omitted` : ""}`;
   const collapsed = litTotal - individual;
   const artifactNote = opts.overflowTo ? ` \u2014 full list saved to ${opts.overflowTo}` : "";
   const renderK = (k2, note = artifactNote) => {
     const shownIndiv = Math.min(k2, individual);
     const remaining = collapsed + individual - shownIndiv;
     const footer = remaining > 0 ? `
-\u2026 ${remaining} more results collapsed or outside budget${note} \u2014 use fovea_dwell for wider context` : "";
+\u2026 ${remaining} more results collapsed or outside budget${note} \u2014 use ${coreToolName("dwell")} for wider context` : "";
     return header + "\n" + items.slice(0, k2).join("\n") + footer;
   };
   const fits = (k2) => tokenEstimate(renderK(k2)) <= opts.budget;
@@ -1139,7 +1382,7 @@ var revealGroups = (groups, opts) => {
     const body = ordered.slice(0, k).map((gl) => `${gl.label.padEnd(2)} ${gl.detail}`);
     const rest = ordered.length - k;
     const footer = rest > 0 ? [`
-\u2026 ${rest} more groups omitted${note} \u2014 use fovea_focus for detail`] : [];
+\u2026 ${rest} more groups omitted${note} \u2014 use ${coreToolName("focus")} for detail`] : [];
     return [opts.header, ...body, ...footer].join("\n");
   };
   let hi = ordered.length;
@@ -1180,7 +1423,7 @@ var revealGroups = (groups, opts) => {
 };
 
 // src/fovea/core/session.ts
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { isAbsolute as isAbsolute2, relative as relative2, resolve, sep as sep2 } from "node:path";
 var FOCUS_T0 = 2;
 var sessions = owned("session.ts:sessions", () => /* @__PURE__ */ new Map(), true);
 var attention = owned("session.ts:attention", () => /* @__PURE__ */ new Map(), true);
@@ -1218,9 +1461,9 @@ var getSession = (root) => {
 };
 var repoRelativePath = (root, input) => {
   const raw = input.startsWith("@") ? input.slice(1) : input;
-  const rel = relative(resolve(root), resolve(root, raw));
-  if (!rel || rel === "." || rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) return void 0;
-  return rel.split(sep).join("/");
+  const rel = relative2(resolve(root), resolve(root, raw));
+  if (!rel || rel === "." || rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return void 0;
+  return rel.split(sep2).join("/");
 };
 var syncScopeForPath = (root, input) => {
   const rel = repoRelativePath(root, input);
@@ -1801,7 +2044,7 @@ var extractBend = (file, text) => {
 
 // src/fovea/core/source.ts
 import { readFile } from "node:fs/promises";
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 var makeFileSource = (root, contents) => {
   const inflight2 = /* @__PURE__ */ new Map();
   return {
@@ -1810,7 +2053,7 @@ var makeFileSource = (root, contents) => {
       if (cached !== void 0) return Promise.resolve(cached);
       const pending = inflight2.get(file);
       if (pending) return pending;
-      const p = readFile(join3(root, file), "utf8").then(
+      const p = readFile(join4(root, file), "utf8").then(
         (text) => text,
         () => void 0
       ).finally(() => inflight2.delete(file));
@@ -2693,12 +2936,12 @@ var coChangeHistory = async (root, filesInGraph, now = Date.now()) => {
   units.forEach((unit, index) => {
     if (consumed.has(index)) return;
     commits++;
-    const fs = [...unit.files].sort();
-    for (const f of fs) touchCount.set(f, (touchCount.get(f) ?? 0) + 1);
-    if (fs.length < 2 || fs.length > MAX_FILES_PER_UNIT) return;
-    for (let i = 0; i < fs.length; i++) {
-      for (let j = i + 1; j < fs.length; j++) {
-        const k = JSON.stringify([fs[i], fs[j]]);
+    const fs2 = [...unit.files].sort();
+    for (const f of fs2) touchCount.set(f, (touchCount.get(f) ?? 0) + 1);
+    if (fs2.length < 2 || fs2.length > MAX_FILES_PER_UNIT) return;
+    for (let i = 0; i < fs2.length; i++) {
+      for (let j = i + 1; j < fs2.length; j++) {
+        const k = JSON.stringify([fs2[i], fs2[j]]);
         pairCount.set(k, (pairCount.get(k) ?? 0) + 1);
         pairLast.set(k, Math.max(pairLast.get(k) ?? 0, unit.ts));
       }
@@ -2755,434 +2998,13 @@ var groupPairs = (pairs, commits) => {
 // src/fovea/core/state.ts
 import { createHash as createHash4 } from "node:crypto";
 import { stat as stat3 } from "node:fs/promises";
-import { isAbsolute as isAbsolute2, join as join4, relative as relative2, resolve as resolve3, sep as sep2 } from "node:path";
+import { isAbsolute as isAbsolute3, join as join5, relative as relative3, resolve as resolve3, sep as sep3 } from "node:path";
 
 // src/fovea/core/build.ts
 import { createHash as createHash3 } from "node:crypto";
-import { lstat as lstat2, readFile as readFile4, readdir, stat as stat2 } from "node:fs/promises";
+import { lstat as lstat3, readFile as readFile4, readdir, stat as stat2 } from "node:fs/promises";
 import { createInterface } from "node:readline";
 import { join as joinPath3 } from "node:path";
-
-// src/fovea/core/graph.ts
-import { basename, posix as posix2 } from "node:path";
-var CODE_EXTS_BY_LANGFAMILY = {
-  ts: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
-  py: [".py"],
-  rs: [".rs"],
-  go: []
-};
-var langFamily = (file) => {
-  const ext = file.split(".").pop()?.toLowerCase() ?? "";
-  if (["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"].includes(ext)) return "ts";
-  if (ext === "py") return "py";
-  if (ext === "rs") return "rs";
-  if (ext === "go") return "go";
-  return ext;
-};
-var pushIndex = (m, key, value) => {
-  (m.get(key) ?? m.set(key, []).get(key)).push(value);
-};
-var buildImportIndex = (files) => {
-  const fileSet = new Set(files);
-  const filesByDir = /* @__PURE__ */ new Map();
-  const goDirsBySuffix = /* @__PURE__ */ new Map();
-  const rsByBase = /* @__PURE__ */ new Map();
-  const tsByTailStem = /* @__PURE__ */ new Map();
-  for (const f of files) {
-    const dir = posix2.dirname(f);
-    pushIndex(filesByDir, dir, f);
-  }
-  for (const dir of filesByDir.keys()) {
-    const segs = dir.split("/").filter(Boolean);
-    for (let k = 1; k <= Math.min(3, segs.length); k++) {
-      pushIndex(goDirsBySuffix, segs.slice(-k).join("/"), dir);
-    }
-  }
-  for (const f of files) {
-    if (f.endsWith(".rs")) {
-      const base = basename(f, ".rs");
-      pushIndex(rsByBase, base, f);
-      if (base === "mod") {
-        const parentBase = basename(posix2.dirname(f));
-        pushIndex(rsByBase, parentBase, f);
-      }
-    }
-    if (f.endsWith(".ts")) {
-      const base = basename(f, ".ts");
-      if (base === "index") pushIndex(tsByTailStem, basename(posix2.dirname(f)), f);
-      else pushIndex(tsByTailStem, base, f);
-    }
-  }
-  return { fileSet, filesByDir, goDirsBySuffix, rsByBase, tsByTailStem };
-};
-var resolveImportToFile = (spec, fromFile, index) => {
-  const { fileSet } = index;
-  const fam = langFamily(fromFile);
-  const exact = (candidates, strategy) => {
-    const hits2 = [...new Set(candidates)].filter((candidate) => fileSet.has(candidate));
-    return hits2.length ? { file: hits2[0], evidence: { strategy, rule: "import-resolve", source: spec, candidates: hits2.length } } : void 0;
-  };
-  if (fam === "bend") {
-    if (spec === "Base" || /^0x[0-9a-f]+\//i.test(spec) || posix2.isAbsolute(spec)) return void 0;
-    const local = posix2.normalize(posix2.join(posix2.dirname(fromFile), spec));
-    if (local === ".." || local.startsWith("../")) return void 0;
-    return exact([local], "relative-import");
-  }
-  if (spec.startsWith("./") || spec.startsWith("../")) {
-    let base = posix2.normalize(posix2.join(posix2.dirname(fromFile), spec));
-    base = base.replace(/\.(?:[cm]?js|jsx)$/, "");
-    const candidates = [];
-    for (const ext of CODE_EXTS_BY_LANGFAMILY[fam] ?? []) {
-      candidates.push(base + ext, `${base}/index${ext}`);
-    }
-    candidates.push(base);
-    return exact(candidates, "relative-import");
-  }
-  if (fam === "py") {
-    const p = spec.replace(/\./g, "/");
-    return exact([`${p}.py`, `${p}/__init__.py`], "python-module");
-  }
-  if (fam === "go") {
-    const segs = spec.split("/").filter(Boolean);
-    for (let k = 1; k <= Math.min(3, segs.length); k++) {
-      const suffix = segs.slice(-k).join("/");
-      const matches = (index.goDirsBySuffix.get(suffix) ?? []).filter(
-        (directory) => directory === suffix || directory.endsWith(`/${suffix}`)
-      );
-      if (matches.length === 1) {
-        const inDir = index.filesByDir.get(matches[0]) ?? [];
-        if (inDir.length) {
-          return {
-            file: inDir[0],
-            evidence: { strategy: "go-module-suffix", rule: "go-package-representative", source: spec, candidates: inDir.length }
-          };
-        }
-      }
-    }
-    return void 0;
-  }
-  if (fam === "rs") {
-    const modPath = spec.replace(/^crate::|^self::/, "").replace(/::/g, "/");
-    const direct = exact([`src/${modPath}.rs`, `${modPath}.rs`], "rust-module");
-    if (direct) return direct;
-    const baseName = basename(modPath);
-    const hits2 = (index.rsByBase.get(baseName) ?? []).filter(
-      (file) => file === `${baseName}.rs` || file.endsWith(`/${baseName}.rs`) || file.endsWith(`/${baseName}/mod.rs`)
-    );
-    return hits2.length === 1 ? { file: hits2[0], evidence: { strategy: "rust-module", rule: "import-resolve", source: spec, candidates: hits2.length } } : void 0;
-  }
-  const tail = spec.split("/").filter(Boolean).join("/");
-  const stem = tail.split("/").pop() ?? tail;
-  const hits = (index.tsByTailStem.get(stem) ?? []).filter(
-    (file) => file.endsWith(`/${tail}.ts`) || file.endsWith(`/${tail}/index.ts`)
-  );
-  return hits.length === 1 ? { file: hits[0], evidence: { strategy: "typescript-tail", rule: "import-resolve", source: spec, candidates: hits.length } } : void 0;
-};
-var importFamilyResolver = (files) => {
-  const sorted = [...files].sort();
-  const cache = /* @__PURE__ */ new Map();
-  return (site) => {
-    const bounds = site.dynamic;
-    if (langFamily(site.file) !== "ts" || bounds?.prefix === void 0 || bounds.suffix === void 0 || !bounds.prefix.startsWith("./") && !bounds.prefix.startsWith("../")) {
-      return { files: [], reason: "computed target is not a bounded relative literal-prefix/suffix expression" };
-    }
-    const joined = posix2.join(posix2.dirname(site.file), bounds.prefix);
-    const prefix = joined === "." || joined === "./" ? "" : joined;
-    if (prefix === ".." || prefix.startsWith("../") || posix2.isAbsolute(prefix)) {
-      return { files: [], reason: "computed family lies outside the selected root" };
-    }
-    const key = JSON.stringify([prefix, bounds.suffix]);
-    const cached = cache.get(key);
-    if (cached) return cached;
-    let lo = 0, hi = sorted.length;
-    while (lo < hi) {
-      const mid = lo + hi >>> 1;
-      if (sorted[mid] < prefix) lo = mid + 1;
-      else hi = mid;
-    }
-    const hits = [];
-    let examined = 0;
-    for (let at = lo; at < sorted.length && sorted[at].startsWith(prefix); at++) {
-      if (++examined > 4096) {
-        const result2 = { files: [], capped: true, reason: "computed family scan exceeded 4096 files; no possible edges emitted" };
-        cache.set(key, result2);
-        return result2;
-      }
-      const file = sorted[at];
-      const runtime = file.replace(/\.tsx?$/, ".js").replace(/\.mts$/, ".mjs").replace(/\.cts$/, ".cjs");
-      if (!file.endsWith(bounds.suffix) && !runtime.endsWith(bounds.suffix)) continue;
-      hits.push(file);
-      if (hits.length > 32) {
-        const result2 = { files: [], capped: true, reason: "computed family exceeds 32 possible targets; no possible edges emitted" };
-        cache.set(key, result2);
-        return result2;
-      }
-    }
-    const result = hits.length ? { files: hits } : { files: [], reason: "no matching targets in the selected graph" };
-    cache.set(key, result);
-    return result;
-  };
-};
-var addNode = (nodes, seen2, rec) => {
-  const hit = seen2.get(rec.id);
-  if (hit !== void 0) return hit;
-  const idx = nodes.length;
-  seen2.set(rec.id, idx);
-  nodes.push(rec);
-  return idx;
-};
-var assembleGraphWithIndex = async (_root, files, factsMap) => {
-  const facts = (file) => factsMap instanceof Map ? factsMap.get(file) : factsMap[file];
-  const factValues = () => factsMap instanceof Map ? factsMap.values() : Object.values(factsMap);
-  const nodes = [];
-  const seen2 = /* @__PURE__ */ new Map();
-  const edges = [];
-  const byFile = /* @__PURE__ */ new Map();
-  const fileIdx = /* @__PURE__ */ new Map();
-  const pushEdge = (a, b, kind, w, evidence) => {
-    if (a === b) return;
-    edges.push({ a, b, kind, w, evidence });
-  };
-  for (const rel of files) {
-    const idx = addNode(nodes, seen2, {
-      id: `file:${rel}`,
-      name: posix2.basename(rel),
-      kind: "file",
-      file: rel,
-      line: 0,
-      sig: rel,
-      lang: LANG_BY_EXT[rel.split(".").pop()?.toLowerCase() ?? ""] ?? "config"
-    });
-    fileIdx.set(rel, idx);
-    (byFile.get(rel) ?? byFile.set(rel, []).get(rel)).push(idx);
-  }
-  const symIdxByFileLine = /* @__PURE__ */ new Map();
-  await forEachChunked(files, 512, (rel) => {
-    const f = facts(rel);
-    if (!f) return;
-    for (const s of f.symbols) {
-      const idx = addNode(nodes, seen2, { id: `${s.name}@${s.file}`, ...s });
-      (byFile.get(rel) ?? byFile.set(rel, []).get(rel)).push(idx);
-      pushEdge(fileIdx.get(rel), idx, "contains", 1, { strategy: "file-membership", rule: "symbol-contained-by-file", source: rel });
-      const key = `${rel}:${s.line}`;
-      if (!symIdxByFileLine.has(key)) symIdxByFileLine.set(key, idx);
-    }
-  });
-  for (const [, arr] of byFile) arr.sort((x, y) => nodes[x].line - nodes[y].line);
-  const enclosingIdx = (file, line) => {
-    const arr = byFile.get(file) ?? [];
-    let best = fileIdx.get(file);
-    for (const idx of arr) {
-      const n = nodes[idx];
-      if (n.kind !== "file" && n.line <= line && nodes[best].line <= n.line) best = idx;
-    }
-    return best;
-  };
-  const byName = /* @__PURE__ */ new Map();
-  {
-    const addKey = (key, idx) => {
-      if (!key) return;
-      (byName.get(key) ?? byName.set(key, []).get(key)).push(idx);
-    };
-    nodes.forEach((n, i) => {
-      if (n.kind === "file" || n.kind === "anchor") return;
-      addKey(n.name.toLowerCase(), i);
-      const dot = n.name.indexOf(".");
-      if (dot > 0) addKey(n.name.slice(dot + 1).toLowerCase(), i);
-    });
-  }
-  const importIndex = buildImportIndex(files);
-  const resolveFamily = importFamilyResolver(files);
-  const importCoverage = {
-    sites: 0,
-    resolved: 0,
-    possible: 0,
-    unresolved: 0,
-    capped: 0,
-    unsupportedLanguages: [...new Set(files.map((file) => LANG_BY_EXT[file.split(".").pop()?.toLowerCase() ?? ""]).filter((language) => !!language && !supportsImportExtraction(language)))].sort(),
-    examples: [],
-    examplesOmitted: 0
-  };
-  const noteImport = (site, status, reason) => {
-    if (importCoverage.examples.length < 20) {
-      importCoverage.examples.push({ file: site.file, line: site.line, spec: site.spec.slice(0, 160), status, reason });
-    } else importCoverage.examplesOmitted++;
-  };
-  const importTargets = /* @__PURE__ */ new Map();
-  await forEachChunked(files, 512, (rel) => {
-    const f = facts(rel);
-    if (!f) return;
-    for (const imp of f.imports) {
-      importCoverage.sites++;
-      if (imp.dynamic) {
-        const family = resolveFamily(imp);
-        if (!family.files.length) {
-          importCoverage.unresolved++;
-          if (family.capped) importCoverage.capped++;
-          noteImport(imp, family.capped ? "capped" : "unresolved", family.reason);
-          continue;
-        }
-        importCoverage.possible++;
-        noteImport(imp, "possible", `${family.files.length} literal-prefix/suffix targets; runtime values are not evaluated`);
-        for (const file of family.files) {
-          pushEdge(fileIdx.get(rel), fileIdx.get(file), "imports", 0.15 / family.files.length, {
-            strategy: "computed-import-family",
-            rule: "literal-prefix-suffix",
-            source: imp.spec,
-            candidates: family.files.length,
-            possible: true
-          });
-        }
-        continue;
-      }
-      const target = resolveImportToFile(imp.spec, rel, importIndex);
-      if (!target) {
-        importCoverage.unresolved++;
-        noteImport(imp, "unresolved", "not resolved within the selected graph; may be external or outside the modeled import forms");
-        continue;
-      }
-      importCoverage.resolved++;
-      if (target.file === rel) continue;
-      pushEdge(fileIdx.get(rel), fileIdx.get(target.file), "imports", 0.3, target.evidence);
-      (importTargets.get(rel) ?? importTargets.set(rel, []).get(rel)).push({ ...target, alias: imp.alias });
-    }
-    if (isTestFile(rel)) {
-      for (const target of importTargets.get(rel) ?? []) {
-        pushEdge(fileIdx.get(rel), fileIdx.get(target.file), "tests", 0.6, {
-          strategy: "test-import",
-          rule: "test-subject-import",
-          source: target.evidence.source,
-          candidates: target.evidence.candidates
-        });
-      }
-    }
-  });
-  await forEachChunked(files, 256, (rel) => {
-    const f = facts(rel);
-    if (!f) return;
-    const targets = importTargets.get(rel) ?? [];
-    const imported = new Set(targets.map((target) => target.file));
-    const bend = langFamily(rel) === "bend";
-    const aliases = bend ? targets.filter((target) => target.alias).sort((a, b) => b.alias.length - a.alias.length) : [];
-    for (const call of f.calls) {
-      const alias = aliases.find((target) => call.callee.startsWith(`${target.alias}.`));
-      const name = alias ? call.callee.slice(alias.alias.length + 1) : call.callee;
-      const cands = (byName.get(name.toLowerCase()) ?? []).filter((i) => !bend || nodes[i].lang === "Bend" && nodes[i].name === name && nodes[i].file === (alias?.file ?? rel));
-      if (!cands.length || cands.length > 48) continue;
-      let strategy = "same-file-symbol";
-      let chosen = cands.filter((i) => nodes[i].file === rel);
-      if (!chosen.length) {
-        strategy = "imported-symbol";
-        chosen = cands.filter((i) => imported.has(nodes[i].file));
-      }
-      if (!chosen.length && cands.length === 1) {
-        strategy = "globally-unique-symbol";
-        chosen = cands;
-      }
-      if (!chosen.length || chosen.length > 3) continue;
-      const w = cands.length <= 8 ? 0.7 : cands.length <= 24 ? 0.45 : 0.25;
-      const from = enclosingIdx(rel, call.line);
-      for (const to of chosen) {
-        pushEdge(from, to, "invokes", w, { strategy, rule: "call-target-resolution", source: call.callee, candidates: cands.length });
-      }
-    }
-  });
-  nodes.forEach((node, i) => {
-    if (node.kind !== "class") return;
-    for (const match of node.sig.matchAll(/extends\s+([A-Za-z_$][\w$.]*)/g)) {
-      const candidates = byName.get(match[1].toLowerCase()) ?? [];
-      for (const to of candidates) {
-        pushEdge(i, to, "inherits", 0.9, {
-          strategy: "signature-extends",
-          rule: "extends-clause",
-          source: match[1],
-          candidates: candidates.length
-        });
-      }
-    }
-    const impl = /implements\s+([A-Za-z_$][\w$.,\s]*)/.exec(node.sig);
-    if (impl) {
-      for (const raw of impl[1].split(",")) {
-        const name = raw.trim();
-        const candidates = byName.get(name.toLowerCase()) ?? [];
-        for (const to of candidates) {
-          pushEdge(i, to, "inherits", 0.9, {
-            strategy: "signature-implements",
-            rule: "implements-clause",
-            source: name,
-            candidates: candidates.length
-          });
-        }
-      }
-    }
-  });
-  const allSites = [];
-  for (const f of factValues()) for (const literal of f.literals) allSites.push(literal);
-  const joinIdx = buildJoinIndex(allSites, (file, line) => enclosingIdx(file, line));
-  for (const edge of joinIdx.edges) pushEdge(edge.a, edge.b, "join", edge.w, edge.evidence);
-  const drafts = [];
-  for (const rel of files) {
-    const f = facts(rel);
-    if (f) for (const anchor2 of f.anchors) drafts.push(anchor2);
-  }
-  const draftsByLabel = /* @__PURE__ */ new Map();
-  for (const anchor2 of drafts) {
-    (draftsByLabel.get(anchor2.id) ?? draftsByLabel.set(anchor2.id, []).get(anchor2.id)).push(anchor2);
-  }
-  const anchors = [];
-  for (const [label, sites] of draftsByLabel) {
-    const first = sites[0];
-    const filesOf = [...new Set(sites.map((site) => site.file))];
-    const sources = [...new Set(sites.map((site) => site.ruleId).filter((source) => !!source))].sort();
-    const hubImplicit = sites.every((site) => site.implicit === true);
-    anchors.push({
-      id: label,
-      kind: first.kind,
-      label: sites.length > 1 ? `${label} \xB7 ${sites.length} sites` : label,
-      nodeId: first.nodeId,
-      file: first.file,
-      line: first.line,
-      ...sources.length ? { sources } : {},
-      ...hubImplicit ? { implicit: true } : {}
-    });
-    const idx = addNode(nodes, seen2, {
-      id: `anchor:${label}`,
-      name: label,
-      kind: "anchor",
-      file: first.file,
-      line: first.line,
-      sig: `${hubImplicit ? "(\u25B3 discovered) " : ""}${sites.length > 1 ? `${label} (${sites.length} sites)` : label}`,
-      lang: "anchor"
-    });
-    (byFile.get(first.file) ?? byFile.set(first.file, []).get(first.file)).push(idx);
-    const w = (hubImplicit ? 0.5 : 1) / Math.sqrt(sites.length);
-    for (const site of sites) {
-      const handler = seen2.get(site.nodeId) ?? fileIdx.get(site.file);
-      pushEdge(idx, handler, "anchors", w, {
-        strategy: site.implicit ? "discovered-anchor" : "declared-anchor",
-        rule: site.ruleId ?? "legacy-anchor",
-        source: `${site.file}:${site.line}`,
-        candidates: sites.length,
-        key: label,
-        ...site.implicit ? { implicit: true } : {}
-      });
-    }
-    if (filesOf.length > 1 && filesOf.length <= 12) {
-      const fw = 0.35 / Math.sqrt(filesOf.length);
-      for (const file of filesOf) {
-        pushEdge(idx, fileIdx.get(file), "anchors", fw, {
-          strategy: "anchor-membership",
-          rule: "feature-file-membership",
-          source: file,
-          candidates: filesOf.length,
-          key: label,
-          ...hubImplicit ? { implicit: true } : {}
-        });
-      }
-    }
-  }
-  return { graph: { nodes, edges, byName, byFile, anchors, files, importCoverage }, joinIndex: joinIdx };
-};
 
 // src/fovea/core/anchors.ts
 import { createHash as createHash2 } from "node:crypto";
@@ -4433,7 +4255,7 @@ var expandSubmodules = async (root, prefix, entries, enrolled, depth) => {
   const kinds = await mapLimit(
     candidates,
     IO_CONCURRENCY,
-    (entry) => lstat2(joinPath3(root, entry)).then(
+    (entry) => lstat3(joinPath3(root, entry)).then(
       (value) => value.isDirectory() ? "directory" : value.isFile() || value.isSymbolicLink() ? "file" : "other",
       () => "unavailable"
     )
@@ -5145,6 +4967,427 @@ var refreshFacts = async (root, store, files, changed, deletedPaths = []) => {
   };
 };
 
+// src/fovea/core/graph.ts
+import { basename as basename2, posix as posix2 } from "node:path";
+var CODE_EXTS_BY_LANGFAMILY = {
+  ts: [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+  py: [".py"],
+  rs: [".rs"],
+  go: []
+};
+var langFamily = (file) => {
+  const ext = file.split(".").pop()?.toLowerCase() ?? "";
+  if (["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"].includes(ext)) return "ts";
+  if (ext === "py") return "py";
+  if (ext === "rs") return "rs";
+  if (ext === "go") return "go";
+  return ext;
+};
+var pushIndex = (m, key, value) => {
+  (m.get(key) ?? m.set(key, []).get(key)).push(value);
+};
+var buildImportIndex = (files) => {
+  const fileSet = new Set(files);
+  const filesByDir = /* @__PURE__ */ new Map();
+  const goDirsBySuffix = /* @__PURE__ */ new Map();
+  const rsByBase = /* @__PURE__ */ new Map();
+  const tsByTailStem = /* @__PURE__ */ new Map();
+  for (const f of files) {
+    const dir = posix2.dirname(f);
+    pushIndex(filesByDir, dir, f);
+  }
+  for (const dir of filesByDir.keys()) {
+    const segs = dir.split("/").filter(Boolean);
+    for (let k = 1; k <= Math.min(3, segs.length); k++) {
+      pushIndex(goDirsBySuffix, segs.slice(-k).join("/"), dir);
+    }
+  }
+  for (const f of files) {
+    if (f.endsWith(".rs")) {
+      const base = basename2(f, ".rs");
+      pushIndex(rsByBase, base, f);
+      if (base === "mod") {
+        const parentBase = basename2(posix2.dirname(f));
+        pushIndex(rsByBase, parentBase, f);
+      }
+    }
+    if (f.endsWith(".ts")) {
+      const base = basename2(f, ".ts");
+      if (base === "index") pushIndex(tsByTailStem, basename2(posix2.dirname(f)), f);
+      else pushIndex(tsByTailStem, base, f);
+    }
+  }
+  return { fileSet, filesByDir, goDirsBySuffix, rsByBase, tsByTailStem };
+};
+var resolveImportToFile = (spec, fromFile, index) => {
+  const { fileSet } = index;
+  const fam = langFamily(fromFile);
+  const exact = (candidates, strategy) => {
+    const hits2 = [...new Set(candidates)].filter((candidate) => fileSet.has(candidate));
+    return hits2.length ? { file: hits2[0], evidence: { strategy, rule: "import-resolve", source: spec, candidates: hits2.length } } : void 0;
+  };
+  if (fam === "bend") {
+    if (spec === "Base" || /^0x[0-9a-f]+\//i.test(spec) || posix2.isAbsolute(spec)) return void 0;
+    const local = posix2.normalize(posix2.join(posix2.dirname(fromFile), spec));
+    if (local === ".." || local.startsWith("../")) return void 0;
+    return exact([local], "relative-import");
+  }
+  if (spec.startsWith("./") || spec.startsWith("../")) {
+    let base = posix2.normalize(posix2.join(posix2.dirname(fromFile), spec));
+    base = base.replace(/\.(?:[cm]?js|jsx)$/, "");
+    const candidates = [];
+    for (const ext of CODE_EXTS_BY_LANGFAMILY[fam] ?? []) {
+      candidates.push(base + ext, `${base}/index${ext}`);
+    }
+    candidates.push(base);
+    return exact(candidates, "relative-import");
+  }
+  if (fam === "py") {
+    const p = spec.replace(/\./g, "/");
+    return exact([`${p}.py`, `${p}/__init__.py`], "python-module");
+  }
+  if (fam === "go") {
+    const segs = spec.split("/").filter(Boolean);
+    for (let k = 1; k <= Math.min(3, segs.length); k++) {
+      const suffix = segs.slice(-k).join("/");
+      const matches = (index.goDirsBySuffix.get(suffix) ?? []).filter(
+        (directory) => directory === suffix || directory.endsWith(`/${suffix}`)
+      );
+      if (matches.length === 1) {
+        const inDir = index.filesByDir.get(matches[0]) ?? [];
+        if (inDir.length) {
+          return {
+            file: inDir[0],
+            evidence: { strategy: "go-module-suffix", rule: "go-package-representative", source: spec, candidates: inDir.length }
+          };
+        }
+      }
+    }
+    return void 0;
+  }
+  if (fam === "rs") {
+    const modPath = spec.replace(/^crate::|^self::/, "").replace(/::/g, "/");
+    const direct = exact([`src/${modPath}.rs`, `${modPath}.rs`], "rust-module");
+    if (direct) return direct;
+    const baseName = basename2(modPath);
+    const hits2 = (index.rsByBase.get(baseName) ?? []).filter(
+      (file) => file === `${baseName}.rs` || file.endsWith(`/${baseName}.rs`) || file.endsWith(`/${baseName}/mod.rs`)
+    );
+    return hits2.length === 1 ? { file: hits2[0], evidence: { strategy: "rust-module", rule: "import-resolve", source: spec, candidates: hits2.length } } : void 0;
+  }
+  const tail = spec.split("/").filter(Boolean).join("/");
+  const stem = tail.split("/").pop() ?? tail;
+  const hits = (index.tsByTailStem.get(stem) ?? []).filter(
+    (file) => file.endsWith(`/${tail}.ts`) || file.endsWith(`/${tail}/index.ts`)
+  );
+  return hits.length === 1 ? { file: hits[0], evidence: { strategy: "typescript-tail", rule: "import-resolve", source: spec, candidates: hits.length } } : void 0;
+};
+var importFamilyResolver = (files) => {
+  const sorted = [...files].sort();
+  const cache = /* @__PURE__ */ new Map();
+  return (site) => {
+    const bounds = site.dynamic;
+    if (langFamily(site.file) !== "ts" || bounds?.prefix === void 0 || bounds.suffix === void 0 || !bounds.prefix.startsWith("./") && !bounds.prefix.startsWith("../")) {
+      return { files: [], reason: "computed target is not a bounded relative literal-prefix/suffix expression" };
+    }
+    const joined = posix2.join(posix2.dirname(site.file), bounds.prefix);
+    const prefix = joined === "." || joined === "./" ? "" : joined;
+    if (prefix === ".." || prefix.startsWith("../") || posix2.isAbsolute(prefix)) {
+      return { files: [], reason: "computed family lies outside the selected root" };
+    }
+    const key = JSON.stringify([prefix, bounds.suffix]);
+    const cached = cache.get(key);
+    if (cached) return cached;
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) {
+      const mid = lo + hi >>> 1;
+      if (sorted[mid] < prefix) lo = mid + 1;
+      else hi = mid;
+    }
+    const hits = [];
+    let examined = 0;
+    for (let at = lo; at < sorted.length && sorted[at].startsWith(prefix); at++) {
+      if (++examined > 4096) {
+        const result2 = { files: [], capped: true, reason: "computed family scan exceeded 4096 files; no possible edges emitted" };
+        cache.set(key, result2);
+        return result2;
+      }
+      const file = sorted[at];
+      const runtime = file.replace(/\.tsx?$/, ".js").replace(/\.mts$/, ".mjs").replace(/\.cts$/, ".cjs");
+      if (!file.endsWith(bounds.suffix) && !runtime.endsWith(bounds.suffix)) continue;
+      hits.push(file);
+      if (hits.length > 32) {
+        const result2 = { files: [], capped: true, reason: "computed family exceeds 32 possible targets; no possible edges emitted" };
+        cache.set(key, result2);
+        return result2;
+      }
+    }
+    const result = hits.length ? { files: hits } : { files: [], reason: "no matching targets in the selected graph" };
+    cache.set(key, result);
+    return result;
+  };
+};
+var addNode = (nodes, seen2, rec) => {
+  const hit = seen2.get(rec.id);
+  if (hit !== void 0) return hit;
+  const idx = nodes.length;
+  seen2.set(rec.id, idx);
+  nodes.push(rec);
+  return idx;
+};
+var assembleGraphWithIndex = async (_root, files, factsMap) => {
+  const facts = (file) => factsMap instanceof Map ? factsMap.get(file) : factsMap[file];
+  const factValues = () => factsMap instanceof Map ? factsMap.values() : Object.values(factsMap);
+  const nodes = [];
+  const seen2 = /* @__PURE__ */ new Map();
+  const edges = [];
+  const byFile = /* @__PURE__ */ new Map();
+  const fileIdx = /* @__PURE__ */ new Map();
+  const pushEdge = (a, b, kind, w, evidence) => {
+    if (a === b) return;
+    edges.push({ a, b, kind, w, evidence });
+  };
+  for (const rel of files) {
+    const idx = addNode(nodes, seen2, {
+      id: `file:${rel}`,
+      name: posix2.basename(rel),
+      kind: "file",
+      file: rel,
+      line: 0,
+      sig: rel,
+      lang: LANG_BY_EXT[rel.split(".").pop()?.toLowerCase() ?? ""] ?? "config"
+    });
+    fileIdx.set(rel, idx);
+    (byFile.get(rel) ?? byFile.set(rel, []).get(rel)).push(idx);
+  }
+  const symIdxByFileLine = /* @__PURE__ */ new Map();
+  await forEachChunked(files, 512, (rel) => {
+    const f = facts(rel);
+    if (!f) return;
+    for (const s of f.symbols) {
+      const idx = addNode(nodes, seen2, { id: `${s.name}@${s.file}`, ...s });
+      (byFile.get(rel) ?? byFile.set(rel, []).get(rel)).push(idx);
+      pushEdge(fileIdx.get(rel), idx, "contains", 1, { strategy: "file-membership", rule: "symbol-contained-by-file", source: rel });
+      const key = `${rel}:${s.line}`;
+      if (!symIdxByFileLine.has(key)) symIdxByFileLine.set(key, idx);
+    }
+  });
+  for (const [, arr] of byFile) arr.sort((x, y) => nodes[x].line - nodes[y].line);
+  const enclosingIdx = (file, line) => {
+    const arr = byFile.get(file) ?? [];
+    let best = fileIdx.get(file);
+    for (const idx of arr) {
+      const n = nodes[idx];
+      if (n.kind !== "file" && n.line <= line && nodes[best].line <= n.line) best = idx;
+    }
+    return best;
+  };
+  const byName = /* @__PURE__ */ new Map();
+  {
+    const addKey = (key, idx) => {
+      if (!key) return;
+      (byName.get(key) ?? byName.set(key, []).get(key)).push(idx);
+    };
+    nodes.forEach((n, i) => {
+      if (n.kind === "file" || n.kind === "anchor") return;
+      addKey(n.name.toLowerCase(), i);
+      const dot = n.name.indexOf(".");
+      if (dot > 0) addKey(n.name.slice(dot + 1).toLowerCase(), i);
+    });
+  }
+  const importIndex = buildImportIndex(files);
+  const resolveFamily = importFamilyResolver(files);
+  const importCoverage = {
+    sites: 0,
+    resolved: 0,
+    possible: 0,
+    unresolved: 0,
+    capped: 0,
+    unsupportedLanguages: [...new Set(files.map((file) => LANG_BY_EXT[file.split(".").pop()?.toLowerCase() ?? ""]).filter((language) => !!language && !supportsImportExtraction(language)))].sort(),
+    examples: [],
+    examplesOmitted: 0
+  };
+  const noteImport = (site, status, reason) => {
+    if (importCoverage.examples.length < 20) {
+      importCoverage.examples.push({ file: site.file, line: site.line, spec: site.spec.slice(0, 160), status, reason });
+    } else importCoverage.examplesOmitted++;
+  };
+  const importTargets = /* @__PURE__ */ new Map();
+  await forEachChunked(files, 512, (rel) => {
+    const f = facts(rel);
+    if (!f) return;
+    for (const imp of f.imports) {
+      importCoverage.sites++;
+      if (imp.dynamic) {
+        const family = resolveFamily(imp);
+        if (!family.files.length) {
+          importCoverage.unresolved++;
+          if (family.capped) importCoverage.capped++;
+          noteImport(imp, family.capped ? "capped" : "unresolved", family.reason);
+          continue;
+        }
+        importCoverage.possible++;
+        noteImport(imp, "possible", `${family.files.length} literal-prefix/suffix targets; runtime values are not evaluated`);
+        for (const file of family.files) {
+          pushEdge(fileIdx.get(rel), fileIdx.get(file), "imports", 0.15 / family.files.length, {
+            strategy: "computed-import-family",
+            rule: "literal-prefix-suffix",
+            source: imp.spec,
+            candidates: family.files.length,
+            possible: true
+          });
+        }
+        continue;
+      }
+      const target = resolveImportToFile(imp.spec, rel, importIndex);
+      if (!target) {
+        importCoverage.unresolved++;
+        noteImport(imp, "unresolved", "not resolved within the selected graph; may be external or outside the modeled import forms");
+        continue;
+      }
+      importCoverage.resolved++;
+      if (target.file === rel) continue;
+      pushEdge(fileIdx.get(rel), fileIdx.get(target.file), "imports", 0.3, target.evidence);
+      (importTargets.get(rel) ?? importTargets.set(rel, []).get(rel)).push({ ...target, alias: imp.alias });
+    }
+    if (isTestFile(rel)) {
+      for (const target of importTargets.get(rel) ?? []) {
+        pushEdge(fileIdx.get(rel), fileIdx.get(target.file), "tests", 0.6, {
+          strategy: "test-import",
+          rule: "test-subject-import",
+          source: target.evidence.source,
+          candidates: target.evidence.candidates
+        });
+      }
+    }
+  });
+  await forEachChunked(files, 256, (rel) => {
+    const f = facts(rel);
+    if (!f) return;
+    const targets = importTargets.get(rel) ?? [];
+    const imported = new Set(targets.map((target) => target.file));
+    const bend = langFamily(rel) === "bend";
+    const aliases = bend ? targets.filter((target) => target.alias).sort((a, b) => b.alias.length - a.alias.length) : [];
+    for (const call of f.calls) {
+      const alias = aliases.find((target) => call.callee.startsWith(`${target.alias}.`));
+      const name = alias ? call.callee.slice(alias.alias.length + 1) : call.callee;
+      const cands = (byName.get(name.toLowerCase()) ?? []).filter((i) => !bend || nodes[i].lang === "Bend" && nodes[i].name === name && nodes[i].file === (alias?.file ?? rel));
+      if (!cands.length || cands.length > 48) continue;
+      let strategy = "same-file-symbol";
+      let chosen = cands.filter((i) => nodes[i].file === rel);
+      if (!chosen.length) {
+        strategy = "imported-symbol";
+        chosen = cands.filter((i) => imported.has(nodes[i].file));
+      }
+      if (!chosen.length && cands.length === 1) {
+        strategy = "globally-unique-symbol";
+        chosen = cands;
+      }
+      if (!chosen.length || chosen.length > 3) continue;
+      const w = cands.length <= 8 ? 0.7 : cands.length <= 24 ? 0.45 : 0.25;
+      const from = enclosingIdx(rel, call.line);
+      for (const to of chosen) {
+        pushEdge(from, to, "invokes", w, { strategy, rule: "call-target-resolution", source: call.callee, candidates: cands.length });
+      }
+    }
+  });
+  nodes.forEach((node, i) => {
+    if (node.kind !== "class") return;
+    for (const match of node.sig.matchAll(/extends\s+([A-Za-z_$][\w$.]*)/g)) {
+      const candidates = byName.get(match[1].toLowerCase()) ?? [];
+      for (const to of candidates) {
+        pushEdge(i, to, "inherits", 0.9, {
+          strategy: "signature-extends",
+          rule: "extends-clause",
+          source: match[1],
+          candidates: candidates.length
+        });
+      }
+    }
+    const impl = /implements\s+([A-Za-z_$][\w$.,\s]*)/.exec(node.sig);
+    if (impl) {
+      for (const raw of impl[1].split(",")) {
+        const name = raw.trim();
+        const candidates = byName.get(name.toLowerCase()) ?? [];
+        for (const to of candidates) {
+          pushEdge(i, to, "inherits", 0.9, {
+            strategy: "signature-implements",
+            rule: "implements-clause",
+            source: name,
+            candidates: candidates.length
+          });
+        }
+      }
+    }
+  });
+  const allSites = [];
+  for (const f of factValues()) for (const literal of f.literals) allSites.push(literal);
+  const joinIdx = buildJoinIndex(allSites, (file, line) => enclosingIdx(file, line));
+  for (const edge of joinIdx.edges) pushEdge(edge.a, edge.b, "join", edge.w, edge.evidence);
+  const drafts = [];
+  for (const rel of files) {
+    const f = facts(rel);
+    if (f) for (const anchor2 of f.anchors) drafts.push(anchor2);
+  }
+  const draftsByLabel = /* @__PURE__ */ new Map();
+  for (const anchor2 of drafts) {
+    (draftsByLabel.get(anchor2.id) ?? draftsByLabel.set(anchor2.id, []).get(anchor2.id)).push(anchor2);
+  }
+  const anchors = [];
+  for (const [label, sites] of draftsByLabel) {
+    const first = sites[0];
+    const filesOf = [...new Set(sites.map((site) => site.file))];
+    const sources = [...new Set(sites.map((site) => site.ruleId).filter((source) => !!source))].sort();
+    const hubImplicit = sites.every((site) => site.implicit === true);
+    anchors.push({
+      id: label,
+      kind: first.kind,
+      label: sites.length > 1 ? `${label} \xB7 ${sites.length} sites` : label,
+      nodeId: first.nodeId,
+      file: first.file,
+      line: first.line,
+      ...sources.length ? { sources } : {},
+      ...hubImplicit ? { implicit: true } : {}
+    });
+    const idx = addNode(nodes, seen2, {
+      id: `anchor:${label}`,
+      name: label,
+      kind: "anchor",
+      file: first.file,
+      line: first.line,
+      sig: `${hubImplicit ? "(\u25B3 discovered) " : ""}${sites.length > 1 ? `${label} (${sites.length} sites)` : label}`,
+      lang: "anchor"
+    });
+    (byFile.get(first.file) ?? byFile.set(first.file, []).get(first.file)).push(idx);
+    const w = (hubImplicit ? 0.5 : 1) / Math.sqrt(sites.length);
+    for (const site of sites) {
+      const handler = seen2.get(site.nodeId) ?? fileIdx.get(site.file);
+      pushEdge(idx, handler, "anchors", w, {
+        strategy: site.implicit ? "discovered-anchor" : "declared-anchor",
+        rule: site.ruleId ?? "legacy-anchor",
+        source: `${site.file}:${site.line}`,
+        candidates: sites.length,
+        key: label,
+        ...site.implicit ? { implicit: true } : {}
+      });
+    }
+    if (filesOf.length > 1 && filesOf.length <= 12) {
+      const fw = 0.35 / Math.sqrt(filesOf.length);
+      for (const file of filesOf) {
+        pushEdge(idx, fileIdx.get(file), "anchors", fw, {
+          strategy: "anchor-membership",
+          rule: "feature-file-membership",
+          source: file,
+          candidates: filesOf.length,
+          key: label,
+          ...hubImplicit ? { implicit: true } : {}
+        });
+      }
+    }
+  }
+  return { graph: { nodes, edges, byName, byFile, anchors, files, importCoverage }, joinIndex: joinIdx };
+};
+
 // src/fovea/core/state.ts
 var states = owned("state.ts:states", () => /* @__PURE__ */ new Map());
 var inflight = owned("state.ts:inflight", () => /* @__PURE__ */ new Map());
@@ -5265,7 +5508,7 @@ var refreshState = async (state, hints = [], force = false) => {
   changed.push(...hinted);
   let disclosureChanged = false;
   for (const boundary of [...store.enrolled]) {
-    const exists = await stat3(join4(state.root, boundary, ".git")).then(() => true, () => false);
+    const exists = await stat3(join5(state.root, boundary, ".git")).then(() => true, () => false);
     if (!exists) {
       store.enrolled.delete(boundary);
       disclosureChanged = true;
@@ -5289,7 +5532,7 @@ var refreshState = async (state, hints = [], force = false) => {
     for (const seg of h.split("/").slice(0, -1)) {
       prefix = prefix ? `${prefix}/${seg}` : seg;
       if (store.enrolled.has(prefix)) continue;
-      const boundary = await stat3(join4(state.root, prefix, ".git")).then(() => true, () => false);
+      const boundary = await stat3(join5(state.root, prefix, ".git")).then(() => true, () => false);
       if (!boundary) continue;
       store.enrolled.add(prefix);
       disclosureChanged = true;
@@ -5310,7 +5553,7 @@ var refreshState = async (state, hints = [], force = false) => {
       let needsList = probe.relist || disclosureChanged || headMoved || dirtyPathRemoved || membershipPathAdded || ignoreRulesChanged || probe.changes.some((change) => change.path.endsWith("/"));
       if (probe.changes.length) {
         const dirFlags = await Promise.all(
-          probe.changes.map((c) => !c.path.endsWith("/") && stat3(join4(state.root, c.path)).then((s) => s.isDirectory(), () => false))
+          probe.changes.map((c) => !c.path.endsWith("/") && stat3(join5(state.root, c.path)).then((s) => s.isDirectory(), () => false))
         );
         probe.changes.forEach((c, i) => {
           if (!dirFlags[i]) return;
@@ -5344,7 +5587,7 @@ var refreshState = async (state, hints = [], force = false) => {
       if (!headMoved && !needsList) {
         for (const p of state.dirty) {
           if (nowDirty.has(p)) continue;
-          const onDisk = await stat3(join4(state.root, p)).then((s) => s.isFile(), () => false);
+          const onDisk = await stat3(join5(state.root, p)).then((s) => s.isFile(), () => false);
           if (onDisk) changed.push(p);
           else if (store.facts.has(p) || store.failedSha.has(p)) deleted.push(p);
         }
@@ -5411,10 +5654,10 @@ var ensureState = (root, opts = {}) => {
 var relativeRequest = (root, input) => {
   const raw = input.startsWith("@") ? input.slice(1) : input;
   const rootPath = resolve3(root);
-  const absolute = isAbsolute2(raw) ? resolve3(raw) : resolve3(rootPath, raw);
-  const rel = relative2(rootPath, absolute);
-  if (!rel || rel === "." || rel === ".." || rel.startsWith(`..${sep2}`) || isAbsolute2(rel)) return void 0;
-  return rel.split(sep2).join("/");
+  const absolute = isAbsolute3(raw) ? resolve3(raw) : resolve3(rootPath, raw);
+  const rel = relative3(rootPath, absolute);
+  if (!rel || rel === "." || rel === ".." || rel.startsWith(`..${sep3}`) || isAbsolute3(rel)) return void 0;
+  return rel.split(sep3).join("/");
 };
 var explainPathCoverage = async (state, requested) => {
   const { fileRoutes } = await loadRepoRules(state.root);
@@ -5445,7 +5688,7 @@ var explainPathCoverage = async (state, requested) => {
       out.push({ requested: input, path: rel, status: "unavailable", reason: "Git listed the path but the worktree entry was unavailable" });
       continue;
     }
-    const onDisk = await stat3(join4(state.root, rel)).catch(() => void 0);
+    const onDisk = await stat3(join5(state.root, rel)).catch(() => void 0);
     if (!onDisk) {
       out.push({ requested: input, path: rel, status: "missing", reason: "path does not exist in this worktree" });
       continue;
@@ -5488,7 +5731,7 @@ var explainPathCoverage = async (state, requested) => {
     for (const segment of rel.split("/").slice(0, -1)) {
       prefix = prefix ? `${prefix}/${segment}` : segment;
       if (state.store.enrolled.has(prefix)) continue;
-      const marker = await stat3(join4(state.root, prefix, ".git")).then(() => true, () => false);
+      const marker = await stat3(join5(state.root, prefix, ".git")).then(() => true, () => false);
       if (marker) {
         closedBoundary = prefix;
         break;
@@ -5795,7 +6038,7 @@ var historySeedWeights = (seedFiles, _graph, history, now) => {
   return partners;
 };
 var clampBudget = (b, dflt) => Math.max(256, Math.min(16e3, b ?? dflt));
-var overflowArtifact = (op, key) => context().artifactLabel?.(op, key) ?? join5(privateTmpdir(), `pi-fovea-${op}-${createHash5("sha1").update(key).digest("hex").slice(0, 8)}.txt`);
+var overflowArtifact = (op, key) => context().artifactLabel?.(op, key) ?? join6(privateTmpdir(), `pi-fovea-${op}-${createHash5("sha1").update(key).digest("hex").slice(0, 8)}.txt`);
 var isTestScope = (file) => isTestFile(file) || /(^|\/)(tests?|__tests__|fixtures?)(\/|$)/i.test(file);
 var sketch = async (root, budget, ensured) => {
   const state = ensured ?? await ensureState(root);
@@ -5819,7 +6062,7 @@ var sketch = async (root, budget, ensured) => {
   let vmax = 0;
   for (let i = 0; i < field.length; i++) if (field[i] > vmax) vmax = field[i];
   if (vmax <= 0) {
-    const text = `fovea sketch: empty graph (no supported files matched)${extractionSuffix(state)}`;
+    const text = `${coreDisplayName()} sketch: empty graph (no supported files matched)${extractionSuffix(state)}`;
     return { text, tokens: tokenEstimate(text), details: { files: 0, ...extractionDetails(state) } };
   }
   const claimed = /* @__PURE__ */ new Set();
@@ -5899,7 +6142,7 @@ var sketch = async (root, budget, ensured) => {
   }
   const anchorSummary = testAnchorIdx.length ? `${productionAnchorIdx.length} production anchors \xB7 ${testAnchorIdx.length} test/fixture anchors collapsed` : `${productionAnchorIdx.length} anchors`;
   const fit = revealGroups(groups, {
-    header: `fovea sketch \xB7 ${g.files.length} files \xB7 ${g.nodes.length} symbols \xB7 ${anchorSummary}${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} sketch \xB7 ${g.files.length} files \xB7 ${g.nodes.length} symbols \xB7 ${anchorSummary}${extractionSuffix(state)}`,
     budget: B,
     overflowTo: overflowArtifact("sketch", `${root}|sketch`)
   });
@@ -5930,12 +6173,12 @@ var focus = async (root, query, budget, options = {}, ensured) => {
         const node = g.nodes[suggestion.index];
         return `  ? ${node.name} \u2014 ${formatNodeLocation(node)} \u2014 ${node.sig}`;
       });
-      const guidance = suggestions.length ? "Retry fovea_focus with one of these names, a route path (/api/...), or a file path." : "Try a symbol name, a route path (/api/...), or a file path. Run fovea_sketch for the map silhouette first.";
+      const guidance = suggestions.length ? `Retry ${coreToolName("focus")} with one of these names, a route path (/api/...), or a file path.` : `Try a symbol name, a route path (/api/...), or a file path. Run ${coreToolName("sketch")} for the map silhouette first.`;
       const coverageGaps = requestedCoverage.filter((entry) => entry.status !== "indexed").map((entry) => `! ${entry.path ?? entry.requested}: ${entry.reason}.`);
       return [
         ...coverageGaps,
         ...state.extraction.failed.length ? [`! ${state.extraction.failed.length} files failed extraction; matches may be incomplete.`] : [],
-        `fovea focus "${query}": ${note}.`,
+        `${coreDisplayName()} focus "${query}": ${note}.`,
         ...nearby.length ? ["Nearby symbols:", ...nearby] : [],
         guidance
       ].join("\n");
@@ -5980,7 +6223,7 @@ var focus = async (root, query, budget, options = {}, ensured) => {
   const field = heatField(session.tk, t, g.nodes.length);
   const scopedIds = options.path || options.language || options.kind ? new Set(g.nodes.filter(focusScope(options)).map((node) => node.id)) : void 0;
   const fit = revealFoveated(g, field, {
-    header: `fovea focus "${query}" \xB7 ${note}${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} focus "${query}" \xB7 ${note}${extractionSuffix(state)}`,
     include: scopedIds,
     disclosed: session.disclosed,
     seeds,
@@ -6018,7 +6261,7 @@ var dwell = async (root, factor, budget, ensured) => {
   if (session.seeds.length && (session.generation !== state.generation || session.tk.length > 0 && session.tk[0]?.length !== g.nodes.length)) {
     const previousGeneration = session.generation || "unknown";
     clearSessionFocus(session);
-    const text = `fovea dwell: focus expired because the graph changed (${previousGeneration} \u2192 ${state.generation}). Call fovea_focus again; no stale vector was applied.`;
+    const text = `${coreDisplayName()} dwell: focus expired because the graph changed (${previousGeneration} \u2192 ${state.generation}). Call ${coreToolName("focus")} again; no stale vector was applied.`;
     return {
       text,
       tokens: tokenEstimate(text),
@@ -6026,7 +6269,7 @@ var dwell = async (root, factor, budget, ensured) => {
     };
   }
   if (!session.seeds.length) {
-    const text = "fovea dwell: no focus yet. Call fovea_focus with a symbol, feature id, route, or file first; dwell then deepens that field.";
+    const text = `${coreDisplayName()} dwell: no focus yet. Call ${coreToolName("focus")} with a symbol, feature id, route, or file first; dwell then deepens that field.`;
     return { text, tokens: tokenEstimate(text), details: { seeds: 0, ...extractionDetails(state) } };
   }
   if (!session.tk.length) {
@@ -6044,7 +6287,7 @@ var dwell = async (root, factor, budget, ensured) => {
   const scope = session.scope ?? {};
   const scopedIds = scope.path || scope.language || scope.kind ? new Set(g.nodes.filter(focusScope(scope)).map((node) => node.id)) : void 0;
   const fit = revealFoveated(g, field, {
-    header: `fovea dwell \xB7 context widened ${Number((to / from).toFixed(1))}\xD7 \xB7 new results${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} dwell \xB7 context widened ${Number((to / from).toFixed(1))}\xD7 \xB7 new results${extractionSuffix(state)}`,
     include: scopedIds,
     disclosed: session.disclosed,
     seeds: session.seeds,
@@ -6166,7 +6409,7 @@ var impact = async (root, args, ensured) => {
   if (!seedSet.size) {
     const gaps = requestedCoverage.filter((entry) => entry.status !== "indexed").map((entry) => `
 ! ${entry.path ?? entry.requested}: ${entry.reason}.`).join("");
-    const text = `fovea impact: no seed files (repo clean or paths unknown). Pass files: [...] or symbols: [...] for a what-if cascade.${gaps}`;
+    const text = `${coreDisplayName()} impact: no seed files (repo clean or paths unknown). Pass files: [...] or symbols: [...] for a what-if cascade.${gaps}`;
     const fit2 = revealGroups([], { header: text, budget: B });
     return {
       text: fit2.text,
@@ -6324,7 +6567,7 @@ var impact = async (root, args, ensured) => {
   const groups = [...anchorHits, ...fileGroups];
   const seedNames = seeds.slice(0, 5).map((i) => g.nodes[i].file).join(", ");
   const fit = revealGroups(groups, {
-    header: `fovea impact \xB7 changed: ${seedNames}${seeds.length > 5 ? ", \u2026" : ""} \xB7 likely review order${extractionSuffix(state)}`,
+    header: `${coreDisplayName()} impact \xB7 changed: ${seedNames}${seeds.length > 5 ? ", \u2026" : ""} \xB7 likely review order${extractionSuffix(state)}`,
     budget: B,
     overflowTo: overflowArtifact("impact", `${root}|${(args.files ?? []).join(",")}`)
   });
@@ -6373,18 +6616,18 @@ var impact = async (root, args, ensured) => {
 import { createHash as createHash7 } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile as readFile6, stat as stat4 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 
 // src/fovea/core/provenance.ts
 import { createHash as createHash6 } from "node:crypto";
 import { readFile as readFile5, readdir as readdir2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute3, join as join6, relative as relative3, resolve as resolve4, sep as sep3 } from "node:path";
+import { isAbsolute as isAbsolute4, join as join7, relative as relative4, resolve as resolve4, sep as sep4 } from "node:path";
 var JOURNAL_VERSION = 1;
 var sha1 = (value) => createHash6("sha1").update(value).digest("hex");
 var ownerFor = (sessionId) => sha1(sessionId).slice(0, 16);
 var rootKey = (root) => sha1(resolve4(root)).slice(0, 16);
 var prefixFor = (root) => `pi-fovea-provenance-${rootKey(root)}-`;
-var provenancePathFor = (root, sessionId) => join6(privateTmpdir(), `${prefixFor(root)}${ownerFor(sessionId)}.json`);
+var provenancePathFor = (root, sessionId) => join7(privateTmpdir(), `${prefixFor(root)}${ownerFor(sessionId)}.json`);
 var writeQueues = owned("provenance.ts:writeQueues", () => /* @__PURE__ */ new Map());
 var readRecords = async (root, since) => {
   void maintainTempStorage();
@@ -6400,7 +6643,7 @@ var readRecords = async (root, since) => {
   }
   const records = [];
   await Promise.all(names.map(async (name) => {
-    const path = join6(privateTmpdir(), name);
+    const path = join7(privateTmpdir(), name);
     try {
       const journal = JSON.parse(await readTempText(path, Infinity));
       if (journal.version !== JOURNAL_VERSION || journal.root !== resolve4(root) || !Array.isArray(journal.records)) return;
@@ -6479,10 +6722,10 @@ var gitDriftSince = async (root, shas) => {
   for (const change of probe.changes) {
     const rel = change.path;
     if (rel.endsWith("/")) return true;
-    const st = await stat4(join7(root, rel)).catch(() => void 0);
+    const st = await stat4(join8(root, rel)).catch(() => void 0);
     if (st?.isDirectory()) return true;
     try {
-      const buf = await readFile6(join7(root, rel));
+      const buf = await readFile6(join8(root, rel));
       const sha = createHash7("sha1").update(buf).digest("hex");
       if (shas.get(rel) !== sha) return true;
     } catch {
@@ -6556,9 +6799,9 @@ var coldManifestDrift = async (root, baseline, routes) => {
   const sweep2 = Date.now() - (coldSweeps.get(root) ?? baseline.capturedAt) >= 2e4;
   const changed = await mapLimit(listing.files, 32, async (file) => {
     try {
-      const info = await stat4(join7(root, file)), before = baseline.meta.get(file);
+      const info = await stat4(join8(root, file)), before = baseline.meta.get(file);
       if (!before || info.size !== before.size || info.mtimeMs !== before.mtime) return true;
-      return sweep2 && baseline.shas.has(file) && createHash7("sha1").update(await readFile6(join7(root, file))).digest("hex") !== baseline.shas.get(file);
+      return sweep2 && baseline.shas.has(file) && createHash7("sha1").update(await readFile6(join8(root, file))).digest("hex") !== baseline.shas.get(file);
     } catch {
       return true;
     }
@@ -6575,7 +6818,7 @@ var coldDrift = async (root, baseline) => {
   if (!probe || probe.head !== baseline.head || probe.relist) return true;
   const candidates = /* @__PURE__ */ new Set([...baseline.dirty, ...probe.changes.map((change) => change.path)]);
   for (const file of candidates) {
-    const path = join7(root, file), info = await stat4(path).catch(() => void 0);
+    const path = join8(root, file), info = await stat4(path).catch(() => void 0);
     if (info?.isDirectory() || file.endsWith("/")) return coldManifestDrift(root, baseline, routes);
     if (!baseline.shas.has(file) && !filterSupported([file], routes).length) continue;
     try {
@@ -6710,7 +6953,7 @@ var sync = async (root, params, now, opts) => {
   const semanticChanged = allSemanticChanged.filter(relevantFile);
   const hinted = (params.files ?? []).filter((file) => semanticChanged.includes(file));
   const allDeleted = [...prev.shas.keys()].filter(
-    (file) => !(file in state.facts) && !existsSync(join7(state.root, file))
+    (file) => !(file in state.facts) && !existsSync(join8(state.root, file))
   );
   const deleted = allDeleted.filter(relevantFile);
   const ignoredFiles = [.../* @__PURE__ */ new Set([
@@ -6841,7 +7084,7 @@ var sync = async (root, params, now, opts) => {
     };
   }
   const changedSummary = files.length ? `${files.slice(0, 4).join(", ")}${files.length > 4 ? ` (+${files.length - 4} more)` : ""}` : deleted.length ? `deleted ${deleted.slice(0, 4).join(", ")}${deleted.length > 4 ? ` (+${deleted.length - 4} more)` : ""}` : "route structure";
-  const origin = provenance?.kind === "current-session" ? "current session" : provenance?.kind === "other-session" ? "another Fovea-enabled session" : provenance?.kind === "mixed" ? "mixed sessions or mutation paths" : "unattributed mutation path";
+  const origin = provenance?.kind === "current-session" ? "current session" : provenance?.kind === "other-session" ? `another ${coreDisplayName("Fovea")}-enabled session` : provenance?.kind === "mixed" ? "mixed sessions or mutation paths" : "unattributed mutation path";
   const delivery = provenance?.kind === "other-session" ? "next-prompt" : "steer";
   const lines = [
     "Repository structure changed.",
@@ -6877,7 +7120,7 @@ var sync = async (root, params, now, opts) => {
     }
   }
   if (!embedded && (!pushFocus || focusTarget)) {
-    lines.push(focusTarget ? `Next: fovea_focus ${JSON.stringify(focusTarget)} to see what it now connects to.` : "Next: fovea_sketch for the updated silhouette.");
+    lines.push(focusTarget ? `Next: ${coreToolName("focus")} ${JSON.stringify(focusTarget)} to see what it now connects to.` : `Next: ${coreToolName("sketch")} for the updated silhouette.`);
   }
   lines.push(actionLine);
   while (lines.length > 3 && Math.ceil(lines.join("\n").length / 4) > params.budget) {
@@ -6971,20 +7214,20 @@ function boundResultDetails(input, maxChars = 4e5, maxNodes = 18e3) {
 }
 
 // src/fovea/source-access.ts
-import { lstat as lstat3, mkdir, writeFile as writeFile2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute5, join as join9, relative as relative5, sep as sep5 } from "node:path";
+import { lstat as lstat4, mkdir, writeFile as writeFile2 } from "node:fs/promises";
+import { isAbsolute as isAbsolute6, join as join10, relative as relative6, sep as sep6 } from "node:path";
 import { createHash as createHash9 } from "node:crypto";
 
 // src/fovea/parser-executable.ts
 import { createHash as createHash8 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
-import { open as open2, realpath, writeFile, chmod } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, relative as relative4, sep as sep4, join as join8 } from "node:path";
+import { open as open2, realpath as realpath2, writeFile, chmod } from "node:fs/promises";
+import { isAbsolute as isAbsolute5, relative as relative5, sep as sep5, join as join9 } from "node:path";
 import { execFile as execFile3 } from "node:child_process";
 var sha256 = (bytes) => createHash8("sha256").update(bytes).digest("hex");
 async function readVerifiedExecutable(path, maxBytes = 128 * 1024 * 1024) {
-  if (!isAbsolute4(path)) throw new Error("Executable path must be absolute");
-  const canonical = await realpath(path);
+  if (!isAbsolute5(path)) throw new Error("Executable path must be absolute");
+  const canonical = await realpath2(path);
   if (canonical !== path) throw new Error("Executable path must be canonical and cannot contain symlinks");
   const handle = await open2(path, constants2.O_RDONLY | constants2.O_NOFOLLOW);
   try {
@@ -7008,14 +7251,14 @@ async function resolveParserDescriptor(descriptor, storageRoot, signal) {
     throw new Error("Invalid managed parser descriptor");
   }
   if (descriptor.generationRoot) {
-    const root = await realpath(descriptor.generationRoot);
-    const rel = relative4(root, descriptor.path);
-    if (!rel || rel === ".." || rel.startsWith(`..${sep4}`) || isAbsolute4(rel)) throw new Error("Parser is outside its generation");
+    const root = await realpath2(descriptor.generationRoot);
+    const rel = relative5(root, descriptor.path);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute5(rel)) throw new Error("Parser is outside its generation");
   }
   signal?.throwIfAborted();
   const bytes = await readVerifiedExecutable(descriptor.path);
   if (sha256(bytes) !== descriptor.sha256.toLowerCase()) throw new Error("Managed parser SHA-256 mismatch");
-  const path = join8(storageRoot, "managed-parser");
+  const path = join9(storageRoot, "managed-parser");
   await writeFile(path, bytes, { flag: "wx", mode: 320 });
   await chmod(path, 320);
   const version = await new Promise((resolve6, reject) => {
@@ -7227,14 +7470,14 @@ var SourceAccess = class {
   async stageFile(destination, filePath, data, signal) {
     signal?.throwIfAborted();
     const parent = filePath.includes("/") ? filePath.slice(0, filePath.lastIndexOf("/")) : "";
-    await mkdir(join9(destination, parent), { recursive: true, mode: 448 });
-    await writeFile2(join9(destination, filePath), data, { flag: "wx", mode: 256 });
+    await mkdir(join10(destination, parent), { recursive: true, mode: 448 });
+    await writeFile2(join10(destination, filePath), data, { flag: "wx", mode: 256 });
   }
   /** Pin the previous snapshot: its root must exist as a private directory. */
   async pinPreviousSnapshot(previous) {
     if (!previous) return null;
     try {
-      const held = await lstat3(previous.root);
+      const held = await lstat4(previous.root);
       if (!held.isDirectory() || held.isSymbolicLink()) return null;
       return { root: previous.root, dev: held.dev, ino: held.ino };
     } catch {
@@ -7244,7 +7487,7 @@ var SourceAccess = class {
   /** Re-verify the pinned previous snapshot: same directory identity. */
   async previousSnapshotStillPinned(pinned) {
     try {
-      const held = await lstat3(pinned.root);
+      const held = await lstat4(pinned.root);
       return held.isDirectory() && !held.isSymbolicLink() && held.dev === pinned.dev && held.ino === pinned.ino;
     } catch {
       return false;
@@ -7285,9 +7528,9 @@ var SourceAccess = class {
   /** Bounded Git shallow-ledger reader; same ancestor/no-follow boundary as capture. */
   async readScopeSafeFile(root, path, maxBytes) {
     sourceLimit(maxBytes, 128 * 1024 * 1024, "metadata bytes");
-    const rel = relative5(root, path);
-    if (!rel || rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute5(rel)) throw new Error("Git metadata is outside authorized scope");
-    const segments = rel.split(sep5);
+    const rel = relative6(root, path);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep6}`) || isAbsolute6(rel)) throw new Error("Git metadata is outside authorized scope");
+    const segments = rel.split(sep6);
     let directory = await openSourceDirectory(this.platform, root);
     try {
       for (const segment of segments.slice(0, -1)) {
@@ -7323,9 +7566,9 @@ var SourceAccess = class {
   }
 };
 function relativeStorageExclusion(root, storageRoot) {
-  const rel = relative5(root, storageRoot);
+  const rel = relative6(root, storageRoot);
   if (!rel) throw new Error("Storage root cannot be the authorized source root");
-  return rel !== ".." && !rel.startsWith(`..${sep5}`) && !isAbsolute5(rel) ? [rel.split(sep5).join("/")] : [];
+  return rel !== ".." && !rel.startsWith(`..${sep6}`) && !isAbsolute6(rel) ? [rel.split(sep6).join("/")] : [];
 }
 
 // src/fovea/engine.ts
@@ -7355,15 +7598,18 @@ var FoveaEngine = class {
   conversations = /* @__PURE__ */ new Map();
   preparedSync = /* @__PURE__ */ new Map();
   closed = false;
+  closeTask;
+  scratch;
+  cleanupFailure;
   constructor(options) {
     this.options = { ...options, parser: { ...options.parser } };
-    if (!isAbsolute6(options.storageRoot)) throw new Error("Fovea storageRoot must be absolute");
+    if (!isAbsolute7(options.storageRoot)) throw new Error("Navigator storageRoot must be absolute");
   }
   query(request, signal) {
     const input = structuredClone(request);
     const combined = signal ? AbortSignal.any([signal, this.lifetime.signal]) : this.lifetime.signal;
     const run2 = this.tail.then(async () => {
-      if (this.closed) throw new Error("Fovea engine closed");
+      if (this.closed || this.cleanupFailure) throw new Error("Navigator engine closed or cleanup uncertain", { cause: this.cleanupFailure });
       combined.throwIfAborted();
       const result = await this.execute(input, combined);
       combined.throwIfAborted();
@@ -7376,8 +7622,8 @@ var FoveaEngine = class {
    * invalidation. Serialized with queries so a late query cannot resurrect state. */
   retireConversation(conversationId, conversationEpoch) {
     const run2 = this.tail.then(() => {
-      if (this.closed) throw new Error("Fovea engine closed");
-      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Fovea retirement owner");
+      if (this.closed || this.cleanupFailure) throw new Error("Navigator engine closed or cleanup uncertain", { cause: this.cleanupFailure });
+      if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(conversationId) || !Number.isSafeInteger(conversationEpoch) || conversationEpoch < 0) throw new Error("Invalid Navigator retirement owner");
       for (const map of [this.conversations, this.preparedSync]) for (const key of map.keys()) {
         const owner = JSON.parse(key);
         if (owner[0] === conversationId && owner[1] === conversationEpoch) map.delete(key);
@@ -7389,17 +7635,20 @@ var FoveaEngine = class {
   async initialize(signal) {
     if (this.parser) return;
     await mkdir2(this.options.storageRoot, { recursive: true, mode: 448 });
-    const info = await lstat4(this.options.storageRoot);
-    if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 63 || info.uid !== process.getuid?.() || await realpath2(this.options.storageRoot) !== this.options.storageRoot) {
-      throw new Error("Fovea storageRoot must be canonical, private, and owned");
+    const info = await lstat5(this.options.storageRoot);
+    if (!info.isDirectory() || info.isSymbolicLink() || info.mode & 63 || info.uid !== process.getuid?.() || await realpath3(this.options.storageRoot) !== this.options.storageRoot) {
+      throw new Error("Navigator storageRoot must be canonical, private, and owned");
     }
-    const directory = await mkdtemp(join10(this.options.storageRoot, "engine-"));
+    signal.throwIfAborted();
+    const scratch = new FoveaScratchOwner(this.options.storageRoot);
+    this.scratch = scratch;
     try {
+      const directory = await scratch.createRoot(signal);
       const parser = await resolveParserDescriptor(this.options.parser, directory, signal);
       let git;
       if (this.options.gitPath) {
         const bytes = await readVerifiedExecutable(this.options.gitPath);
-        git = join10(directory, "git");
+        git = join11(directory, "git");
         await writeFile3(git, bytes, { flag: "wx", mode: 320 });
       }
       const source = new SourceAccess(process.platform === "darwin" ? await loadManagedSourcePlatform(this.options.parser, directory) : sourcePlatform());
@@ -7409,16 +7658,22 @@ var FoveaEngine = class {
       this.git = git;
       this.source = source;
     } catch (error) {
-      await rm(directory, { recursive: true, force: true });
+      try {
+        await scratch.close();
+        this.scratch = void 0;
+      } catch (cleanup) {
+        this.cleanupFailure = cleanup;
+        throw new AggregateError([error, cleanup], "Navigator initialization and scratch cleanup failed", { cause: error });
+      }
       throw error;
     }
   }
   async execute(request, signal) {
     const { operation, args } = request;
-    if (!["sketch", "focus", "dwell", "impact", "status", "anchors", "rules", "reset", "reload", "sync"].includes(operation)) throw new Error(`Unsupported Fovea operation: ${operation}`);
+    if (!["sketch", "focus", "dwell", "impact", "status", "anchors", "rules", "reset", "reload", "sync"].includes(operation)) throw new Error(`Unsupported Navigator operation: ${operation}`);
     if (!object(args) || !request.conversationId || !request.rootId || !Number.isSafeInteger(request.conversationEpoch) || request.conversationEpoch < 0 || !Number.isSafeInteger(request.authorizationEpoch) || request.authorizationEpoch < 0) throw new Error("Invalid engine request identity");
-    const identity = await lstat4(request.root, { bigint: true });
-    if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Fovea root must be a physical directory");
+    const identity = await lstat5(request.root, { bigint: true });
+    if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Navigator root must be a physical directory");
     const rootKey2 = JSON.stringify([request.root, String(identity.dev), String(identity.ino)]);
     const conversationKey = JSON.stringify([request.conversationId, request.conversationEpoch, rootKey2]);
     if (operation === "sync" && args.commitPreparationId !== void 0) {
@@ -7456,14 +7711,14 @@ var FoveaEngine = class {
       return { status: "ok", operation, reset: "conversation-root", ...operation === "reload" ? { graphInvalidated: true } : {} };
     }
     await this.initialize(signal);
-    if (!isAbsolute6(request.root) || await realpath2(request.root) !== request.root) throw new Error("Fovea root must be canonical");
+    if (!isAbsolute7(request.root) || await realpath3(request.root) !== request.root) throw new Error("Navigator root must be canonical");
     let root = this.roots.get(rootKey2);
     if (!root) {
       if (this.roots.size >= 32) {
         const oldest = this.roots.keys().next().value;
         await this.retireRoot(oldest, true);
       }
-      root = { path: join10(this.directory, `root-${randomUUID2()}`), store: /* @__PURE__ */ new Map(), hot: false, gap: true };
+      root = { path: join11(this.directory, `root-${randomUUID2()}`), store: /* @__PURE__ */ new Map(), hot: false, gap: true };
       this.roots.set(rootKey2, root);
     }
     this.roots.delete(rootKey2);
@@ -7475,14 +7730,14 @@ var FoveaEngine = class {
     }
     if (operation === "dwell" && root.gap && !this.conversations.has(conversationKey)) throw new Error("Unknown or expired focusId after root retirement; focus again");
     const original = this.conversations.get(conversationKey) ?? { store: /* @__PURE__ */ new Map(), focuses: /* @__PURE__ */ new Map(), active: "" };
-    if (!this.conversations.has(conversationKey) && this.conversations.size >= 128) throw new Error("Fovea conversation capacity reached");
+    if (!this.conversations.has(conversationKey) && this.conversations.size >= 128) throw new Error("Navigator conversation capacity reached");
     const conversation = { store: cloneStore(original.store), focuses: new Map(original.focuses), active: original.active };
     const transient = args.transient === true;
     let focusId = typeof args.focusId === "string" ? args.focusId : conversation.active;
     if (typeof args.focusId === "string" && !conversation.focuses.has(args.focusId)) throw new Error("Unknown or expired conversation-owned focusId");
     if (operation === "focus" && (!focusId || args.fresh === true)) focusId = randomUUID2();
     if (!focusId) focusId = "transient";
-    const stage = await mkdtemp(join10(this.directory, "snapshot-"));
+    const stage = await this.scratch.createStage(signal);
     const ctx = {
       store: root.store,
       sessionStore: conversation.store,
@@ -7491,6 +7746,7 @@ var FoveaEngine = class {
       sourceRoot: request.root,
       snapshotRoot: root.path,
       gitPath: this.git,
+      cleanupTemporary: (file, snapshot2, available) => this.scratch.removeTemporary(file, snapshot2, available),
       readGitMetadata: async (path) => {
         signal.throwIfAborted();
         const text = await this.source.readScopeSafeFile(request.root, resolve5(request.root, path), 1024 * 1024);
@@ -7501,9 +7757,12 @@ var FoveaEngine = class {
       gitFailures: [],
       focusKey: focusId,
       spills: /* @__PURE__ */ new Map(),
-      artifactLabel: (operation2) => `retained:${operation2}`
+      artifactLabel: (operation2) => `retained:${operation2}`,
+      displayName: "Navigator",
+      toolName: (operation2) => `repo.${operation2}`
     };
     return coreContext.run(ctx, async () => {
+      let primary;
       try {
         const snapshot2 = await this.source.captureSourceSnapshot(request.root, stage, signal, {
           exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
@@ -7513,8 +7772,9 @@ var FoveaEngine = class {
         signal.throwIfAborted();
         const snapshotReused = snapshot2.root === root.path && root.snapshotId === snapshot2.id;
         if (!snapshotReused) {
-          await rm(root.path, { recursive: true, force: true });
-          await rename2(stage, root.path);
+          await this.removeScratchTree(root.path);
+          signal.throwIfAborted();
+          await this.scratch.moveStage(stage, root.path);
         }
         const head = this.git ? await gitHead(root.path) : void 0;
         const warm = snapshotReused && head === root.head ? getState(root.path) : void 0;
@@ -7564,6 +7824,7 @@ var FoveaEngine = class {
           const savedNavigation = navigationBeforePush ? structuredClone(navigationBeforePush) : void 0;
           const native = await this.bridgeProvenance(request, root, conversation, snapshot2.hashes, state.facts, String(identity.dev), String(identity.ino));
           let outcome;
+          let syncFailure;
           try {
             outcome = await sync(root.path, {
               files: strings(args.files),
@@ -7573,8 +7834,15 @@ var FoveaEngine = class {
               scope: args.scope === "repository" ? "repository" : "session",
               sessionId: native.origin
             }, state, { current: () => !signal.aborted });
+          } catch (error) {
+            syncFailure = { error };
+            throw error;
           } finally {
-            await Promise.all(native.paths.map((p) => rm(p, { force: true })));
+            try {
+              await this.removeScratchFiles(native.paths);
+            } catch (cleanup) {
+              throw syncFailure ? new AggregateError([syncFailure.error, cleanup], "Navigator sync and temporary cleanup failed", { cause: syncFailure.error }) : cleanup;
+            }
           }
           conversation.store.set("native:provenance", { hashes: new Map(snapshot2.hashes), sequence: native.sequence });
           signal.throwIfAborted();
@@ -7682,30 +7950,43 @@ var FoveaEngine = class {
         if (!transient) this.conversations.set(conversationKey, conversation);
         return packet;
       } catch (error) {
-        root.store.clear();
+        primary = { error };
+        try {
+          await this.clearRootStore(root);
+        } catch (cleanup) {
+          throw new AggregateError([error, cleanup], "Navigator query and maintenance failed", { cause: error });
+        }
         delete root.snapshotId;
         delete root.snapshotHashes;
         throw error;
       } finally {
-        await rm(stage, { recursive: true, force: true });
+        const failures2 = [];
+        try {
+          await this.removeScratchTree(stage);
+        } catch (error) {
+          failures2.push(error);
+        }
         if (signal.aborted) {
-          root.store.clear();
+          try {
+            await this.clearRootStore(root);
+          } catch (error) {
+            failures2.push(error);
+          }
           delete root.snapshotId;
           delete root.snapshotHashes;
           this.preparedSync.delete(conversationKey);
           if (original.active || original.store.size) this.conversations.set(conversationKey, original);
           else this.conversations.delete(conversationKey);
-          signal.throwIfAborted();
+          failures2.push(signal.reason);
         }
+        if (failures2.length) throw new AggregateError([...primary ? [primary.error] : [], ...failures2], "Navigator query/cleanup failed", { cause: primary?.error ?? failures2[0] });
       }
     });
   }
   async retireRoot(key, remove) {
     const root = this.roots.get(key);
     if (!root) return;
-    const timers = root.store.get("build.ts:persistDebounce");
-    if (timers instanceof Map) for (const timer of timers.values()) clearTimeout(timer);
-    root.store.clear();
+    await this.clearRootStore(root);
     root.hot = false;
     root.gap = true;
     delete root.snapshotId;
@@ -7713,7 +7994,7 @@ var FoveaEngine = class {
     delete root.head;
     for (const conversationKey of this.conversations.keys()) if (JSON.parse(conversationKey)[2] === key) this.conversations.delete(conversationKey);
     for (const conversationKey of this.preparedSync.keys()) if (JSON.parse(conversationKey)[2] === key) this.preparedSync.delete(conversationKey);
-    await rm(root.path, { recursive: true, force: true });
+    await this.removeScratchTree(root.path);
     if (remove) this.roots.delete(key);
   }
   /** Adapt only exact captured SHA-256 endpoints to core's SHA-1 fact IDs.
@@ -7768,11 +8049,12 @@ var FoveaEngine = class {
     try {
       for (const [ownerOrigin, records] of byOwner) {
         const target = provenancePathFor(root.path, ownerOrigin);
-        result.paths.push(target);
         await writeAtomicTemp(target, JSON.stringify({ version: 1, root: root.path, owner: createHash10("sha1").update(ownerOrigin).digest("hex").slice(0, 16), records }), 128e3);
+        await this.scratch.captureFile(target);
+        result.paths.push(target);
       }
     } catch {
-      await Promise.all(result.paths.map((p) => rm(p, { force: true })));
+      await this.removeScratchFiles(result.paths);
       result.paths = [];
       result.gap = true;
     }
@@ -7781,35 +8063,101 @@ var FoveaEngine = class {
   cleanText(text) {
     return text.replace(/full list saved to retained:[a-z]+/g, "full list retained in result");
   }
-  async close() {
-    if (!this.closed) {
-      this.closed = true;
-      this.lifetime.abort(new Error("Fovea engine closed"));
+  async clearRootStore(root) {
+    const timers = root.store.get("build.ts:persistDebounce");
+    if (timers instanceof Map) for (const timer of timers.values()) clearTimeout(timer);
+    const maintenance = root.store.get("maintenance");
+    await maintenance?.value?.pending;
+    root.store.clear();
+  }
+  async removeScratchTree(directory) {
+    try {
+      if (!this.scratch) throw new Error("Navigator scratch ownership unavailable; preserve evidence");
+      await this.scratch.removeTree(directory);
+    } catch (error) {
+      this.cleanupFailure ??= error;
+      throw error;
     }
-    await this.tail;
-    for (const key of [...this.roots.keys()]) await this.retireRoot(key, true);
-    this.roots.clear();
-    this.conversations.clear();
-    this.preparedSync.clear();
-    if (this.directory) await rm(this.directory, { recursive: true, force: true });
+  }
+  async removeScratchFiles(files) {
+    const failures2 = [];
+    for (const file of files) try {
+      if (!this.scratch) throw new Error("Navigator temporary ownership unavailable");
+      await this.scratch.removeFile(file);
+    } catch (error) {
+      failures2.push(error);
+    }
+    if (failures2.length) {
+      this.cleanupFailure ??= failures2[0];
+      throw new AggregateError(failures2, "Navigator temporary cleanup failed");
+    }
+  }
+  close() {
+    if (this.closeTask) return this.closeTask;
+    this.closed = true;
+    this.closeTask = Promise.resolve().then(async () => {
+      const failures2 = this.cleanupFailure === void 0 ? [] : [this.cleanupFailure];
+      try {
+        await this.tail;
+      } catch (error) {
+        failures2.push(error);
+      }
+      for (const key of [...this.roots.keys()]) try {
+        await this.retireRoot(key, true);
+      } catch (error) {
+        failures2.push(error);
+      }
+      this.conversations.clear();
+      this.preparedSync.clear();
+      try {
+        if (this.scratch) await this.scratch.close();
+        else if (this.directory) throw new Error("Navigator scratch ownership unavailable; preserve evidence");
+      } catch (error) {
+        failures2.push(error);
+      }
+      if (this.cleanupFailure !== void 0 && !failures2.includes(this.cleanupFailure)) failures2.unshift(this.cleanupFailure);
+      if (failures2.length) throw new AggregateError(failures2, "Navigator scratch cleanup failed; retained evidence", { cause: failures2[0] });
+    });
+    this.lifetime.abort(new Error("Navigator engine closed"));
+    return this.closeTask;
   }
 };
 
 // src/fovea/engine-entry.ts
 var engine;
 var current;
-var closing = false;
+var closing;
 var seen = /* @__PURE__ */ new Set();
+var safeError = (error) => (error instanceof Error ? error.message : "Navigator engine failure").replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, 800);
 var send = (response) => {
-  if (process.connected) process.send?.(encodeFrame(response));
+  if (!closing && process.connected) process.send?.(encodeFrame(response));
 };
-var safeError = (error) => (error instanceof Error ? error.message : "Fovea engine failure").replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, 800);
-var shutdown = async () => {
-  if (closing) return;
-  closing = true;
-  current?.controller.abort();
-  await engine?.close();
-  process.exit(0);
+var sendFinal = async (response) => {
+  if (!process.connected || !process.send) return;
+  await new Promise((resolve6, reject) => {
+    process.send(encodeFrame(response), (error) => error ? reject(error) : resolve6());
+  });
+};
+var shutdown = (id, protocolError) => {
+  if (closing) return closing;
+  closing = Promise.resolve().then(async () => {
+    let failure = protocolError;
+    try {
+      await engine?.close();
+    } catch (error) {
+      failure = error;
+    }
+    try {
+      if (id) await sendFinal(failure === void 0 ? { version: 1, id, ok: true, value: { shutdown: true, closed: true, cleanup: { scratch: "removed" } } } : { version: 1, id, ok: false, error: safeError(failure) });
+    } catch (error) {
+      failure ??= error;
+    }
+    process.exit(failure === void 0 ? 0 : 1);
+  }).catch(() => {
+    process.exit(1);
+  });
+  current?.controller.abort(new Error("Navigator engine shutdown"));
+  return closing;
 };
 process.once("disconnect", () => {
   void shutdown();
@@ -7821,23 +8169,23 @@ process.on("message", (raw) => {
   void (async () => {
     const message = decodeRequest(raw);
     if (message.type === "cancel") {
-      if (message.id === current?.id) current.controller.abort(new Error("Fovea request cancelled"));
+      if (message.id === current?.id) current.controller.abort(new Error("Navigator request cancelled"));
       return;
     }
     if (message.type === "shutdown") {
-      await shutdown();
+      await shutdown(message.id);
       return;
     }
-    if (closing || seen.has(message.id) || current) throw new Error("Fovea replay or concurrent request rejected");
+    if (closing || seen.has(message.id) || current) throw new Error("Navigator replay or concurrent request rejected");
     seen.add(message.id);
     if (seen.size > 1024) seen.delete(seen.values().next().value);
     if (message.type === "initialize") {
-      if (engine) throw new Error("Fovea already initialized");
+      if (engine) throw new Error("Navigator already initialized");
       engine = new FoveaEngine(message.options);
       send({ version: 1, id: message.id, ok: true, value: { initialized: true, ipcVersion: 1 } });
       return;
     }
-    if (!engine) throw new Error("Fovea not initialized");
+    if (!engine) throw new Error("Navigator not initialized");
     if (message.type === "retireConversation") {
       current = { id: message.id, controller: new AbortController() };
       try {
@@ -7850,7 +8198,7 @@ process.on("message", (raw) => {
     }
     const controller = new AbortController();
     current = { id: message.id, controller };
-    const timer = setTimeout(() => controller.abort(new Error("Fovea worker deadline expired")), message.remainingMs);
+    const timer = setTimeout(() => controller.abort(new Error("Navigator worker deadline expired")), message.remainingMs);
     try {
       const value = projectEngineJson(await engine.query(message.request, controller.signal));
       controller.signal.throwIfAborted();
@@ -7861,7 +8209,7 @@ process.on("message", (raw) => {
       clearTimeout(timer);
       current = void 0;
     }
-  })().catch(() => {
-    void shutdown();
+  })().catch((error) => {
+    void shutdown(void 0, error);
   });
 });

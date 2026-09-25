@@ -7,6 +7,7 @@ import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 import { sharedEsbuildOptions } from "./esbuild-common.mjs";
 import { buildFoveaNative } from "./build-fovea-native.mjs";
+import { prepareGeneratedOutput } from "./prepare-generated-output.mjs";
 
 import { captureBuildInputs, assertBuildInputs } from "./build-inputs.mjs";
 import { renderAgentGuidance } from "./generate-agent-guidance.mjs";
@@ -34,9 +35,9 @@ for (const allowed of allowedDirect) {
   if (!Object.hasOwn(pkg.dependencies ?? {}, allowed)) throw new Error(`Agent manifest allows an unused direct dependency: ${allowed}`);
 }
 
-// Explicit outputs are fresh and retained, including on failure. Never erase a
-// caller-selected directory. The legacy local build keeps its default behavior.
-if (!args.length) fs.rmSync(outdir, { recursive: true, force: true });
+// Explicit outputs must be new. Default outputs preserve their inspected prior
+// generation; repositories, links and uncertain trees refuse before replacement.
+if (!args.length) prepareGeneratedOutput(root, "dist/kiro-agent-closure");
 else fs.mkdirSync(outdir, { mode: 0o700 });
 const external = [...new Set(builtinModules.flatMap((name) => [name, name.startsWith("node:") ? name.slice(5) : `node:${name}`]))];
 // jsonc-parser advertises a legacy UMD `main` before its ESM `module`. The UMD
@@ -134,6 +135,7 @@ for (const name of ["component.json", "upstream.json", "ast-grep-LICENSE.txt"]) 
 }
 fs.copyFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), path.join(outdir, "fovea/UPSTREAM-LICENSE.txt"));
 buildFoveaNative(root, path.join(outdir, "fovea"));
+
 const noticeParts = ["Kiro Fabric bundled third-party license notices\n",
   "\n===== Vendored Fovea (MIT; see fovea/component.json) =====\n",
   fs.readFileSync(path.join(root, "src/fovea/core/UPSTREAM-LICENSE.txt"), "utf8"),

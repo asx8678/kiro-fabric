@@ -105,7 +105,6 @@ export const liveConstraints = (
 
 const binary = (): string => context().parserPath;
 const FAILURE_TTL_MS = 15_000;
-export const hasAstGrep = (): boolean => !!binary();
 export const hasAstGrepAsync = async (): Promise<boolean> => !!binary();
 
 // Import-file argument lists on Windows cap around 8k chars; keep chunks

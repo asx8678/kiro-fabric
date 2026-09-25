@@ -106,34 +106,56 @@ const establishDirectoryEntry = (root: string): StateDirectoryBarrier => {
  * barrier completed after the rename; "unconfirmed" when publication was
  * observed but the barrier did not complete (the rename may not survive a
  * host crash). */
-export type StateDurability = "confirmed" | "unconfirmed";
+type StateDurability = "confirmed" | "unconfirmed";
 /** Whether the store can establish directory-entry durability at all. */
 export type StateDirectoryBarrier = "fsync" | "unconfirmed";
+
+/** Whether the mutation lock was released cleanly. "unresolved" means a
+ * post-publication lock loss, or a cleanup failure deferred for retry, was
+ * observed: the published state stands, but lock ownership is unconfirmed and
+ * new effects must wait for operator recovery. */
+type StateLockCleanup = "confirmed" | "unresolved";
 
 /** The mutation is visible, but a post-commit deadline, lock cleanup or the
  * directory durability barrier failed. `durability` is "confirmed" only when
  * the barrier completed: the published bytes survive process restarts and
  * host crashes. An "unconfirmed" mutation is still visible but its rename
- * may not be durable. Transport-level interruption can still lose this
+ * may not be durable. `lockCleanup` is "unresolved" when lock ownership could
+ * not be confirmed. Transport-level interruption can still lose this
  * acknowledgement entirely; read state before any retry and never replay
  * external effects from this error alone. */
-export class StateCommitAcknowledgementError extends Error {
+class StateCommitAcknowledgementError extends Error {
   readonly committed = true;
   readonly durability: StateDurability;
+  readonly lockCleanup: StateLockCleanup;
   readonly [FABRIC_COMMIT_ACKNOWLEDGEMENT]: { readonly version: 1; readonly operation: "set" | "delete" };
-  constructor(readonly revision: number, options: ErrorOptions, operation: "set" | "delete" = "set", durability: StateDurability = "confirmed") {
-    super(durability === "confirmed"
+  constructor(readonly revision: number, options: ErrorOptions, operation: "set" | "delete" = "set", durability: StateDurability = "confirmed", lockCleanup: StateLockCleanup = "confirmed") {
+    super((durability === "confirmed"
       ? `State mutation committed at revision ${revision}; acknowledgement failed; read state before retrying`
-      : `State mutation published at revision ${revision}; directory durability is unconfirmed; read state before any retry and do not replay external effects`, options);
+      : `State mutation published at revision ${revision}; directory durability is unconfirmed; read state before any retry and do not replay external effects`)
+      + (lockCleanup === "unresolved" ? "; state lock cleanup is unresolved and further effects are refused until operator recovery" : ""), options);
     this.name = "StateCommitAcknowledgementError";
     this.durability = durability;
+    this.lockCleanup = lockCleanup;
     this[FABRIC_COMMIT_ACKNOWLEDGEMENT] = Object.freeze({ version: 1 as const, operation });
+  }
+}
+
+/** A held mutation lock disappeared without a release this provider completed.
+ * Published state is untouched, but lock ownership cannot be confirmed, so the
+ * provider refuses new effects until an operator recovers the store. */
+class StateLockLossError extends Error {
+  readonly lockLoss = true;
+  constructor() {
+    super("unexpected state lock loss: the held state mutation lock disappeared without an acknowledged release; operator recovery required");
+    this.name = "StateLockLossError";
   }
 }
 
 export class StateProvider implements FabricProvider {
   readonly name = "state";
   readonly description = "Workspace-bound atomic state";
+  readonly requirements = { verifiedWorkspace: true };
   /** How directory-entry durability is established for publications:
    * "fsync" when the store root's directory entry barrier was established at
    * construction, "unconfirmed" otherwise (a platform without a directory
@@ -249,7 +271,7 @@ export class StateProvider implements FabricProvider {
         return { key, deleted: true, revision: document.revision };
       });
     } catch (error) {
-      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, actionName, durability);
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, actionName, durability, this.#lockCleanupState());
       throw error;
     }
   }
@@ -290,7 +312,7 @@ export class StateProvider implements FabricProvider {
         return { key, revision: document.revision };
       });
     } catch (error) {
-      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, "set", durability);
+      if (committedRevision !== undefined) throw new StateCommitAcknowledgementError(committedRevision, { cause: error }, "set", durability, this.#lockCleanupState());
       throw error;
     }
   }
@@ -485,13 +507,21 @@ export class StateProvider implements FabricProvider {
    * platforms use the verified bounded child, which fails closed if the named
    * directory no longer matches the held descriptor. Windows keeps the plain
    * pathname and its legacy semantics. */
-  #removeNamedEntry(identity: { dev: number; ino: number }, target: string, rootFd: number): void {
+  #removeNamedEntry(identity: { dev: number; ino: number }, target: string, rootFd: number, strictMissing = false): void {
     const name = path.basename(target);
     let before: fs.BigIntStats;
     try { before = fs.lstatSync(target, { bigint: true }); }
     catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
       this.#assertRoot();
+      if (strictMissing) {
+        // The lock this provider acquired is gone. Another actor removed it;
+        // this provider never completed a release. Never claim a completed
+        // release and never mistake the disappearance for durability: refuse
+        // new effects until an operator recovers the store.
+        this.#uncertainLock = true;
+        throw new StateLockLossError();
+      }
       return;
     }
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || !sameBigFile(before, identity)) {
@@ -522,6 +552,24 @@ export class StateProvider implements FabricProvider {
   #releaseLock(identity: { dev: number; ino: number }, target: string, rootFd: number): void {
     this.#assertRoot();
     this.#removeNamedEntry(identity, target, rootFd);
+  }
+
+  /** Release the mutation lock this provider acquired. Every owned release is
+   * strict: an absent lock never counts as a completed unlink. Filesystem
+   * identity (`dev:ino`) is recyclable, so no cross-acquisition cache can prove
+   * completion; a disappearance is unexpected ownership loss and blocks further
+   * effects until an operator recovers the store. The per-acquisition deferred
+   * cleanup retry still replays the same strict release. */
+  #releaseMutationLock(identity: { dev: number; ino: number }, rootFd: number): void {
+    this.#assertRoot();
+    this.#removeNamedEntry(identity, this.#lock, rootFd, true);
+  }
+
+  /** Truthful lock-cleanup classification for a post-publication failure. A
+   * detected loss, or a cleanup failure deferred for retry, means ownership is
+   * unresolved; otherwise the lock was released before the error surfaced. */
+  #lockCleanupState(): StateLockCleanup {
+    return this.#uncertainLock || this.#pendingLockCleanup !== undefined ? "unresolved" : "confirmed";
   }
 
   #readLockOwner(inspected: fs.Stats): StateLockOwner | undefined {
@@ -645,12 +693,15 @@ export class StateProvider implements FabricProvider {
     let failed = false;
     try {
       while (!identity) {
+        // A sibling invocation can lose its lock while this caller awaits
+        // contention. Admission before the first await is not sufficient.
+        if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
         throwIfAbortedOrExpired(context.signal, context.deadline);
         this.#assertRoot();
         // Only a completed operation can leave this deferred responsibility.
         // Retry before acquisition, including callers already waiting here.
         if (this.#pendingLockCleanup) {
-          this.#releaseLock(this.#pendingLockCleanup, this.#lock, rootFd);
+          this.#releaseMutationLock(this.#pendingLockCleanup, rootFd);
           this.#pendingLockCleanup = undefined;
         }
         try {
@@ -694,8 +745,15 @@ export class StateProvider implements FabricProvider {
       failed = true; operationError = error; throw error;
     } finally {
       if (identity) {
-        try { this.#releaseLock(identity, this.#lock, rootFd); }
+        try { this.#releaseMutationLock(identity, rootFd); }
         catch (cleanup) {
+          if (cleanup instanceof StateLockLossError) {
+            // The lock vanished; there is nothing to delete or defer, and
+            // #uncertainLock already refuses later effects. Surface the
+            // operation failure too when there was one.
+            if (failed) throw new AggregateError([operationError, cleanup], "state mutation and state lock loss; operator recovery required", { cause: operationError });
+            throw cleanup;
+          }
           this.#pendingLockCleanup = identity;
           if (failed) throw new AggregateError([operationError, cleanup], "state mutation and lock cleanup failed; lock replacement or removal is uncertain", { cause: operationError });
           throw cleanup;

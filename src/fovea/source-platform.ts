@@ -10,7 +10,7 @@ export interface SourceHandle {
   read(buffer: Buffer, offset: number, length: number, position: null): Promise<{ bytesRead: number }>;
   close(): Promise<void>;
 }
-export type SourceOpenKind = 'directory' | 'entry';
+type SourceOpenKind = 'directory' | 'entry';
 export interface SourcePlatform {
   openRootDirectory(): Promise<SourceHandle>;
   openChild(directory: SourceHandle, name: string, kind: SourceOpenKind): Promise<SourceHandle>;

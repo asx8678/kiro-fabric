@@ -96,9 +96,14 @@ jobs:
       - name: Verify all signed native gates and capture exact final assets
         env: { COMMIT: '${{ needs.verify.outputs.commit }}', TAG: '${{ inputs.tag }}' }
         run: node scripts/complete-release-promotion.mjs "$RUNNER_TEMP/complete-private" "$RUNNER_TEMP/complete-assets" "$COMMIT" "$TAG"
-      - name: Remove decrypted qualification witnesses
+      - name: Retain private witnesses and block publication
         if: always()
-        run: rm -rf -- "$RUNNER_TEMP/complete-private" "$RUNNER_TEMP/complete-inputs"
+        run: |
+          # These trees can contain private witnesses, unknown files or repositories.
+          # Retention cannot satisfy the private-state disposal gate. Never upload
+          # them or label runner expiry as verified cleanup.
+          echo 'Private qualification inputs retained; release publication BLOCKED pending a verified private-state disposition contract.' >&2
+          exit 1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: verified-complete-release-${{ needs.verify.outputs.commit }}

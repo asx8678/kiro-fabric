@@ -12,7 +12,7 @@
 // and non-TTY terminals by falling back to plain text.
 //
 // CUSTOMIZATION GUIDE
-//   - Product explanations: edit FABRIC_INTRO / FOVEA_INTRO below.
+//   - Product explanations: edit FABRIC_INTRO / NAVIGATOR_INTRO below.
 //   - What the installer touches: edit the MODIFICATIONS array.
 //   - Preflight thresholds: DISK_MIN_BYTES, PINNED_NODE, and the pnpm pin
 //     (read from package.json "packageManager" — single source of truth).
@@ -54,7 +54,7 @@ const PINNED_NODE = "24.0.0"; // mirror of the authoritative check in source-ins
 const PINNED_PNPM = /^pnpm@(\S+)$/u.exec(String(JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8")).packageManager ?? ""))?.[1] ?? null;
 
 /** Educational copy. Keep these grounded in the shipped product: Fabric is
- * the agent/orchestration side; Fovea is the bundled repository navigation
+ * the agent/orchestration side; Navigator is the bundled repository navigation
  * engine. Update this text when the product surfaces change. */
 const FABRIC_INTRO = [
   "Fabric is the agent orchestration layer that runs INSIDE Kiro CLI v3 as an",
@@ -64,8 +64,8 @@ const FABRIC_INTRO = [
   "continuity checkpoints for explicit session handoff. It ships a private",
   "Node.js runtime and ripgrep so the agent never depends on your system tools.",
 ];
-const FOVEA_INTRO = [
-  "Fovea is bundled with Fabric, including its private ast-grep parser.",
+const NAVIGATOR_INTRO = [
+  "Navigator is bundled with Fabric, including its private ast-grep parser.",
   "It provides repo.sketch / focus / dwell / impact through Fabric.",
   "The installer verifies a real query before activating the runtime.",
   "Analysis starts when requested; automatic native hooks stay off.",
@@ -77,7 +77,7 @@ const MODIFICATIONS = [
   ["kiro-fabric", "Fabric installation"],
   ["agents/kiro-fabric.json", "Active Kiro agent profile"],
   ["kiro-fabric/bin/kiro-fabric", "Launcher (start / doctor / rollback)"],
-  ["kiro-fabric/runtime/<generation>/app/fovea", "Bundled Fovea engine"],
+  ["kiro-fabric/runtime/<generation>/app/fovea", "Bundled Navigator engine"],
   ["kiro-fabric/runtime/<generation>/tools", "Private Node.js, ripgrep and ast-grep"],
   ["kiro-fabric/runtime/<generation>/resources", "Versioned Fabric skills and steering"],
   ["kiro-fabric/backups", "Prior configuration backups"],
@@ -255,12 +255,12 @@ async function preflight() {
 
 function overview() {
   process.stderr.write(paint.cyan(BANNER) + "\n");
-  say(paint.bold(`Kiro Fabric v${INSTALLER_VERSION} + Fovea`));
+  say(paint.bold(`Kiro Fabric v${INSTALLER_VERSION} + Navigator`));
   say(paint.dim("This front-end explains, confirms, and logs. The audited installer does the work.\n"));
   process.stderr.write(frame("WHAT IS FABRIC?", FABRIC_INTRO) + "\n\n");
   log.write(frame("WHAT IS FABRIC?", FABRIC_INTRO) + "\n");
-  process.stderr.write(frame("WHAT IS FOVEA?", FOVEA_INTRO) + "\n\n");
-  log.write(frame("WHAT IS FOVEA?", FOVEA_INTRO) + "\n");
+  process.stderr.write(frame("WHAT IS NAVIGATOR?", NAVIGATOR_INTRO) + "\n\n");
+  log.write(frame("WHAT IS NAVIGATOR?", NAVIGATOR_INTRO) + "\n");
   say(paint.bold("INSTALLATION PATHS"));
   say(`Kiro home: ${kiroHome}`);
   // Keep destination paths outside fixed-width panels: long/custom home paths
@@ -281,7 +281,7 @@ async function confirm() {
   if (flags.yes) return true;
   const terminal = createInterface({ input: process.stdin, output: process.stderr });
   try {
-    const answer = (await terminal.question(paint.bold(`Install Fabric v${INSTALLER_VERSION} + Fovea in ${kiroHome}? [Y/n] `))).trim().toLowerCase();
+    const answer = (await terminal.question(paint.bold(`Install Fabric v${INSTALLER_VERSION} + Navigator in ${kiroHome}? [Y/n] `))).trim().toLowerCase();
     if (["", "y", "yes"].includes(answer)) return true;
     say(paint.yellow("Cancelled before any modification."));
     process.exit(3); // mirrors the installer's cancelled exit code

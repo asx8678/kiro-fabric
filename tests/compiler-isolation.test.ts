@@ -2,15 +2,25 @@ import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
-import { shutdownFabricCompilerWorker, typeCheckFabricCode, typeCheckFabricCodeInWorker } from "../src/runtime/type-checker.js";
+import { FabricCompilerPool, typeCheckFabricCode } from "../src/runtime/type-checker.js";
 
 const roots: string[] = [];
-afterEach(async () => { await shutdownFabricCompilerWorker(); while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true }); });
+const pools: FabricCompilerPool[] = [];
+const services: FabricExecutionService[] = [];
+const delay = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms));
+
+// Close only pools/services this fixture created; there is no process-global compiler owner.
+afterEach(async () => {
+  await Promise.all(pools.splice(0).map(pool => pool.close()));
+  await Promise.all(services.splice(0).map(service => service.close()));
+  while (roots.length) removeFixtureSync(roots.pop()!, { recursive: true, force: true });
+});
 
 const forbidden = [
   "import value from '/etc/passwd'; return value as any",
@@ -62,20 +72,56 @@ describe("closed guest TypeScript compiler host", () => {
     const config = normalizeFabricConfig({ executor: { timeoutMs: 5_000 } });
     const a = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
     const b = new FabricExecutionService(new ActionRegistry(), config, "/workspace");
-    const options = { code: "return 42", approver: { async approve() {} } };
+    services.push(a, b);
+    const approver = { async approve() {} };
     try {
-      expect((await b.execute(options)).value).toBe(42);
-      const compiling = b.execute(options);
+      expect((await b.execute({ code: "return 42", approver })).value).toBe(42);
+      // A distinct program forces a real compile on B's own reused worker rather
+      // than a cache hit, then A's unrelated close must not terminate it.
+      const compiling = b.execute({ code: "return 43", approver });
       await Promise.resolve(); // submit to the real reused worker before A closes
       await a.close();
-      expect((await compiling).value).toBe(42);
+      expect((await compiling).value).toBe(43);
     } finally { await Promise.all([a.close(), b.close()]); }
   });
 
   it("terminates an aborted compiler worker before rejecting", async () => {
-    const controller = new AbortController();
-    const checking = typeCheckFabricCodeInWorker({ code: "return true", declarations: fabricGuestDeclarations }, { signal: controller.signal });
-    controller.abort(new Error("compiler cancelled"));
-    await expect(checking).rejects.toThrow("compiler cancelled");
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-compiler-abort-"));
+    roots.push(root);
+    const marker = path.join(root, "worker-heartbeat");
+    const workerPath = path.join(root, "abort-worker.mjs");
+    fs.writeFileSync(workerPath, [
+      'import fs from "node:fs";',
+      'import { parentPort } from "node:worker_threads";',
+      'const marker = process.env.FABRIC_COMPILER_ABORT_MARKER;',
+      'let count = 0;',
+      'setInterval(() => { try { fs.writeFileSync(marker, String(++count)); } catch {} }, 5);',
+      'parentPort.on("message", () => {});',
+      '',
+    ].join("\n"));
+    const previousMarker = process.env.FABRIC_COMPILER_ABORT_MARKER;
+    process.env.FABRIC_COMPILER_ABORT_MARKER = marker;
+    const pool = new FabricCompilerPool();
+    pools.push(pool);
+    try {
+      const controller = new AbortController();
+      const checking = pool.check({ code: "return true", declarations: fabricGuestDeclarations }, { signal: controller.signal, workerUrl: pathToFileURL(workerPath) });
+      const deadline = Date.now() + 2_000;
+      while (!fs.existsSync(marker)) {
+        if (Date.now() > deadline) throw new Error("fixture worker never started");
+        await delay(5);
+      }
+      expect(Number(fs.readFileSync(marker, "utf8"))).toBeGreaterThan(0);
+      controller.abort(new Error("compiler cancelled"));
+      await expect(checking).rejects.toThrow("compiler cancelled");
+      // Termination witness: the owned worker stopped executing before rejection.
+      const observed = fs.readFileSync(marker, "utf8");
+      await delay(150);
+      expect(fs.readFileSync(marker, "utf8")).toBe(observed);
+    } finally {
+      if (previousMarker === undefined) delete process.env.FABRIC_COMPILER_ABORT_MARKER;
+      else process.env.FABRIC_COMPILER_ABORT_MARKER = previousMarker;
+      await pool.close();
+    }
   });
 });

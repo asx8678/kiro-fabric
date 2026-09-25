@@ -44,7 +44,10 @@ export interface FabricRegistryInvocationContext extends FabricInvocationContext
   maxAuditEntries?: number;
   maxAuditBytes?: number;
   auditBudget?: { bytes: number };
-  approve(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
+  approve(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+  ): Promise<void>;
 }
 
 const providerName = /^[a-z][a-z0-9_-]{0,63}$/u;
@@ -369,6 +372,8 @@ export class ActionRegistry {
   readonly #unavailable = new Map<string, string>();
   readonly #activeWrites = new Map<string, { ref: string; resources: readonly string[] }>();
   #closed = false;
+  #closing: Promise<void> | undefined;
+  #closeStatus: "closing" | "failed" | "closed" | undefined;
 
   #assertOpen(): void {
     if (this.#closed) throw new Error("Fabric registry is closed");
@@ -405,7 +410,10 @@ export class ActionRegistry {
 
   providers(): FabricProviderStatus[] {
     return [
-      ...[...this.#providers.values()].map((provider) => ({ name: provider.name, description: provider.description, available: true as const })),
+      ...[...this.#providers.values()].map((provider) => ({ name: provider.name, description: provider.description,
+        available: !this.#closed,
+        ...(this.#closed ? { reason: `Fabric registry shutdown ${this.#closeStatus}; provider ownership retained` } : {}),
+      })),
       ...[...this.#unavailable].map(([name, reason]) => ({ name, description: reason, available: false as const, reason })),
     ].sort((left, right) => compareCodeUnits(left.name, right.name));
   }
@@ -662,15 +670,29 @@ export class ActionRegistry {
     }
   }
 
-  async close(): Promise<void> {
-    // Enter the terminal state first, then cancel queued producers, so no
-    // provider can be invoked after its own close() has resolved.
+  close(): Promise<void> {
+    if (this.#closing) return this.#closing;
+    // Admission is terminal now; install the shared operation before any
+    // extension callback can reenter. A failed close is never retried implicitly.
     this.#closed = true;
+    this.#closeStatus = "closing";
+    this.#closing = Promise.resolve().then(async () => {
+      const providers = [...this.#providers.values()];
+      const results = await Promise.allSettled(providers.map(provider =>
+        Promise.resolve().then(() => provider.close?.())));
+      const failures: unknown[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "rejected") failures.push(result.reason);
+        else this.#providers.delete(providers[index]!.name);
+      });
+      // Pending discovery and invocation reservations release themselves only
+      // after their own settlement. Failed providers remain owned, not reusable.
+      for (const record of this.#discovery.values()) if (!record.pending && !record.users) record.release();
+      this.#discovery.clear();
+      this.#closeStatus = failures.length ? "failed" : "closed";
+      if (failures.length) throw new AggregateError(failures, "Fabric provider shutdown failed");
+    });
     while (this.#rawQueue.length) this.#rawQueue.shift()!.cancel();
-    await Promise.allSettled([...this.#providers.values()].map((provider) => provider.close?.()));
-    this.#providers.clear();
-    for (const record of this.#discovery.values()) if (!record.pending && !record.users) record.release();
-    this.#discovery.clear();
-    this.#activeWrites.clear();
+    return this.#closing;
   }
 }

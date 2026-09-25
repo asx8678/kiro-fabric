@@ -8,7 +8,7 @@ export const display = value => String(value).replace(/[\u0000-\u001f\u007f]/gu,
 export const shellQuote = value => "'" + String(value).replaceAll("'", "'\\''") + "'";
 
 /** @type {Readonly<Record<string, {flag: string, value?: string, description: string}>>} */
-export const MANAGER_OPTIONS = Object.freeze({
+const MANAGER_OPTIONS = Object.freeze({
   kiroHome: { flag: "--kiro-home", value: "PATH", description: "Absolute Kiro home (installed launcher remains bound to its own home)" },
   archive: { flag: "--from-archive", value: "PATH", description: "Offline signed archive with verified release sidecars; never bypasses trust" },
   version: { flag: "--version", value: "X.Y.Z", description: "Exact stable signed release version" },

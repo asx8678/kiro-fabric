@@ -4,9 +4,18 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, symlink, chmod, utimes, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { FoveaEngine, type EngineRequest, type NavigationResult } from '../../src/fovea/engine.js';
+import { FoveaEngine, type EngineRequest, type EngineResult } from '../../src/fovea/engine.js';
 import { sha256, resolveParserDescriptor } from '../../src/fovea/parser-executable.js';
-import { captureSourceSnapshot } from '../../src/fovea/source-access.js';
+import { SourceAccess } from '../../src/fovea/source-access.js';
+import { sourcePlatform } from '../../src/fovea/source-platform.js';
+
+// NavigationResult is module-private in src/fovea/engine.ts; recover the exact
+// structural type from the public EngineResult union without re-exporting it.
+type NavigationResult = Extract<EngineResult, { status: 'ok' | 'no-match' }>;
+
+// The standalone captureSourceSnapshot wrapper was removed; every call goes
+// through the public SourceAccess method on a fresh platform.
+const captureAccess = (): SourceAccess => new SourceAccess(sourcePlatform());
 
 const parser = { path: resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
 const dirs: string[] = [];
@@ -32,7 +41,7 @@ describe.skipIf(process.platform !== 'linux')('scope-safe exact source snapshots
     await writeFile(join(root, 'bytes.ts'), bytes);
     await symlink('/etc/passwd', join(root, 'escape.ts'));
     await symlink('/etc', join(root, 'escape-dir'));
-    const shot = await captureSourceSnapshot(root, storage);
+    const shot = await captureAccess().captureSourceSnapshot(root, storage);
     expect(shot.hashes.get('bytes.ts')).toBe(sha256(bytes));
     expect(await readFile(join(storage, 'bytes.ts'))).toEqual(bytes);
     expect(shot.hashes.has('escape.ts')).toBe(false);
@@ -42,7 +51,7 @@ describe.skipIf(process.platform !== 'linux')('scope-safe exact source snapshots
   it('retains old snapshot bytes across a same-size same-mtime source replacement', async () => {
     const { root, storage } = await setup();
     const file = join(root, 'math.ts'); const before = await readFile(file); const info = await stat(file);
-    const shot = await captureSourceSnapshot(root, storage);
+    const shot = await captureAccess().captureSourceSnapshot(root, storage);
     const next = Buffer.from(before.toString().replace('+ 1', '+ 2'));
     await writeFile(file, next); await utimes(file, info.atime, info.mtime);
     expect(shot.hashes.get('math.ts')).toBe(sha256(before));
@@ -53,10 +62,10 @@ describe.skipIf(process.platform !== 'linux')('scope-safe exact source snapshots
     const { root, storage } = await setup();
     await mkdir(join(root, 'node_modules')); await writeFile(join(root, 'node_modules', 'secret.ts'), 'secret');
     await writeFile(join(root, 'huge.ts'), 'x'.repeat(1024));
-    const shot = await captureSourceSnapshot(root, storage, undefined, { maxFileBytes: 128 });
+    const shot = await captureAccess().captureSourceSnapshot(root, storage, undefined, { maxFileBytes: 128 });
     expect(shot.coverage.counts).toMatchObject({ excluded: 1, oversized: 1 });
     expect(shot.hashes.has('node_modules/secret.ts')).toBe(false);
-    await expect(captureSourceSnapshot(root, storage, AbortSignal.abort())).rejects.toThrow();
+    await expect(captureAccess().captureSourceSnapshot(root, storage, AbortSignal.abort())).rejects.toThrow();
   });
 });
 

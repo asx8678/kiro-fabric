@@ -8,11 +8,12 @@ import { randomBytes, scryptSync, createCipheriv, createDecipheriv } from 'node:
 import { fileURLToPath } from 'node:url';
 import { TARGETS, readRegular, sha256, LIMITS } from './bundle-contract.mjs';
 import { captureDirectoryAncestry } from '../src/installation/filesystem-boundary.mjs';
+import { COMPLETE_GATES } from './complete-release-promotion.mjs';
 const MAGIC = Buffer.from('kiro-fabric.complete-inputs.v1\0');
 const MAX = 512 * 1024 * 1024;
 const targetPattern = '(?:darwin-arm64|darwin-x64|linux-arm64|linux-x64)';
 const artifact = new RegExp(`^kiro-fabric-(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-${targetPattern}\\.tar\\.gz(?:\\.spdx\\.json|\\.release\\.(?:json|sig)|\\.qualification\\.(?:json|sig))?$`);
-const gate = new RegExp(`^${targetPattern}/(?:native|installed|client|minimum-system)\\.json$`);
+const gate = new RegExp(`^${targetPattern}/(?:${COMPLETE_GATES.join('|')})\\.json$`);
 const allowed = name => typeof name === 'string' && (artifact.test(name) || gate.test(name) || /^witnesses\/[a-f0-9]{64}\.json$/.test(name));
 function key(secret, salt) { if (typeof secret !== 'string' || Buffer.byteLength(secret) < 32 || Buffer.byteLength(secret) > 4096) throw Error('Explicit private transport passphrase (32..4096 bytes) required'); return scryptSync(secret, salt, 32); }
 /** @param {Buffer} bytes @param {string} secret */
@@ -48,7 +49,7 @@ export async function packCompleteInputs(input, output, version, secret) {
   for (const target of TARGETS) {
     const base = `kiro-fabric-${version}-${target}.tar.gz`;
     for (const suffix of ['', '.release.json', '.release.sig', '.spdx.json', '.qualification.json', '.qualification.sig']) names.add(base + suffix);
-    for (const name of ['native','installed','client','minimum-system']) {
+    for (const name of COMPLETE_GATES) {
       const rel = `${target}/${name}.json`; names.add(rel);
       const evidence = JSON.parse((await readRegular(path.join(input, rel), 16 * 1024 * 1024)).toString('utf8'));
       if (!Array.isArray(evidence.witnesses) || evidence.witnesses.length > 256) throw Error('Witness transport bound');

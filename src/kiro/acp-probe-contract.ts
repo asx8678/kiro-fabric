@@ -16,7 +16,7 @@
  * its raw byte cap on the wire *before* JSON parsing; this module cannot do
  * that for it. */
 
-export const ACP_PROTOCOL_VERSION = 1;
+const ACP_PROTOCOL_VERSION = 1;
 
 /** Serialized byte cap for one accepted incoming frame (post-parse bound). */
 export const ACP_PROBE_MAX_FRAME_BYTES = 256 * 1024;
@@ -130,30 +130,7 @@ export function inspectSessionIdResult(result: unknown): AcpSessionIdInspection 
     return { ok: false, reason: `session/new returned a session id longer than ${ACP_PROBE_MAX_SESSION_ID_BYTES} bytes` };
   }
   return { ok: true, sessionId: result.sessionId };
-}
-
-export type AcpPromptRequestInspection = { ok: true; sessionId: string; text: string } | AcpContractFailure;
-
-/** ACP v1 sends user content in a `prompt` array of content blocks. There is
- * no `content` field; that historical shape is rejected here. The probe emits
- * exactly one text block, so the first block's text is returned. */
-export function inspectPromptRequestParams(params: unknown): AcpPromptRequestInspection {
-  if (!isRecord(params)) return { ok: false, reason: "session/prompt params must carry the target sessionId and a `prompt` array of content blocks" };
-  if (typeof params.sessionId !== "string" || params.sessionId === "") return { ok: false, reason: "session/prompt params must carry the target sessionId" };
-  if (!Array.isArray(params.prompt) || params.prompt.length === 0) {
-    return { ok: false, reason: "session/prompt params must carry a `prompt` array of content blocks (ACP v1 has no `content` field)" };
-  }
-  for (const block of params.prompt) {
-    if (!isRecord(block) || block.type !== "text" || typeof block.text !== "string" || block.text === "") {
-      return { ok: false, reason: "session/prompt prompt blocks must be { type: \"text\", text } content blocks" };
-    }
-  }
-  const first = (params.prompt as Array<{ type: "text"; text: string }>)[0];
-  if (first === undefined) return { ok: false, reason: "session/prompt prompt blocks must be { type: \"text\", text } content blocks" };
-  return { ok: true, sessionId: params.sessionId, text: first.text };
-}
-
-export interface AcpPermissionOption {
+}export interface AcpPermissionOption {
   optionId: string;
   name: string;
   kind: string;
@@ -200,28 +177,7 @@ export function selectRejectOptionId(options: readonly AcpPermissionOption[]): s
     if (option.kind === "reject_once") return option.optionId;
   }
   return null;
-}
-
-type AcpPermissionOutcome = { outcome: "selected"; optionId: string } | { outcome: "cancelled" };
-export type AcpPermissionReplyInspection = { ok: true; outcome: AcpPermissionOutcome } | AcpContractFailure;
-
-/** ACP v1 permission replies use `selected` (with the optionId of an
- * advertised option) or `cancelled`. There is no `deny` outcome. */
-export function inspectPermissionReply(result: unknown): AcpPermissionReplyInspection {
-  if (!isRecord(result)) return { ok: false, reason: "a permission reply without a result object" };
-  const outcome = result.outcome;
-  if (!isRecord(outcome)) return { ok: false, reason: "a permission reply without an outcome object" };
-  if (outcome.outcome === "cancelled") return { ok: true, outcome: { outcome: "cancelled" } };
-  if (outcome.outcome === "selected") {
-    if (typeof outcome.optionId !== "string" || outcome.optionId === "") {
-      return { ok: false, reason: "a selected permission reply without an optionId" };
-    }
-    return { ok: true, outcome: { outcome: "selected", optionId: outcome.optionId } };
-  }
-  return { ok: false, reason: "a permission reply with an outcome other than selected or cancelled (ACP v1 has no \"deny\" outcome)" };
-}
-
-export type AcpStopReason = "end_turn" | "refusal" | "cancelled";
+}export type AcpStopReason = "end_turn" | "refusal" | "cancelled";
 const ACP_STOP_REASONS: readonly AcpStopReason[] = ["end_turn", "refusal", "cancelled"];
 
 export function inspectStopReason(value: unknown): AcpStopReason | null {

@@ -98,19 +98,33 @@ describe("Fabric approval and projection", () => {
     expect(message).toBe("");
   });
 
-  it("shows exact web queries and URLs including the full suffix, or refuses oversized approval", async () => {
-    let message = "";
-    const bridge = new KiroPowerApprover({ supported: () => true, async request(options) { message = options.message; return { action: "accept", approved: true }; } });
-    const approver = new KiroPowerFabricApprover(DEFAULT_FABRIC_CONFIG.approvals, bridge, "/workspace");
-    const web = { ...action, provider: "web", ref: "web.open", name: "open", risk: "network" as const };
-    const url = "https://example.com/source?query=" + "x".repeat(1600) + "&suffix=visible";
-    await approver.approve(web, { url });
-    expect(message).toContain(url); expect(message).toContain("Exact web arguments");
-    await approver.approve({ ...web, name: "search", ref: "web.search" }, { query: "public documentation" });
-    expect(message).toContain("public documentation");
-    message = "";
-    await expect(approver.approve(web, { url: "x".repeat(12000) })).rejects.toThrow("denied or unavailable");
-    expect(message).toBe("");
+  it("rejects retired web and browser programs before any approval or provider contact", async () => {
+    let approvals = 0;
+    const registry = new ActionRegistry();
+    const service = new FabricExecutionService(registry, normalizeFabricConfig({}), "/workspace");
+    try {
+      const retired = [
+        'return await web.search({query:"public documentation"});',
+        'return await web.open({url:"https://example.com/source?query=" + "x".repeat(1600) + "&suffix=visible"});',
+        'return await browser.open({url:"https://example.com"});',
+      ];
+      for (const code of retired) {
+        const result = await service.execute({ code, approver: { async approve() { approvals += 1; } } });
+        expect(result.success, code).toBe(false);
+        expect(result.typeErrors?.length, code).toBeGreaterThan(0);
+        expect(result.audits, code).toEqual([]);
+      }
+      // A generic call cannot dynamically regain a removed provider, even with a long suffix.
+      const generic = await service.execute({
+        code: 'return await tools.call({ref:"web.open",args:{url:"https://example.com/source?query=" + "x".repeat(1600)}});',
+        approver: { async approve() { approvals += 1; } },
+      });
+      expect(generic.success).toBe(false);
+      expect(generic.audits.every(audit => !audit.success)).toBe(true);
+      expect(approvals).toBe(0);
+      // Discovery never advertises a browser/web provider.
+      expect(registry.providers().some(provider => /web|browser/iu.test(provider.name))).toBe(false);
+    } finally { await service.close(); }
   });
 
   it("enforces explicit policy denial without elicitation", async () => {

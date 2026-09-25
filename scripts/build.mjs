@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-import fs from "node:fs";
+import { prepareGeneratedOutput } from "./prepare-generated-output.mjs";
 import { execFileSync } from "node:child_process";
 import { build } from "esbuild";
 import { assertPackagePolicy } from "./package-policy.mjs";
 import { sharedEsbuildOptions } from "./esbuild-common.mjs";
 
 assertPackagePolicy();
-fs.rmSync("dist", { recursive: true, force: true });
+prepareGeneratedOutput(process.cwd(), "dist");
 execFileSync("pnpm", ["exec", "tsc", "-p", "tsconfig.build.json", "--emitDeclarationOnly"], { stdio: "inherit" });
 await build({
   ...sharedEsbuildOptions,

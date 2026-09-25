@@ -13,7 +13,7 @@ export interface FabricExecInput {
 
 export type FabricExecNormalizationDiagnostic = never;
 
-export interface PreparedFabricExecArguments {
+interface PreparedFabricExecArguments {
   value: unknown;
   diagnostics: readonly never[];
 }

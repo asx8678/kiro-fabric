@@ -49,7 +49,7 @@ import {
 } from "../scripts/run-kiro-agent-real-driver.mjs";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
-import { qualificationFailureRecorder } from "../scripts/qualification-failure.mjs";
+import { withQualificationFailureReport } from "../scripts/qualification-failure.mjs";
 
 const digest = "a".repeat(64);
 const archiveDigest = "b".repeat(64);
@@ -722,10 +722,13 @@ describe("real-client release evidence", () => {
     expect(() => buildRealClientTranscript({ ...captures, "coding-qualification": Buffer.alloc(128_001) })).toThrow();
   });
 
-  it("never accepts sanitized failure/progress reports as authenticated qualification", () => {
-    const recorder = qualificationFailureRecorder(undefined, "driver");
-    recorder.phase("publication"); recorder.failure(new Error("fixture failure")); recorder.cleanup("processes", "complete");
-    const report = recorder.snapshot();
+  it("never accepts sanitized failure/progress reports as authenticated qualification", async () => {
+    // The private recorder stays private; the public callback seam emits the same
+    // strict-schema nonqualifying diagnostic without any root/CLI/env bypass.
+    const report = await withQualificationFailureReport(
+      { component: "driver", cleanupKind: "processes", cleanup: async () => "complete" },
+      async (recorder) => { recorder.phase("publication"); recorder.failure(new Error("fixture failure")); return recorder.snapshot(); },
+    );
     expect(report).toMatchObject({ qualifying: false, ok: false, scope: "nonqualifying-sanitized-diagnostic-only" });
     expect(() => assertRealClientEvidence(report, digest)).toThrow();
     expect(() => assertRealClientEvidence({ ...report, ok: true }, digest)).toThrow();

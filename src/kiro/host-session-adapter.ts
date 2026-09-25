@@ -80,14 +80,17 @@ export class KiroHostSessionAdapter {
     const state = this.#sessions.get(session);
     if (!state) throw new Error("Foreign or retired host session");
     if (state.retirement) return state.retirement;
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const cleanup = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    // Publish before abort listeners or host callbacks can reenter retirement.
+    state.retirement = cleanup.then(() => { this.#sessions.delete(session); });
     state.controller.abort(new Error("Host session retired"));
     if (state.turn) this.#forgetTurn(state.turn);
     // Invoke synchronously: Fovea leases/catalogs must be revoked before returning
     // this promise, not after a lifecycle queue or active effect drain.
-    let cleanup: Promise<void>;
-    try { cleanup = this.#retire?.(session) ?? Promise.resolve(); }
-    catch (error) { cleanup = Promise.reject(error); }
-    state.retirement = cleanup.then(() => { this.#sessions.delete(session); });
+    try { void Promise.resolve(this.#retire?.(session)).then(resolve, reject); }
+    catch (error) { reject(error); }
     // Failed cleanup retains the capacity reservation and is surfaced to callers.
     return state.retirement;
   }
@@ -157,11 +160,19 @@ export class KiroHostSessionAdapter {
   close(): Promise<void> {
     if (this.#closeTask) return this.#closeTask;
     this.#closed = true;
-    const tasks = [...this.#sessions.keys()].map(session => this.retireSession(session));
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    this.#closeTask = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+    // Retirement must revoke synchronously, but callbacks may reenter close.
+    const tasks = [...this.#sessions.keys()].map(session => {
+      try { return this.retireSession(session); }
+      catch (error) { return Promise.reject(error); }
+    });
     this.#requests.clear(); this.#receipts.clear();
-    this.#closeTask = Promise.allSettled(tasks).then(results => {
-      const failure = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
-      if (failure) throw failure.reason;
+    void Promise.allSettled(tasks).then(results => {
+      const failures = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+      if (failures.length) reject(new AggregateError(failures.map(failure => failure.reason), "Host session shutdown failed"));
+      else resolve();
     });
     return this.#closeTask;
   }

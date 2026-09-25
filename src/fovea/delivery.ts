@@ -16,10 +16,10 @@ export class FoveaOutbox {
   readonly #claims = new Map<string, symbol>();
   constructor(readonly now: () => number = Date.now) {}
   prepare(rootId: string, authorizationEpoch: number, text: string, origin: FoveaNotice["origin"], semanticKey?: string): string {
-    if (!text || text.length > 65_536 || (semanticKey !== undefined && semanticKey.length > 256)) throw new Error("Fovea notice budget exceeded");
+    if (!text || text.length > 65_536 || (semanticKey !== undefined && semanticKey.length > 256)) throw new Error("Navigator notice budget exceeded");
     for (const n of this.#notices.values()) if (n.rootId === rootId && n.authorizationEpoch === authorizationEpoch && n.text === text &&
       (semanticKey === undefined ? n.state === "prepared" : this.#keys.get(n.noticeId) === semanticKey)) return n.noticeId;
-    if (this.#notices.size >= 32) throw new Error("Fovea outbox full; pending context not discarded");
+    if (this.#notices.size >= 32) throw new Error("Navigator outbox full; pending context not discarded");
     const noticeId = `notice_${randomBytes(16).toString("hex")}`;
     this.#notices.set(noticeId, { noticeId, rootId, authorizationEpoch, text, origin, state: "prepared", createdAt: this.now() });
     if (semanticKey !== undefined) this.#keys.set(noticeId, semanticKey);
@@ -30,7 +30,7 @@ export class FoveaOutbox {
     return n?.rootId === rootId && n.authorizationEpoch === authorizationEpoch ? { ...n } : undefined;
   }
   select(rootId: string, authorizationEpoch: number, budget: number, nextPrompt = true): FoveaNotice[] {
-    if (!Number.isSafeInteger(budget) || budget < 0 || budget > 131_072) throw new Error("Invalid Fovea delivery budget");
+    if (!Number.isSafeInteger(budget) || budget < 0 || budget > 131_072) throw new Error("Invalid Navigator delivery budget");
     const out = []; let used = 0;
     for (const n of this.#notices.values()) if (n.rootId === rootId && n.authorizationEpoch === authorizationEpoch && n.state === "prepared" && !this.#claims.has(n.noticeId) && (nextPrompt || n.origin !== "foreign")) {
       if (used + n.text.length + 160 > budget) break;
@@ -41,7 +41,7 @@ export class FoveaOutbox {
   claim(rootId: string, authorizationEpoch: number, budget: number, nextPrompt = false): FoveaDeliveryClaim | undefined {
     const notices = this.select(rootId, authorizationEpoch, budget, nextPrompt);
     if (!notices.length) return undefined;
-    const token = Symbol("Fovea delivery claim");
+    const token = Symbol("Navigator delivery claim");
     for (const n of notices) this.#claims.set(n.noticeId, token);
     const settle = (state?: "emitted" | "uncertain"): void => {
       for (const selected of notices) {

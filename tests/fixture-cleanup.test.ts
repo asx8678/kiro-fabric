@@ -85,4 +85,68 @@ describe("repository-preserving test teardown", () => {
       } ts.forEachChild(node, visit); }; visit(source);
     } }; walk("tests"); expect(violations).toEqual([]);
   });
+  it("retains a case-folded bare repository layout", () => {
+    const root = fixture(); for (const name of ["objects", "refs"]) fs.mkdirSync(path.join(root, name));
+    fs.writeFileSync(path.join(root, "head"), "ref: refs/heads/main\n");
+    expect(fixtureCleanupDecision(root)).toEqual({ remove: false, reason: "bare Git repository" });
+    removeFixtureSync(root, { recursive: true, force: true });
+    expect(fs.readFileSync(path.join(root, "head"), "utf8")).toBe("ref: refs/heads/main\n");
+  });
+  it("bounds a single directory with a pathological entry count mid-stream", () => {
+    const root = fixture();
+    for (let i = 0; i < 25_001; i++) fs.writeFileSync(path.join(root, `entry-${i}`), "");
+    expect(fixtureCleanupDecision(root)).toEqual({ remove: false, reason: "inspection bound reached" });
+    expect(fs.existsSync(root)).toBe(true);
+    const leaf = path.join(root, "leaf"); fs.mkdirSync(leaf);
+    // A tiny target must not bypass the budget while scanning its wide parent.
+    expect(fixtureCleanupDecision(leaf)).toEqual({ remove: false, reason: "inspection bound reached" });
+  });
+
+  // The following cases assert the decision only. None of them call a removal
+  // API: a dangerous target that is wrongly authorized would destroy a kept
+  // repository. The afterEach hook still runs the guard over each fixture, so
+  // these repository fixtures remain retained.
+  it("refuses an intermediate symlink alias into Git metadata objects", () => {
+    const root = fixture(), repo = path.join(root, "repo");
+    fs.mkdirSync(path.join(repo, ".git", "objects"), { recursive: true });
+    fs.writeFileSync(path.join(repo, ".git", "objects", "sentinel"), "preserved");
+    fs.symlinkSync(path.join(repo, ".git"), path.join(root, "metadata-alias"));
+    expect(fixtureCleanupDecision(path.join(root, "metadata-alias", "objects"))).toEqual({ remove: false, reason: "symlinked cleanup ancestry" });
+    expect(fs.readFileSync(path.join(repo, ".git", "objects", "sentinel"), "utf8")).toBe("preserved");
+  });
+  it("refuses a target reached through an intermediate alias of an unsafe root", () => {
+    const owned = fixture(), root = fixture();
+    fs.symlinkSync(os.tmpdir(), path.join(root, "tmp-alias"));
+    expect(fixtureCleanupDecision(path.join(root, "tmp-alias", path.basename(owned)))).toEqual({ remove: false, reason: "symlinked cleanup ancestry" });
+    expect(fs.existsSync(owned)).toBe(true);
+  });
+  it("refuses a direct bare-repository metadata subtree target", () => {
+    const root = fixture(); for (const name of ["objects", "refs"]) fs.mkdirSync(path.join(root, name));
+    fs.writeFileSync(path.join(root, "HEAD"), "ref: refs/heads/main\n");
+    expect(fixtureCleanupDecision(path.join(root, "objects"))).toEqual({ remove: false, reason: "bare Git repository" });
+    expect(fs.readFileSync(path.join(root, "HEAD"), "utf8")).toBe("ref: refs/heads/main\n");
+  });
+  it("refuses ancestry depth exhaustion before authorizing a bare metadata descendant", () => {
+    const root = fixture();
+    fs.writeFileSync(path.join(root, "HEAD"), "ref: refs/heads/main\n");
+    fs.mkdirSync(path.join(root, "refs"));
+    let leaf = path.join(root, "objects"); fs.mkdirSync(leaf);
+    for (let i = 0; i < 130; i++) { leaf = path.join(leaf, "x"); fs.mkdirSync(leaf); }
+    fs.writeFileSync(path.join(leaf, "sentinel"), "preserved");
+    expect(fixtureCleanupDecision(leaf)).toEqual({ remove: false, reason: "inspection bound reached" });
+    expect(fs.readFileSync(path.join(leaf, "sentinel"), "utf8")).toBe("preserved");
+  });
+  it("keeps final-symlink unlink semantics without following the link", () => {
+    const outside = fixture(), root = fixture();
+    fs.mkdirSync(path.join(outside, "kept"));
+    fs.symlinkSync(outside, path.join(root, "alias"));
+    expect(fixtureCleanupDecision(path.join(root, "alias"))).toEqual({ remove: true, reason: "inspected generated fixture" });
+    expect(fs.existsSync(path.join(outside, "kept"))).toBe(true);
+  });
+  it("fails closed when symlinked ancestry cannot be inspected", () => {
+    const root = fixture();
+    fs.symlinkSync(path.join(root, "b"), path.join(root, "a"));
+    fs.symlinkSync(path.join(root, "a"), path.join(root, "b"));
+    expect(fixtureCleanupDecision(path.join(root, "a", "child"))).toEqual({ remove: false, reason: "inspection unavailable" });
+  });
 });

@@ -8,7 +8,9 @@ import path from 'node:path';
 function trustedMacApplications(directory,stat,platform=process.platform){
  return platform==='darwin'&&directory==='/Applications'&&stat.uid===0&&stat.gid===80&&(stat.mode&0o7777)===0o775;
 }
-/** @param {string} directory @param {import('node:fs').Stats} stat @param {AncestryOptions} [options] */
+/** @internal Live ancestry policy predicate, exported for boundary-oracle tests only.
+ * It remains the exact predicate `captureDirectoryAncestry` uses; no policy changed.
+ * @param {string} directory @param {import('node:fs').Stats} stat @param {AncestryOptions} [options] */
 export function trustedDirectoryStat(directory,stat,{platform=process.platform,uid=process.getuid?.()}={}){
  const sticky=stat.uid===0&&(stat.mode&0o1000)!==0;
  return stat.isDirectory()&&!stat.isSymbolicLink()&&(uid===undefined||stat.uid===uid||stat.uid===0)&&

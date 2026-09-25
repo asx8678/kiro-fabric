@@ -37,17 +37,29 @@ function roleFor(p) {
   safePath(p);
   if(p==='tools/node'||p==='tools/rg'||p==='tools/ast-grep') return 'executable';
   if(p==='manager/install-manager.mjs') return 'manager';
+  if(p.startsWith('app/browser/')) throw Error('Obsolete browser bundle resources are not supported');
   if(p.startsWith('app/')) return 'app';
   if(p==='resources/steering/fabric.md'||p==='resources/skills/fabric-exec/SKILL.md'||p.startsWith('resources/skills/fabric-exec/references/')) return 'resource';
   if(p.startsWith('notices/')) return 'notice';
   throw Error('Unknown bundle entry: '+p);
 }
+/** @internal Schema-1 app closure. Test-local mirrors drift; fixtures build against the live list.
+ * Called in production by checkManifest/createManifestFor/validateBundleFor (schema 1).
+ * No public accessor exists for the exact admitted path set, and duplicating it risks
+ * mask drift between fixture bytes and the admission contract. Not a root/package export. */
 export const REQUIRED_APP = ['app/kiro/mcp-entry.js','app/runtime/compiler-worker-entry.js','app/runtime/sandbox-worker-entry.js','app/package.json','app/closure-manifest.json'];
 // Older owned generations predate the sandbox worker. This historical contract
 // is for retained-installation verification only, never new bundle admission.
+/** @internal Schema-2 historical app closure. Test fixtures must materialize the
+ * exact legacy-native member set; validateInstalledBundle's member list is otherwise
+ * inaccessible and a hand mirror would silently diverge. Used in production by
+ * checkManifestFor for schema 2. Not a root/package export. */
 export const FOVEA_REQUIRED_APP = [...REQUIRED_APP, 'app/fovea/engine-entry.js', 'app/kiro/fovea-hook.js', 'app/fovea/component.json', 'app/fovea/upstream.json', 'app/fovea/UPSTREAM-LICENSE.txt', 'app/fovea/ast-grep-LICENSE.txt', 'tools/ast-grep', 'resources/skills/fabric-exec/references/fovea.md'];
 const DARWIN_SOURCE_APP = ['app/fovea/source-platform.node', 'app/fovea/source-platform.json'];
 const HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter(p => p !== 'app/runtime/sandbox-worker-entry.js');
+// Obsolete browser schema 3 is rejected for both new and historical bundles.
+// Preserve those generations and their data for explicit operator recovery;
+// never downgrade their manifests or admit their resources unchecked.
 /** Stable upstream platform contract; never derived from running node --version.
  * Evidence: https://github.com/nodejs/node/blob/v24.20.0/BUILDING.md
  * Schema 2 additionally binds the measured linux-x64 parser ELF GLIBC_2.34 floor.
@@ -55,7 +67,7 @@ const HISTORICAL_REQUIRED_APP = REQUIRED_APP.filter(p => p !== 'app/runtime/sand
 export function compatibilityFor(target,schema=1){
  if(!TARGETS.includes(target)||![1,2].includes(schema))throw Error('Unsupported target/schema');
  const linux=target.startsWith('linux-');
- return {minNode:'24.20.0',minKiro:'2.21.1',minGlibc:linux?(schema===2&&target==='linux-x64'?'2.34':'2.28'):null,minKernel:linux?'4.18':null,minMacOS:linux?null:'13.5',libc:linux?'glibc':'system'};
+ return {minNode:'24.20.0',minKiro:'2.21.1',minGlibc:linux?(schema>=2&&target==='linux-x64'?'2.34':'2.28'):null,minKernel:linux?'4.18':null,minMacOS:linux?null:'13.5',libc:linux?'glibc':'system'};
 }
 /** Release metadata may describe either reviewed generation version. Bundle
  * admission always passes its explicit schema.
@@ -83,9 +95,9 @@ function pinURL(url,hosts){
 /** Validate the actual acquirePrivateTools().tools shape, optionally against inventory.
  * @param {any} tools @param {any[] | undefined} [inventory] @param {string} [target] @param {number} [schema] */
 export function checkToolPins(tools,inventory,target,schema=tools&&Object.hasOwn(tools,'ast-grep')?2:1){
- if(schema!==1&&schema!==2)throw Error('Unsupported tool schema');
- exactFields(tools,schema===2?['node','rg','ast-grep']:['node','rg']);
- if(schema===2)checkParserPin(tools['ast-grep'],inventory,target);
+ if(![1,2].includes(schema))throw Error('Unsupported tool schema');
+ exactFields(tools,schema>=2?['node','rg','ast-grep']:['node','rg']);
+ if(schema>=2)checkParserPin(tools['ast-grep'],inventory,target);
  const destinations=new Set();let total=0;
  for(const tool of ['node','rg']){
   const pin=tools[tool];exactFields(pin,['version','url','size','sha256','checksumUrl','members']);
@@ -152,6 +164,10 @@ function checkInventoryFor(inventory, requiredApp) {
  return bytes;
 }
 /** @param {any} payload */
+/** @internal Production digest seam used by checkManifestFor and createManifestFor.
+ * Historical-manifest tests must reconstruct pre-sandbox-worker bytes with the same
+ * domain separator; public createBundleManifest always injects the current closure.
+ * Not a root/package export. @param {any} payload */
 export function manifestDigest(payload){return sha256('kiro-fabric.bundle.v1\0'+canonical(payload));}
 /** @param {any} m */
 export function checkManifest(m){ return checkManifestFor(m, REQUIRED_APP); }
@@ -161,6 +177,7 @@ export function checkInstalledManifest(m){ return checkManifestFor(m, HISTORICAL
 /** @param {any} m @param {string[]} requiredApp @param {boolean} [historical] */
 function checkManifestFor(m, requiredApp, historical=false){
  exactFields(m,['compatibility','digest','inventory','product','provenance','schema','target','tools','version']);
+ if(m.schema===3)throw Error('Obsolete browser bundle schema 3 is not supported; preserve the generation and data for recovery');
  if(![1,2].includes(m.schema)||m.product!==PRODUCT||!TARGETS.includes(m.target)||!isStable(m.version))throw Error('Manifest identity');
  checkCompatibility(m.compatibility,m.target,m.schema);checkProvenance(m.provenance);
  // A retained pre-native schema-2 generation may lack both assets, but any
@@ -257,12 +274,15 @@ async function scan(root){
  for(const p of directories)if(!inventory.some(e=>e.path.startsWith(p+'/')))throw Error('Empty/unknown directory');
  return inventory.sort((a,b)=>byteOrder(a.path,b.path));
 }
-/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options */
+/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any,schema?:number}} options */
 export async function createBundleManifest(root,options){ return createManifestFor(root,options,REQUIRED_APP); }
-/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any}} options @param {string[]} requiredApp @param {boolean} [historical] */
-async function createManifestFor(root,{version,target,compatibility,provenance,tools},requiredApp,historical=false){
+/** @param {string} root @param {{version:string,target:string,compatibility:any,provenance:any,tools:any,schema?:number}} options @param {string[]} requiredApp @param {boolean} [historical] */
+async function createManifestFor(root,{version,target,compatibility,provenance,tools,schema},requiredApp,historical=false){
  const guard=await checkRoot(root);root=guard.root;
- const payload={schema:Object.hasOwn(tools,'ast-grep')?2:1,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
+ // New callers may omit schema for the legacy tool-key default. A supplied
+ // schema is authoritative; validation reconstructs that exact generation.
+ const resolvedSchema=schema??(Object.hasOwn(tools,'ast-grep')?2:1);
+ const payload={schema:resolvedSchema,product:PRODUCT,version,target,compatibility,provenance,tools,inventory:await scan(root)};
  guard.check();const manifest={...payload,digest:manifestDigest(payload)};checkManifestFor(manifest,requiredApp,historical);
  await checkNativeSourceFiles(root,manifest,historical);guard.check();return manifest;
 }
@@ -271,7 +291,7 @@ async function createManifestFor(root,{version,target,compatibility,provenance,t
  * @param {string} root @param {any} manifest @param {boolean} [historical] */
 async function checkNativeSourceFiles(root, manifest, historical=false) {
  const present = DARWIN_SOURCE_APP.some(name => manifest.inventory.some(e => e.path === name));
- if (!present && (historical || !(manifest.schema === 2 && manifest.target.startsWith('darwin-')))) return;
+ if (!present && (historical || !(manifest.schema >= 2 && manifest.target.startsWith('darwin-')))) return;
  if (manifest.schema !== 2 || !manifest.target.startsWith('darwin-')) throw Error('Native source target mismatch');
  const capture = async (name, limit) => {
   const entry = manifest.inventory.find(e => e.path === name);

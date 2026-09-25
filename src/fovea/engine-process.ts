@@ -1,153 +1,259 @@
-import { fork, type ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import fs from "node:fs";
-import { fileURLToPath } from "node:url";
-import { decodeResponse, encodeFrame, type FoveaEngineInitialization, type FoveaMessage, type FoveaQuery } from "./protocol.js";
-import { localProcessGroupAlive } from "../providers/local-process-group.js";
+import { fork, type ChildProcess } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { decodeResponse, encodeFrame, type FoveaEngineInitialization, type FoveaMessage, type FoveaQuery } from './protocol.js';
+import { localProcessGroupAlive } from '../providers/local-process-group.js';
 
-const CRASH_BUDGET_UNAVAILABLE = "Fovea crash budget exceeded; same-generation reload required";
-
-interface Pending { resolve(value: Record<string, unknown>): void; reject(error: Error): void }
+const CRASH_BUDGET_UNAVAILABLE = 'Navigator crash budget exceeded; same-generation reload required';
+const CLEANUP_MS = 1_500, GRACE_MS = 500;
+const deferred = (): { promise: Promise<void>; resolve(): void; reject(error: unknown): void } => {
+  let resolve!: () => void, reject!: (error: unknown) => void;
+  const promise = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+};
+const groupAliveWithin = async (pid: number, end: number): Promise<boolean> => {
+  const remaining = end - performance.now();
+  if (remaining <= 0) throw new Error('Navigator process-group cleanup deadline exceeded');
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([localProcessGroupAlive(pid, end), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error('Navigator process-group census deadline exceeded')), remaining);
+    })]);
+  } finally { clearTimeout(timer); }
+};
+interface Pending { child: ChildProcess; resolve(value: Record<string, unknown>): void; reject(error: Error): void }
+interface Cleanup { generation: number; mode: 'graceful' | 'forced' | 'uncertain'; processGroup: 'confirmed' | 'uncertain'; scratch: 'removed' | 'retained' }
 export interface FoveaEngineProcessOptions extends FoveaEngineInitialization { entrypoint?: string }
-/** One lazily started child per owning host. Requests are serialized by the host,
- * but cancellation and shutdown are out-of-band. No guest lifecycle owns this. */
+/** Host-owned lazy child. Admission and cleanup ownership are separate: a
+ * stopping/failed child remains owned, but can never accept another request. */
 export class FoveaEngineProcess {
   readonly #pending = new Map<string, Pending>();
   #child: ChildProcess | undefined;
   #start: Promise<void> | undefined;
   #stopping: Promise<void> | undefined;
+  #closeTask: Promise<void> | undefined;
+  #failure: Error | undefined;
   #closed = false;
   #failures: number[] = [];
+  #cleanup: Cleanup | undefined;
   generation = 0;
   starts = 0;
+  retainedScratchGenerations = 0;
   unavailable: string | undefined;
   constructor(readonly options: FoveaEngineProcessOptions) {}
-  get active(): boolean { return !!this.#child && this.#child.exitCode === null; }
+  get active(): boolean { return !this.#stopping && !this.#failure && !!this.#child && this.#child.exitCode === null && this.#child.signalCode === null; }
+  get cleanup(): Cleanup | undefined { return this.#cleanup ? { ...this.#cleanup } : undefined; }
+  #available(): void {
+    if (this.#failure) throw this.#failure;
+    if (this.#closed || this.unavailable) throw new Error(this.unavailable ?? 'Navigator host closed');
+  }
   async query(request: FoveaQuery, signal: AbortSignal, remainingMs: number): Promise<Record<string, unknown>> {
-    signal.throwIfAborted(); const end = performance.now() + Math.min(900_000, remainingMs);
-    await this.#ensure(); signal.throwIfAborted();
-    const budget = Math.floor(end - performance.now());
-    if (budget <= 0) throw new Error("Fovea request deadline expired during startup");
-    const id = `q_${randomBytes(16).toString("hex")}`;
-    let cancelled: Error | undefined, timer: NodeJS.Timeout | undefined, killTimer: NodeJS.Timeout | undefined;
-    const cancel = (): void => {
-      cancelled ??= new Error("Fovea request cancelled or timed out");
-      try { this.#send({ version: 1, type: "cancel", id }); } catch { /* child failure settles pending */ }
-      killTimer ??= setTimeout(() => { void this.#terminate(cancelled!).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 250);
+    signal.throwIfAborted(); this.#available();
+    const end = performance.now() + Math.min(900_000, remainingMs);
+    if (!(end > performance.now())) throw new Error('Navigator request deadline expired before startup');
+    let id: string | undefined, child: ChildProcess | undefined, cancelled: Error | undefined, primary: unknown;
+    let killTimer: NodeJS.Timeout | undefined, cancellation: Promise<void> | undefined;
+    const stop = (): void => {
+      if (child && this.#child !== child) return; // A retired request never owns a newer child.
+      cancellation ??= this.#terminate(cancelled ?? new Error('Navigator request expired'));
+      void cancellation.catch(() => {});
     };
-    signal.addEventListener("abort", cancel, { once: true });
-    timer = setTimeout(cancel, budget);
+    const cancel = (): void => {
+      cancelled ??= new Error(id ? 'Navigator query cancelled or timed out (lazy parser/query phase)' : 'Navigator cancelled or timed out during IPC initialization');
+      if (!id) { stop(); return; }
+      try { this.#send({ version: 1, type: 'cancel', id }); } catch { /* stop still owns cleanup */ }
+      killTimer ??= setTimeout(stop, 250);
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+    const timer = setTimeout(cancel, Math.max(1, Math.floor(end - performance.now())));
     try {
-      const result = await this.#request({ version: 1, type: "query", id, remainingMs: budget, request });
-      if (cancelled || signal.aborted || performance.now() >= end) { await this.#terminate(cancelled ?? new Error("Fovea deadline expired before publication")); throw cancelled ?? new Error("Fovea request expired"); }
+      await this.#ensure(signal, end);
+      signal.throwIfAborted(); this.#available();
+      if (cancelled || performance.now() >= end) throw cancelled ?? new Error('Navigator request deadline expired during IPC initialization');
+      child = this.#child;
+      id = `q_${randomBytes(16).toString('hex')}`;
+      const result = await this.#request({ version: 1, type: 'query', id, remainingMs: Math.max(1, Math.floor(end - performance.now())), request });
+      if (cancelled || signal.aborted || performance.now() >= end) { cancel(); stop(); await cancellation; throw cancelled!; }
+      this.#available();
+      if (this.#child !== child) throw new Error('Navigator generation retired before publication');
       return result;
-    } finally {
-      clearTimeout(timer); clearTimeout(killTimer); signal.removeEventListener("abort", cancel);
-      if (cancelled) await this.#terminate(cancelled);
+    } catch (error) { primary = error; throw error; }
+    finally {
+      clearTimeout(timer); clearTimeout(killTimer); signal.removeEventListener('abort', cancel);
+      if (cancelled) {
+        stop();
+        try { await cancellation; } catch (cleanup) { throw new AggregateError([primary ?? cancelled, cleanup], 'Navigator cancellation and cleanup failed', { cause: primary ?? cancelled }); }
+      }
     }
   }
-  /** Host scheduler only. Retiring an idle owner must never start a parser. */
+  /** Idle owner retirement never starts the parser or another child. */
   async retireConversation(conversationId: string, conversationEpoch: number): Promise<void> {
-    if (this.#closed) throw new Error("Fovea host closed");
-    // Losing the child reference does not prove its process group is gone.
-    // Join an in-progress stop and preserve its failure latch before declaring
-    // idle retirement complete. Crash-budget exhaustion alone has no live state.
+    if (this.#closed) throw new Error('Navigator host closed');
     if (this.#stopping) await this.#stopping;
-    if (this.#closed) throw new Error("Fovea host closed");
+    if (this.#closed) throw new Error('Navigator host closed');
+    if (this.#failure) throw this.#failure;
     if (this.unavailable && this.unavailable !== CRASH_BUDGET_UNAVAILABLE) throw new Error(this.unavailable);
     if (!this.active) return;
-    const id = `retire_${randomBytes(16).toString("hex")}`;
-    const timer = setTimeout(() => { void this.#terminate(new Error("Fovea retirement timed out")).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 2_000);
+    const child = this.#child, id = `retire_${randomBytes(16).toString('hex')}`;
+    const timer = setTimeout(() => { if (this.#child === child) void this.#terminate(new Error('Navigator retirement timed out')).catch(() => {}); }, 2_000);
     try {
-      const response = await this.#request({ version: 1, type: "retireConversation", id, conversationId, conversationEpoch });
-      if (response.retired !== true) throw new Error("Fovea retirement not confirmed");
-    } catch (error) { await this.#terminate(new Error("Fovea retirement failed")); throw error; }
-    finally { clearTimeout(timer); }
+      const response = await this.#request({ version: 1, type: 'retireConversation', id, conversationId, conversationEpoch });
+      if (response.retired !== true) throw new Error('Navigator retirement not confirmed');
+      if (this.#closed || this.#child !== child) throw new Error('Navigator retirement interrupted by close');
+    } catch (error) {
+      try { if (this.#child === child) await this.#terminate(new Error('Navigator retirement failed')); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], 'Navigator retirement and cleanup failed', { cause: error }); }
+      throw error;
+    } finally { clearTimeout(timer); }
   }
   async restart(): Promise<void> {
-    if (this.#closed) throw new Error("Fovea host closed");
-    await this.#terminate(new Error("Fovea engine restart"));
-    // Explicit recovery clears crash exhaustion only after confirmed cleanup.
-    // Uncertain cleanup and other unavailability must remain latched.
+    if (this.#closed) throw new Error('Navigator host closed');
+    await this.#terminate(new Error('Navigator engine restart'), false, true);
+    if (this.#closed) throw new Error('Navigator host closed during restart');
+    if (this.#failure) throw this.#failure;
     if (this.unavailable && this.unavailable !== CRASH_BUDGET_UNAVAILABLE) throw new Error(this.unavailable);
     this.#failures = []; this.unavailable = undefined;
   }
-  async close(): Promise<void> { this.#closed = true; await this.#terminate(new Error("Fovea host shutdown")); }
-  async #ensure(): Promise<void> {
-    if (this.#closed || this.unavailable) throw new Error(this.unavailable ?? "Fovea host closed");
-    if (this.#stopping) await this.#stopping;
-    if (this.#start) return this.#start;
-    this.#start = this.#spawn().catch(async error => { await this.#terminate(new Error("Fovea initialization failed"), true); throw error; });
-    return this.#start;
+  close(): Promise<void> {
+    if (this.#closeTask) return this.#closeTask;
+    const close = deferred(); this.#closeTask = close.promise;
+    this.#closed = true;
+    this.#terminate(new Error('Navigator host shutdown'), false, true).then(close.resolve, close.reject);
+    return close.promise;
   }
-  async #spawn(): Promise<void> {
+  async #ensure(signal: AbortSignal, end: number): Promise<void> {
+    this.#available(); signal.throwIfAborted();
+    if (this.#stopping) await this.#stopping;
+    this.#available(); signal.throwIfAborted();
+    if (performance.now() >= end) throw new Error('Navigator request deadline expired before spawn');
+    if (!this.#start) {
+      // Install before invoking fork/send or any reentrant host boundary.
+      const start = Promise.resolve().then(() => this.#spawn(signal, end));
+      this.#start = start;
+      void start.catch(() => { if (this.#start === start) this.#start = undefined; });
+    }
+    await this.#start;
+    this.#available(); signal.throwIfAborted();
+  }
+  async #spawn(signal: AbortSignal, end: number): Promise<void> {
+    this.#available(); signal.throwIfAborted();
+    if (this.#stopping || performance.now() >= end) throw new Error('Navigator spawn admission revoked');
     const now = Date.now(); this.#failures = this.#failures.filter(t => now - t < 60_000);
     if (this.#failures.length >= 3) { this.unavailable = CRASH_BUDGET_UNAVAILABLE; throw new Error(this.unavailable); }
-    const entrypoint = this.options.entrypoint ?? fileURLToPath(new URL("./engine-entry.js", import.meta.url));
+    const entrypoint = this.options.entrypoint ?? fileURLToPath(new URL('./engine-entry.js', import.meta.url));
     const stat = fs.lstatSync(entrypoint);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || fs.realpathSync(entrypoint) !== entrypoint) throw new Error("Fovea engine entrypoint identity invalid");
-    const child = fork(entrypoint, [], { execPath: process.execPath, execArgv: [], cwd: this.options.storageRoot, env: { LANG: "C.UTF-8", LC_ALL: "C", TMPDIR: this.options.storageRoot }, detached: true, stdio: ["ignore", "ignore", "ignore", "ipc"], serialization: "json" });
-    this.#child = child; this.generation++; this.starts++;
-    child.on("message", raw => {
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || fs.realpathSync(entrypoint) !== entrypoint) throw new Error('Navigator engine entrypoint identity invalid');
+    this.#available(); signal.throwIfAborted();
+    if (this.#stopping) throw new Error('Navigator spawn admission revoked');
+    const child = fork(entrypoint, [], { execPath: process.execPath, execArgv: [], cwd: this.options.storageRoot, env: { LANG: 'C.UTF-8', LC_ALL: 'C', TMPDIR: this.options.storageRoot }, detached: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'], serialization: 'json' });
+    this.#child = child; const generation = ++this.generation; this.starts++;
+    const current = (): boolean => this.#child === child && this.generation === generation && !this.#stopping;
+    const fail = (message: string): void => { if (current()) void this.#terminate(new Error(message), true).catch(() => {}); };
+    child.on('message', raw => {
+      if (!current()) return;
       try {
         const response = decodeResponse(raw), pending = this.#pending.get(response.id);
-        if (!pending) { void this.#terminate(new Error("Fovea unsolicited/replayed response"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); return; }
+        if (!pending || pending.child !== child) { fail('Navigator unsolicited/replayed response'); return; }
         this.#pending.delete(response.id);
         if (response.ok) pending.resolve(response.value); else pending.reject(new Error(response.error));
-      } catch { void this.#terminate(new Error("Fovea malformed response"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }
+      } catch { fail('Navigator malformed response'); }
     });
-    child.once("error", () => { void this.#terminate(new Error("Fovea engine process failed"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
-    child.once("exit", () => { void this.#terminate(new Error("Fovea engine exited"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); });
-    const id = `init_${randomBytes(8).toString("hex")}`;
-    const timeout = setTimeout(() => { void this.#terminate(new Error("Fovea initialization timed out"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); }, 5_000);
+    child.once('error', () => fail('Navigator engine process failed'));
+    child.once('exit', () => fail('Navigator engine exited'));
+    const timeout = setTimeout(() => fail('Navigator initialization timed out'), 5_000);
     const { parser, storageRoot, gitPath } = this.options;
-    try { await this.#request({ version: 1, type: "initialize", id, options: { parser: { ...parser }, storageRoot, ...(gitPath ? { gitPath } : {}) } }); }
-    finally { clearTimeout(timeout); }
+    try {
+      this.#available(); signal.throwIfAborted();
+      if (this.#stopping) throw new Error('Navigator initialization admission revoked');
+      await this.#request({ version: 1, type: 'initialize', id: `init_${randomBytes(8).toString('hex')}`, options: { parser: { ...parser }, storageRoot, ...(gitPath ? { gitPath } : {}) } });
+    } catch (error) {
+      try { if (this.#child === child) await this.#terminate(new Error('Navigator initialization failed'), true); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], 'Navigator initialization and cleanup failed', { cause: error }); }
+      throw error;
+    } finally { clearTimeout(timeout); }
   }
   #send(message: FoveaMessage): void {
-    const child = this.#child;
-    if (!child?.connected) throw new Error("Fovea engine disconnected");
-    const encoded = encodeFrame(message);
-    child.send(encoded, error => { if (error && this.#child === child) { void this.#terminate(new Error("Fovea engine send failed"), true).catch(() => { this.unavailable = "engine cleanup uncertain"; }); } });
+    const child = this.#child, generation = this.generation;
+    if (!child?.connected || this.#stopping) throw new Error('Navigator engine disconnected/stopping');
+    child.send(encodeFrame(message), error => { if (error && this.#child === child && this.generation === generation && !this.#stopping) void this.#terminate(new Error('Navigator engine send failed'), true).catch(() => {}); });
   }
   #request(message: FoveaMessage): Promise<Record<string, unknown>> {
-    if (this.#pending.size >= 4) return Promise.reject(new Error("Fovea IPC backpressure"));
-    return new Promise((resolve, reject) => { this.#pending.set(message.id, { resolve, reject }); try { this.#send(message); } catch (error) { this.#pending.delete(message.id); reject(error); } });
-  }
-  #terminate(reason: Error, unexpected = false): Promise<void> {
-    if (this.#stopping) return this.#stopping;
+    if (!this.#child || this.#stopping || this.#pending.size >= 4) return Promise.reject(new Error('Navigator IPC unavailable/backpressure'));
     const child = this.#child;
-    // Count each failing generation once, not every healthy start/reload.
-    if (unexpected && (child || this.#start)) this.#failures.push(Date.now());
-    this.#child = undefined; this.#start = undefined;
-    // Old exit/error events must never terminate a replacement child.
-    child?.removeAllListeners("message"); child?.removeAllListeners("exit");
-    child?.removeAllListeners("error"); child?.on("error", () => {});
-    // Capture pending now; reject only after bounded process-group cleanup so
-    // callers never observe a settled cancellation while descendants still run.
-    const pending = [...this.#pending.values()]; this.#pending.clear();
-    this.#stopping = (async () => {
+    return new Promise((resolve, reject) => { this.#pending.set(message.id, { child, resolve, reject }); try { this.#send(message); } catch (error) { this.#pending.delete(message.id); reject(error); } });
+  }
+  #terminate(reason: Error, unexpected = false, graceful = false): Promise<void> {
+    if (this.#stopping) return this.#stopping;
+    if (this.#failure) return Promise.reject(this.#failure);
+    const operation = deferred(); this.#stopping = operation.promise;
+    const end = performance.now() + CLEANUP_MS;
+    const pending = [...this.#pending.values()]; this.#pending.clear(); this.#start = undefined;
+    // Defer resource capture one microtask so a reentrant close during fork owns
+    // the returned child instead of prematurely declaring an empty shutdown.
+    void (async () => {
+      await Promise.resolve();
+      const child = this.#child, generation = this.generation;
+      if (unexpected && child) this.#failures.push(Date.now());
+      let acknowledged = false, mode: Cleanup['mode'] = 'forced', cleanupError: Error | undefined;
       try {
+        child?.removeAllListeners('message'); child?.removeAllListeners('exit'); child?.removeAllListeners('error'); child?.on('error', () => {});
         if (child?.pid) {
-          const pid = child.pid, end = performance.now() + 1_500;
-          try { process.kill(-pid, "SIGKILL"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
-          // Reap our own leader before a host-wide descendant census. Probing
-          // its transient zombie forced a /proc sweep even for an idle engine;
-          // a busy process table could exhaust the 200ms probe bound. This wait
-          // consumes the SAME 1500ms cleanup deadline, never extends it.
-          if (child.exitCode === null && child.signalCode === null) {
-            await new Promise<void>((resolve, reject) => {
-              const exited = (): void => { clearTimeout(timer); resolve(); };
-              const timer = setTimeout(() => { child.removeListener("exit", exited); reject(new Error("Fovea leader reaping deadline exceeded")); }, Math.max(1, end - performance.now()));
-              child.once("exit", exited);
+          const exited = (): boolean => child.exitCode !== null || child.signalCode !== null;
+          if (graceful && pending.length === 0 && child.connected && !exited()) {
+            const id = `shutdown_${randomBytes(16).toString('hex')}`;
+            await new Promise<void>(resolve => {
+              let finished = false;
+              const finish = (): void => { if (finished) return; finished = true; clearTimeout(timer); child.removeListener('message', response); child.removeListener('exit', exit); resolve(); };
+              const exit = (): void => { if (acknowledged || cleanupError) finish(); };
+              const response = (raw: unknown): void => {
+                if (finished || this.#child !== child || this.generation !== generation) return;
+                try {
+                  const value = decodeResponse(raw);
+                  if (value.id !== id) return;
+                  if (!value.ok) { cleanupError = new Error(`Navigator graceful cleanup failed: ${value.error}`); finish(); return; }
+                  const cleanup = value.value.cleanup as Record<string, unknown> | undefined;
+                  if (value.value.shutdown !== true || value.value.closed !== true || cleanup?.scratch !== 'removed') { cleanupError = new Error('Navigator graceful cleanup acknowledgement invalid'); finish(); return; }
+                  acknowledged = true; if (exited()) finish();
+                } catch { cleanupError = new Error('Navigator malformed shutdown acknowledgement'); finish(); }
+              };
+              const timer = setTimeout(finish, Math.max(0, Math.min(GRACE_MS, end - performance.now())));
+              child.on('message', response); child.once('exit', exit);
+              try { child.send(encodeFrame({ version: 1, type: 'shutdown', id }), error => { if (error) finish(); }); } catch { finish(); }
             });
           }
-          while (await localProcessGroupAlive(pid, end)) { if (performance.now() >= end) throw new Error("Fovea process-group cleanup uncertain"); await new Promise(resolve => setTimeout(resolve, 10)); }
+          if (acknowledged && exited() && !cleanupError) mode = 'graceful';
+          else {
+            try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+          }
+          if (!exited()) await new Promise<void>((resolve, reject) => {
+            const exit = (): void => { clearTimeout(timer); resolve(); };
+            const timer = setTimeout(() => { child.removeListener('exit', exit); reject(new Error('Navigator leader reaping deadline exceeded')); }, Math.max(0, end - performance.now()));
+            child.once('exit', exit);
+            if (exited()) { child.removeListener('exit', exit); clearTimeout(timer); resolve(); }
+          });
+          while (await groupAliveWithin(child.pid, end)) {
+            if (performance.now() >= end) throw new Error('Navigator process-group cleanup uncertain');
+            // A graceful leader exit does not prove its descendants exited.
+            if (mode === 'graceful') { mode = 'forced'; try { process.kill(-child.pid, 'SIGKILL'); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; } }
+            await new Promise(resolve => setTimeout(resolve, Math.min(10, Math.max(0, end - performance.now()))));
+          }
           if (child.connected) child.disconnect();
         }
-      } catch (error) { this.unavailable = "Fovea process-group cleanup uncertain"; throw error; }
-      finally { for (const p of pending) p.reject(reason); }
-    })().finally(() => { this.#stopping = undefined; });
-    return this.#stopping;
+        this.#cleanup = { generation, mode, processGroup: 'confirmed', scratch: mode === 'graceful' && !cleanupError ? 'removed' : 'retained' };
+        if (child && mode !== 'graceful') this.retainedScratchGenerations++;
+        if (cleanupError) throw cleanupError;
+        if (this.#child === child) this.#child = undefined;
+        for (const p of pending) p.reject(reason);
+        this.#stopping = undefined; operation.resolve();
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error('Navigator cleanup failed', { cause: error });
+        this.#failure = failure; this.unavailable = 'Navigator cleanup uncertain; owning host restart required';
+        this.#cleanup = { generation, mode: 'uncertain', processGroup: cleanupError === error ? 'confirmed' : 'uncertain', scratch: 'retained' };
+        for (const p of pending) p.reject(new AggregateError([reason, failure], 'Navigator request and cleanup failed', { cause: reason }));
+        this.#stopping = undefined; operation.reject(failure); // Child/failure ownership stays retained.
+      }
+    })();
+    return operation.promise;
   }
 }

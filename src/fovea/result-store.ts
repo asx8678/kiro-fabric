@@ -21,7 +21,7 @@ export class FoveaResultStore {
   page(owner: ResultOwner, resultId: string, cursor?: string, maxChars = 8_000): Record<string, unknown> {
     if (!Number.isSafeInteger(maxChars) || maxChars < 256 || maxChars > 32_000) throw new Error("repo.result page budget must be 256..32000");
     const entry = this.#get(owner, resultId), offset = cursor === undefined ? 0 : this.#offset(resultId, cursor);
-    if (offset > entry.text.length) throw new Error("Invalid Fovea cursor offset");
+    if (offset > entry.text.length) throw new Error("Invalid Navigator cursor offset");
     let end = Math.min(entry.text.length, offset + maxChars);
     if (end < entry.text.length && /[\uD800-\uDBFF]/u.test(entry.text[end - 1]!)) end--;
     return { schemaVersion: 1, advisory: true, resultId, encoding: "json", text: entry.text.slice(offset, end), offset, totalChars: entry.text.length, done: end === entry.text.length, ...(end < entry.text.length ? { nextCursor: this.#cursor(resultId, end) } : {}) };
@@ -36,7 +36,7 @@ export class FoveaResultStore {
   clear(): void { this.#entries.clear(); this.#chars = 0; }
   #sweep(): void { for (const [id, e] of this.#entries) if (e.expiresAt <= this.now()) this.#delete(id); }
   #delete(id: string): void { const e = this.#entries.get(id); if (e) { this.#chars -= e.text.length; this.#entries.delete(id); } }
-  #get(owner: ResultOwner, id: string): Stored { this.#sweep(); const e = this.#entries.get(id); if (!e || !same(e.owner, owner)) throw new Error("Fovea result unavailable: foreign, revoked, expired, or engine generation changed"); return e; }
+  #get(owner: ResultOwner, id: string): Stored { this.#sweep(); const e = this.#entries.get(id); if (!e || !same(e.owner, owner)) throw new Error("Navigator result unavailable: foreign, revoked, expired, or engine generation changed"); return e; }
   #cursor(id: string, offset: number): string { const body = String(offset); return `${body}.${createHmac("sha256", this.#secret).update(`${id}:${body}`).digest("hex")}`; }
-  #offset(id: string, cursor: string): number { if (!/^\d{1,8}\.[a-f0-9]{64}$/u.test(cursor)) throw new Error("Invalid Fovea cursor"); const body = cursor.split(".")[0]!; const expected = this.#cursor(id, Number(body)); if (cursor.length !== expected.length || !timingSafeEqual(Buffer.from(cursor), Buffer.from(expected))) throw new Error("Foreign Fovea cursor"); return Number(body); }
+  #offset(id: string, cursor: string): number { if (!/^\d{1,8}\.[a-f0-9]{64}$/u.test(cursor)) throw new Error("Invalid Navigator cursor"); const body = cursor.split(".")[0]!; const expected = this.#cursor(id, Number(body)); if (cursor.length !== expected.length || !timingSafeEqual(Buffer.from(cursor), Buffer.from(expected))) throw new Error("Foreign Navigator cursor"); return Number(body); }
 }

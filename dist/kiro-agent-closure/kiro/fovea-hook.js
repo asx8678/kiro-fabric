@@ -18,7 +18,7 @@ function runFoveaHook(argv = process.argv.slice(2)) {
     process.stdout.write(JSON.stringify(foveaHookCapability()) + "\n");
     return 0;
   }
-  process.stderr.write("Fovea automatic hooks disabled: no supported native session-to-MCP association. Use --status for diagnostics.\n");
+  process.stderr.write("Navigator automatic hooks disabled: no supported native session-to-MCP association. Use --status for diagnostics.\n");
   return 3;
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

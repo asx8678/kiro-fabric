@@ -1,4 +1,4 @@
-# Fovea implementation status ledger
+# Navigator implementation status ledger
 
 Updated 2026-09-20. **Implemented components; full native integration remains
 unqualified/incomplete at explicit host/platform gates.** This is not a claim
@@ -77,7 +77,7 @@ stays unavailable. Full native Kiro integration and public release remain
   Old management cannot inspect a retained schema-2 generation after rollback;
   use trusted new management code, without deleting newer user data.
 - **Platform and final release verification:** current work/results are tracked
-  in [remaining-work.md](remaining-work.md). No macOS, signed public-release,
+  in the remaining-work note (archived in Git history). No macOS, signed public-release,
   native-TUI or complete-parity qualification is implied by source tests.
 
 ## Baseline / authority

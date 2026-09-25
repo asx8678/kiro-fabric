@@ -131,7 +131,7 @@ export interface SynthesizedRule {
   evidence: { n: number; pathN: number; files: number; posterior: number };
 }
 
-export const synthesize = (s: SigStats): SynthesizedRule | undefined => {
+const synthesize = (s: SigStats): SynthesizedRule | undefined => {
   const slots: string[] = [];
   for (let i = 0; i <= s.argIdx; i++) slots.push(i === s.argIdx ? "$P" : `$X${i}`);
   const inner = slots.join(", ");

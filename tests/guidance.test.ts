@@ -16,18 +16,25 @@ const temporary: string[] = [];
 afterEach(() => { for (const file of temporary.splice(0)) removeFixtureSync(file, { recursive: true, force: true }); });
 
 describe("compiled task guidance", () => {
-  it("type-checks executable Fovea, grounding, continuity and review examples", () => {
-    const fovea = BUNDLED_GUIDANCE.skill.split("## Fovea-first code navigation")[1]!.match(/```ts\n([\s\S]*?)```/)?.[1];
-    const grounding = BUNDLED_GUIDANCE.guide.split("## Browser-backed web grounding")[1]!.match(/```ts\n([\s\S]*?)```/)?.[1];
+  it("type-checks executable Navigator, continuity and review examples and rejects retired browser programs", () => {
+    const navigator = BUNDLED_GUIDANCE.skill.split("## Navigator-first code navigation")[1]!.match(/```ts\n([\s\S]*?)```/)?.[1];
     const continuity = BUNDLED_GUIDANCE.recipes.match(/```ts\n(\/\/ Recipe: resume the explicitly selected durable task after restart or compaction\n[\s\S]*?)\n```/)?.[1];
     const review = [...BUNDLED_GUIDANCE.review.matchAll(/```ts\n([\s\S]*?)\n```/g)].map(match => match[1]!);
-    expect(fovea).toBeDefined();
-    expect(grounding).toBeDefined();
+    expect(navigator).toBeDefined();
     expect(continuity).toBeDefined();
     expect(review.length).toBeGreaterThan(0);
-    for (const code of [fovea!, grounding!, continuity!, ...review, 'return await local.find({pattern:"**/*",hidden:true,limit:200});']) {
+    for (const code of [navigator!, continuity!, ...review, 'return await local.find({pattern:"**/*",hidden:true,limit:200});']) {
       expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code).toEqual([]);
     }
+    // Retired browser/web capabilities are rejected by the checked guest before any effect.
+    const retired = [
+      'return await web.search({query:"public documentation"});',
+      'return await web.open({url:"https://example.com/source?query=" + "x".repeat(1600) + "&suffix=visible"});',
+      'return await browser.open({url:"https://example.com"});',
+    ];
+    for (const code of retired) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors.length, code).toBeGreaterThan(0);
+    // Guidance never advertises the removed providers.
+    expect(BUNDLED_GUIDANCE.guide).not.toMatch(/web\.(?:search|open)|browser\./u);
     expect(LOCAL_GUEST_DECLARATIONS.length).toBeGreaterThan(0);
     expect(fabricGuestDeclarations).toContain(LOCAL_GUEST_DECLARATIONS);
     expect(fabricGuestDeclarations.length).toBeGreaterThan(LOCAL_GUEST_DECLARATIONS.length);

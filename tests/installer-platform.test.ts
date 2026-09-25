@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectInstallerPlatform, normalizeArchitecture, compareVersions } from "../scripts/installer-platform.mjs";
+import { detectInstallerPlatform, compareVersions } from "../scripts/installer-platform.mjs";
 describe("installer platform identity", () => {
   it.each(["4.18.0-553.el8.x86_64", "6.12.25+rpt-rpi-2712", "6.12.0+", "6.6.87.2-microsoft-standard-WSL2", "4.18+local"])("admits Linux LOCALVERSION %s without losing its diagnostic identity", osVersion => {
     for (const arch of ["x64", "arm64"]) expect(detectInstallerPlatform({ platform: "linux", arch, glibc: "2.28", osVersion })).toMatchObject({ target: `linux-${arch}`, osVersion });
@@ -13,7 +13,7 @@ describe("installer platform identity", () => {
   it("does not relax the general version comparator for kernel suffixes", () => {
     expect(() => compareVersions("24.20.0+vendor", "24.0.0")).toThrow(/Unsupported/);
   });
-  it.each([["x86_64","x64"],["aarch64","arm64"],["x64","x64"],["arm64","arm64"]])("normalizes %s", (input, expected) => expect(normalizeArchitecture(input)).toBe(expected));
+  it.each([["x86_64","x64"],["aarch64","arm64"],["x64","x64"],["arm64","arm64"]])("normalizes %s through public detection", (input, expected) => expect(detectInstallerPlatform({ platform: "linux", arch: input, glibc: "2.39", osVersion: "6.8.0" }).target).toBe(`linux-${expected}`));
   it.each(["x64","arm64"])("detects Linux %s and rejects musl", arch => {
     expect(detectInstallerPlatform({ platform: "linux", arch, glibc: "2.39", osVersion: "6.8.0" }).target).toBe(`linux-${arch}`);
     expect(() => detectInstallerPlatform({ platform: "linux", arch, glibc: null, osVersion: "6.8.0" })).toThrow(/musl/);

@@ -101,6 +101,21 @@ function snapshotFiles(base:string){const store=path.join(base,'profile-snapshot
 function evidence(p:any){return [p.profile,p.launcher,p.manifest,p.journal,path.join(p.base,'.transactions/candidate.json'),...snapshotFiles(p.base)].filter(file=>fs.existsSync(file)).map(file=>({file,raw:fs.readFileSync(file)}));}
 function unchanged(records:ReturnType<typeof evidence>){for(const {file,raw} of records)expect(fs.readFileSync(file)).toEqual(raw);}
 
+// In-process fault fixtures test directory/journal identity, not lock recovery.
+// Preserve the exact gate retained by the injected failure outside this fixture
+// installation. No production lock is touched and no gate recovery is claimed.
+function preserveInjectedGate(f:Awaited<ReturnType<typeof setup>>,base:string){
+ const gate=path.join(base,'.install.lock'),stat=fs.lstatSync(gate);
+ expect(stat.isDirectory()&&!stat.isSymbolicLink()).toBe(true);
+ expect(stat.uid).toBe(process.getuid?.());expect(stat.mode&0o777).toBe(0o700);
+ expect(fs.readdirSync(gate)).toEqual(['owner.json']);
+ const owner=JSON.parse(fs.readFileSync(path.join(gate,'owner.json'),'utf8'));
+ expect(Object.keys(owner).sort()).toEqual(['nonce','pid']);expect(owner.pid).toBe(process.pid);
+ expect(owner.nonce).toMatch(/^[a-f0-9]{64}$/);expect(fs.existsSync(path.join(base,'.install-lock'))).toBe(false);
+ const retained=fs.mkdtempSync(path.join(f.root,'retained-injected-gate-'));
+ fs.renameSync(gate,path.join(retained,'gate'));
+}
+
 test('renumbered snapshots inspect without rewriting and rollback preserves original profile and owner schema',async()=>{
  const f=await setup(),a=await installCompleteGeneration(f.bundle,f.opts),profile=fs.readFileSync(a.paths.profile);await change(f.bundle);await installCompleteGeneration(f.bundle,f.opts);
  const snapshots=snapshotFiles(a.paths.base).map(file=>transform(file,renumber,true)),before=evidence(a.paths);
@@ -110,11 +125,51 @@ test('renumbered snapshots inspect without rewriting and rollback preserves orig
  for(const file of snapshots)expect(fs.readFileSync(file)).toEqual(before.find(r=>r.file===file)!.raw);
 });
 
+async function mixedSnapshotHistory(){
+ const f=await setup(),a=await installCompleteGeneration(f.bundle,f.opts);
+ await change(f.bundle,'second');const b=await installCompleteGeneration(f.bundle,f.opts);
+ await change(f.bundle,'third');await installCompleteGeneration(f.bundle,f.opts);
+ const files=snapshotFiles(a.paths.base);
+ const old=transform(files.find(file=>path.basename(file).startsWith(a.digest+'.'))!,r=>{legacy(r);renumber(r);},true);
+ const witness=transform(files.find(file=>path.basename(file).startsWith(b.digest+'.'))!,renumber,true);
+ return {...f,a,old,witness};
+}
+
+test('mixed history verifies legacy snapshots using bound stable-volume evidence without rewriting originals',async()=>{
+ const f=await mixedSnapshotHistory(),before=evidence(f.a.paths);
+ expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
+ expect((await recoverCompleteInstallation(f.kiroHome)).recovered).toBe(false);unchanged(before);
+ const result=await rollbackCompleteGeneration(f.kiroHome,{...f.opts,digest:f.a.digest});
+ expect(result.owner.currentRuntime).toBe(f.a.digest);
+ unchanged(before.filter(r=>r.file.includes('/profile-snapshots/')));
+});
+
+test.each(['base dev','store dev','base inode','store inode','null volume','wrong volume','foreign installation','foreign profile','corrupt bytes','invalid legacy shape'])('mixed history refuses %s before changing controls',async kind=>{
+ const f=await mixedSnapshotHistory();
+ if(kind==='corrupt bytes')fs.appendFileSync(f.witness,' ');
+ else if(kind==='invalid legacy shape')transform(f.old,r=>{r.baseIdentity.extra=true;},true);
+ else transform(f.witness,r=>{
+  if(kind==='base dev')r.baseIdentity.dev=String(BigInt(r.baseIdentity.dev)+1n);
+  if(kind==='store dev')r.storeIdentity.dev=String(BigInt(r.storeIdentity.dev)+1n);
+  if(kind==='base inode')r.baseIdentity.ino=String(BigInt(r.baseIdentity.ino)+1n);
+  if(kind==='store inode')r.storeIdentity.ino=String(BigInt(r.storeIdentity.ino)+1n);
+  if(kind==='null volume')r.baseIdentity.volume=null;
+  if(kind==='wrong volume')r.storeIdentity.volume.uuid=other;
+  if(kind==='foreign installation')r.installationId='0'.repeat(32);
+  if(kind==='foreign profile')r.profileBase64=Buffer.from('{}').toString('base64');
+ },true);
+ const before=evidence(f.a.paths);
+ await expect(inspectCompleteInstallation(f.kiroHome)).rejects.toThrow();
+ await expect(recoverCompleteInstallation(f.kiroHome)).rejects.toThrow();
+ unchanged(before);
+});
+
 test.each(['candidate-root-owned','copied:app/main.js','generation-published','profile-published','owner-committed'])('offline replay after %s accepts only UUID-bound renumbered evidence',async phase=>{
  const f=await setup(),a=await installCompleteGeneration(f.bundle,f.opts),owner=fs.readFileSync(a.paths.manifest),profile=fs.readFileSync(a.paths.profile),next=await change(f.bundle);
  fs.writeFileSync(path.join(a.paths.data,'fabric/sentinel'),'keep',{mode:0o600});
  await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p===phase)throw Error('interrupted');}})).rejects.toThrow('interrupted');
  for(const file of [a.paths.journal,path.join(a.paths.base,'.transactions/candidate.json')])if(fs.existsSync(file))transform(file,renumber);
+ preserveInjectedGate(f,a.paths.base);
  for(const file of snapshotFiles(a.paths.base))transform(file,renumber,true);
  const snapshots=evidence(a.paths).filter(r=>r.file.includes('/profile-snapshots/'));
  if(fs.existsSync(a.paths.journal))expect(readTransaction(f.kiroHome)?.schemaVersion).toBe(2);
@@ -130,6 +185,7 @@ test.each(['snapshot','transaction','candidate'])('legacy %s accepts matching de
  if(kind==='snapshot')await installCompleteGeneration(f.bundle,f.opts);
  else await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p==='profile-published')throw Error('interrupted');}})).rejects.toThrow('interrupted');
  let file=kind==='snapshot'?snapshotFiles(a.paths.base)[0]!:kind==='transaction'?a.paths.journal:path.join(a.paths.base,'.transactions/candidate.json');
+ if(kind!=='snapshot')preserveInjectedGate(f,a.paths.base);
  file=transform(file,legacy,kind==='snapshot');
  if(kind==='snapshot')expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('active');
  if(kind==='transaction')expect(readTransaction(f.kiroHome)?.schemaVersion).toBe(1);
@@ -145,6 +201,7 @@ test.each(['foreign profile','foreign candidate bytes','foreign snapshot'])('mat
  const f=await setup(),a=await installCompleteGeneration(f.bundle,f.opts);await change(f.bundle);
  await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p==='profile-published')throw Error('interrupted');}})).rejects.toThrow('interrupted');
  const marker=path.join(a.paths.base,'.transactions/candidate.json');
+ preserveInjectedGate(f,a.paths.base);
  for(const file of [a.paths.journal,marker])transform(file,renumber);
  for(const file of snapshotFiles(a.paths.base))transform(file,renumber,true);
  let foreign=a.paths.profile;
@@ -221,6 +278,7 @@ test.each(['candidate volume','candidate inode','snapshot volume','transaction v
  const f=await setup(),a=await installCompleteGeneration(f.bundle,f.opts);await change(f.bundle);
  await expect(installCompleteGeneration(f.bundle,{...f.opts,onPhase:(p:string)=>{if(p==='profile-published')throw Error('interrupted');}})).rejects.toThrow('interrupted');
  if(kind.startsWith('candidate'))transform(path.join(a.paths.base,'.transactions/candidate.json'),r=>{if(kind.endsWith('inode'))r.stageIdentity.ino=String(BigInt(r.stageIdentity.ino)+1n);else r.stageIdentity.volume.uuid=other;});
+ preserveInjectedGate(f,a.paths.base);
  if(kind==='snapshot volume')transform(snapshotFiles(a.paths.base)[0]!,r=>{r.storeIdentity.volume.uuid=other;},true);
  if(kind==='transaction volume')transform(a.paths.journal,r=>{r.baseIdentity.volume.uuid=other;});
  const before=evidence(a.paths);await expect(recoverCompleteInstallation(f.kiroHome)).rejects.toThrow(/identity/);unchanged(before);

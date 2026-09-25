@@ -2,7 +2,7 @@ import { largestFittingInteger } from "../../bounded-search.js";
 import { throwIfAbortedOrExpired } from "../../async-settlement.js";
 import type { FabricActionDescriptor, FabricInvocationContext, FabricProvider } from "../../protocol.js";
 import { fabricJsonText } from "../../runtime/json-budget.js";
-import { createKiroArtifactStore, type KiroArtifactReadResult, type KiroArtifactStore, type KiroArtifactStoreOptions } from "../artifacts.js";
+import { createKiroCheckpointStore, type KiroArtifactReadResult, type KiroArtifactStore, type KiroArtifactStoreOptions } from "../artifacts.js";
 
 const idSchema = { type: "string", minLength: 51, maxLength: 51 };
 const KIRO_ARTIFACT_READ_OUTPUT_SCHEMA = {
@@ -48,7 +48,7 @@ export class KiroPowerArtifactsProvider implements FabricProvider {
   readonly description = "Bounded private Fabric artifacts";
   readonly #checkpoints: KiroArtifactStore;
   constructor(readonly store: KiroArtifactStore, options: Omit<KiroArtifactStoreOptions, "root"> = {}) {
-    this.#checkpoints = createKiroArtifactStore({ ...(options.now ? { now: options.now } : {}), maxArtifacts: Math.min(options.maxArtifacts ?? 16, 16), maxArtifactChars: Math.min(options.maxArtifactChars ?? 100_000, 100_000), maxTotalChars: Math.min(options.maxTotalChars ?? 400_000, 400_000), ttlMs: Math.min(options.ttlMs ?? 900_000, 900_000) });
+    this.#checkpoints = createKiroCheckpointStore(options);
   }
   discoveryRevision(): string { return "1"; }
   async list(): Promise<FabricActionDescriptor[]> { return structuredClone([descriptor, checkpointDescriptor]); }
@@ -63,11 +63,14 @@ export class KiroPowerArtifactsProvider implements FabricProvider {
       // Fail before emission if even the handle acknowledgement cannot fit.
       fabricJsonText(response(`ka_${"0".repeat(48)}`), maximum);
       const record = context.checkpoints?.reserve();
-      const id = this.#checkpoints.write(content);
+      const id = context.artifactAccess ? context.artifactAccess.checkpoint(content) : this.#checkpoints.write(content);
       record?.({ id, ...(typeof args.label === "string" ? { label: args.label } : {}) });
       return response(id);
     }
     if (actionName !== "read") throw new Error(`Unknown artifacts action: ${actionName}`);
+    // An owner capability is authoritative. Denial must NEVER fall back to a
+    // runtime-local store, including in injected/embedded runtimes.
+    if (context.artifactAccess) return boundKiroArtifactRead(context.artifactAccess.read(args.id as string, args.offset as number | undefined, args.limit as number | undefined), maximum);
     let page: KiroArtifactReadResult;
     try { page = this.#checkpoints.read(args.id as string, args.offset as number | undefined, args.limit as number | undefined); }
     catch (error) {

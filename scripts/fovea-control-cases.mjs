@@ -59,7 +59,7 @@ export function summarizeExtraControl(run, intact) {
 export function controlDecisionEvidence(run, interaction, requestedDecision) {
   const p = run?.completed ? run.packet : null;
   const unchanged = (a, b) => a !== undefined && b !== undefined && isDeepStrictEqual(a, b);
-  const unavailable = r => r?.ok === false && r.error?.includes('Fovea result unavailable:');
+  const unavailable = r => r?.ok === false && typeof r.error === 'string' && /(?:Navigator|Fovea) result unavailable:/.test(r.error);
   const expectedConfig = p?.settingsBefore?.config ? { ...p.settingsBefore.config, sync: { ...p.settingsBefore.config.sync, ackClean: true, mode: 'hidden' }, tools: { ...p.settingsBefore.config.tools, defaultBudget: 1024 } } : null;
   const effects = {
     configure: {

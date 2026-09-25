@@ -53,7 +53,7 @@ describe('Fovea fixed Git admission', () => {
 
   it('still rejects the explicitly selected hard-linked Apple shim', () => {
     const f = fixture('darwin', osGit); f.file.nlink = 78;
-    expect(() => resolveFoveaGit(osGit)).toThrow('Fovea Git executable is not trusted');
+    expect(() => resolveFoveaGit(osGit)).toThrow('Navigator Git executable is not trusted');
   });
 
   it('rejects hard-linked, writable, non-executable, symlinked, foreign-owned or non-file Git', () => {
@@ -64,7 +64,7 @@ describe('Fovea fixed Git admission', () => {
       { uid: (process.getuid?.() ?? 0) + 100_000 }, { isFile: () => false }, { isSymbolicLink: () => true },
     ]) {
       Object.assign(f.file, trusted, change);
-      expect(() => resolveFoveaGit()).toThrow('Fovea Git executable is not trusted');
+      expect(() => resolveFoveaGit()).toThrow('Navigator Git executable is not trusted');
     }
   });
 
@@ -76,14 +76,14 @@ describe('Fovea fixed Git admission', () => {
       { isDirectory: () => false }, { isSymbolicLink: () => true },
     ]) {
       Object.assign(f.directory, trusted, change);
-      expect(() => resolveFoveaGit()).toThrow('Fovea Git executable ancestry is not trusted');
+      expect(() => resolveFoveaGit()).toThrow('Navigator Git executable ancestry is not trusted');
     }
   });
 
   it('rejects relative paths and aliases', () => {
     const f = fixture('darwin');
-    expect(() => resolveFoveaGit('git')).toThrow('Fovea Git path must be canonical');
+    expect(() => resolveFoveaGit('git')).toThrow('Navigator Git path must be canonical');
     f.realpath.mockReturnValue('/other/git');
-    expect(() => resolveFoveaGit()).toThrow('Fovea Git path must be canonical');
+    expect(() => resolveFoveaGit()).toThrow('Navigator Git path must be canonical');
   });
 });

@@ -1,7 +1,7 @@
 # Linux compatibility and efficiency validation
 
 Supported installer targets require kernel >=4.18 and glibc >=2.34 on Linux
-x64, or glibc >=2.28 on ARM64. The x64 floor comes from the bundled Fovea
+x64, or glibc >=2.28 on ARM64. The x64 floor comes from the bundled Navigator
 ast-grep parser; historical bundles without that parser required only 2.28.
 Alpine/musl is not qualified. Source mode requires Node >=24,
 the package's pinned pnpm, and Kiro CLI >=2.21.1. Kernel LOCALVERSION suffixes
@@ -9,9 +9,9 @@ such as `6.12.25+rpt-rpi-2712`, `6.12.0+`, and WSL's fourth numeric component
 are accepted by both the source installer and generated Bash bootstrap without
 relaxing the minimum version or Node/Kiro version checks.
 
-## Checking Fovea on Ubuntu and WSL
+## Checking Navigator on Ubuntu and WSL
 
-Fovea is part of the Fabric generation, not a separate `fovea` command or Kiro
+Navigator is part of the Fabric generation, not a separate command or Kiro
 MCP server. Its engine, metadata and private `tools/ast-grep` parser are required
 bundle entries. Before activation, the current installer checks the parser
 version and runs `repo.focus` followed by `repo.dwell` over a temporary source
@@ -33,14 +33,14 @@ Run the installed launcher from the project you want to analyze:
 In that session, ask Fabric to execute:
 
 ```ts
-return { fabric: fabric.info(), fovea: await repo.status() };
+return { fabric: fabric.info(), navigator: await repo.status() };
 ```
 
 Inspect the actual `@fabric/fabric_exec` result. `engineActive: false` before
 the first analysis is normal: `repo.status()` does not start the engine. Run
 `repo.sketch({maxTokens: 256})` to exercise analysis. A successful install does
 not enable automatic native prompt/turn hooks; that capability is reported
-separately from explicit analysis. Standard/review profiles can append Fovea
+separately from explicit analysis. Standard/review profiles can append Navigator
 context to supported local file operations within a Fabric invocation.
 
 An intact checkout build from macOS is a source-install cache miss on Linux,
@@ -84,18 +84,23 @@ getconf GNU_LIBC_VERSION
 node --version
 rg --version
 pnpm run typecheck
-pnpm exec vitest run tests/installer-platform.test.ts tests/installer-bootstrap.test.ts tests/source-bootstrap.test.ts tests/local-process-group.test.ts tests/local-shell.test.ts tests/local-search-work.test.ts tests/local-executable.test.ts tests/local-provider.test.ts tests/bundle-contract.test.ts tests/bundle-streaming.test.ts tests/managed-generation.test.ts tests/managed-generation-efficiency.test.ts
+# The former Vitest contract suites under tests/** were removed with the test-suite
+# deletion and are not runnable. Use the maintained offline cases (local
+# development only; not release qualification):
+pnpm run verify:offline baseline
+pnpm run verify:offline installer
 pnpm run build
 ```
 
-`local-process-group.test.ts` explicitly simulates Linux process observations;
-`local-shell.test.ts` creates and cleans real process groups on the host OS.
-Streaming/tamper and search-count regressions use disposable real files.
-The managed-generation efficiency test substitutes executable/version evidence
-but performs real inventory captures and real mutation checks.
+The Vitest contracts named here (`local-process-group.test.ts`,
+`local-shell.test.ts`, the streaming/tamper and search-count regressions, and
+the managed-generation efficiency test) were removed with the test suite; they
+are historical and currently have no executable replacement, so this native
+Linux evidence is unavailable.
 
-The `installer-native-contracts` CI matrix runs these contracts on native
-Linux x64/ARM64 and macOS x64/ARM64, alongside its complete-bundle checks.
+The `installer-native-contracts` CI matrix is configured to run native Linux
+x64/ARM64 and macOS x64/ARM64 jobs, but the Vitest contracts it previously ran
+were removed, so those specific contracts have no current executable coverage.
 A configured or unavailable runner is not a passing run. Local macOS results
 and simulated `/proc` tests are not native Linux performance measurements;
 exact-artifact/client/signing qualification remains separate and pending.

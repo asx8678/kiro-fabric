@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fixture, fixtureTools } from '../bundle-fixture.js';
 import { canonical, compatibilityFor, checkManifest, checkInstalledManifest, checkToolPins, createBundleManifest, FOVEA_REQUIRED_APP, manifestDigest, sha256, validateBundle, validateInstalledBundle } from '../../scripts/bundle-contract.mjs';
 import { acquirePrivateToolsForTest, extractPinnedMember, verifyPrivateToolCache } from '../../scripts/build-private-tools.mjs';
-import { createBundleArchive } from '../../scripts/bundle-archive.mjs';
+import { writeBundleArchive } from '../../scripts/bundle-archive.mjs';
 import { generateInstallerBootstrap } from '../../scripts/generate-installer-bootstrap.mjs';
 import { smokeCandidate } from '../../scripts/installer-smoke.mjs';
 import { generateBundleSbom } from '../../scripts/generate-bundle-sbom.mjs';
@@ -244,7 +244,7 @@ describe('F22 native generation packaging', () => {
     const release = await createBundleManifest(root, { ...manifest, provenance: { kind: 'release', sourceCommit } });
     await put(root, 'bundle-manifest.json', canonical(release) + '\n');
     const output = await fs.mkdtemp(path.join(tmpdir(), 'fovea-bootstrap-')); roots.push(output);
-    const archive = await createBundleArchive(root, path.join(output, 'bundle.tgz'));
+    const archive = await writeBundleArchive(root, path.join(output, 'bundle.tgz'));
     const archiveBytes = await fs.readFile(archive.path); const sbomBytes = Buffer.from('{}');
     const metadata = { schema: 1, product: 'kiro-fabric', target: 'linux-x64', version: release.version, sourceCommit, bundleDigest: release.digest, compatibility: release.compatibility, archive: { url: `https://github.com/asx8678/kiro-fabric/releases/download/v${release.version}/kiro-fabric-${release.version}-linux-x64.tar.gz`, size: archive.size, sha256: archive.sha256 }, sbom: { size: sbomBytes.length, sha256: sha256(sbomBytes) } };
     const script = generateInstallerBootstrap([{ metadata, archiveBytes, sbomBytes }]);

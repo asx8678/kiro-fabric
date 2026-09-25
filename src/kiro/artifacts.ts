@@ -2,13 +2,14 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { privateStorageDirectoryGuard, sameStorageFile } from "./storage-identity.js";
+import type { FabricArtifactReadResult } from "../protocol.js";
 
 const ARTIFACT_ID = /^ka_[a-f0-9]{48}$/u;
 const MAX_ARTIFACT_RESIDUE_AGE_MS = 86_400_000;
 interface StoredArtifact { content: string; lastReadAt: number; file?: string; identity?: fs.Stats }
-export interface KiroArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
+export type KiroArtifactReadResult = FabricArtifactReadResult;
 export interface KiroArtifactStore {
-  write(content: string): string;
+  write(content: string, protectedIds?: readonly string[]): string;
   read(id: string, offset?: number, limit?: number): KiroArtifactReadResult;
   sweep(maxAgeMs?: number, maxEntries?: number): void;
   close(): void;
@@ -28,6 +29,8 @@ class KiroArtifactStoreError extends Error {
 
 class ArtifactStore implements KiroArtifactStore {
   readonly #entries = new Map<string, StoredArtifact>();
+  readonly #failedWrites = new Map<string, { identity?: fs.Stats; error: unknown }>();
+  readonly #uncertainCloses = new Set<unknown>();
   readonly #now: () => number;
   readonly #root?: string;
   readonly #checkRoot?: () => void;
@@ -101,13 +104,25 @@ class ArtifactStore implements KiroArtifactStore {
   #removeFile(file: string, identity: fs.Stats): void {
     if (this.#assertFile(file, identity, true)) fs.rmSync(file, { force: true });
   }
-  write(content: string): string {
+  write(content: string, protectedIds: readonly string[] = []): string {
     this.#open();
+    // A failed partial-file disposal or uncertain descriptor close still owns
+    // resources. Do not acquire more files (including a canonical-output retry).
+    if (this.#failedWrites.size || this.#uncertainCloses.size) throw new AggregateError(
+      [...[...this.#failedWrites.values()].map(entry => entry.error), ...this.#uncertainCloses],
+      "artifact storage cleanup is uncertain; retire the owner");
     if (typeof content !== "string" || content.length > this.#maxArtifactChars) throw new KiroArtifactStoreError("artifact exceeds configured bounds");
     // An impossible write must not evict otherwise usable evidence.
     if (content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
-    this.sweep(this.#ttlMs, this.#maxArtifacts - 1);
-    while (this.#entries.size && this.#totalChars + content.length > this.#maxTotalChars) this.#remove(this.#oldest());
+    this.sweep(this.#ttlMs, this.#maxArtifacts);
+    // Protect only live entries already issued by this synchronous publication.
+    // TTL still applies. An impossible protected write cannot evict other evidence.
+    const protectedSet = new Set(protectedIds);
+    const retained = [...this.#entries].filter(([id]) => protectedSet.has(id));
+    if (retained.length >= this.#maxArtifacts || retained.reduce((size, [, entry]) => size + entry.content.length, content.length) > this.#maxTotalChars) {
+      throw new KiroArtifactStoreError("artifact quota cannot fit protected publication handles");
+    }
+    while (this.#entries.size >= this.#maxArtifacts || this.#totalChars + content.length > this.#maxTotalChars) this.#remove(this.#oldest(protectedSet));
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
     let id: string;
     do id = `ka_${randomBytes(24).toString("hex")}`;
@@ -122,7 +137,8 @@ class ArtifactStore implements KiroArtifactStore {
       const close = (): void => {
         if (descriptor === undefined) return;
         const fd = descriptor; descriptor = undefined;
-        fs.closeSync(fd); // Never retry an uncertain close on a reused descriptor.
+        try { fs.closeSync(fd); }
+        catch (error) { this.#uncertainCloses.add(error); throw error; } // Never retry a possibly reused descriptor.
       };
       try {
         identity = fs.fstatSync(descriptor);
@@ -139,12 +155,14 @@ class ArtifactStore implements KiroArtifactStore {
           try { identity = fs.fstatSync(descriptor); } catch (failure) { errors.push(failure); }
         }
         try { close(); } catch (failure) { errors.push(failure); }
+        let residue = false;
         try {
           if (!identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
           this.#removeFile(file, identity);
-        } catch (cleanup) { errors.push(cleanup); }
-        if (errors.length > 1) throw new AggregateError(errors, "artifact write and cleanup failed", { cause: error });
-        throw error;
+        } catch (cleanup) { errors.push(cleanup); residue = true; }
+        const failure = errors.length > 1 ? new AggregateError(errors, "artifact write and cleanup failed", { cause: error }) : error;
+        if (residue) this.#failedWrites.set(file, { ...(identity ? { identity } : {}), error: failure });
+        throw failure;
       }
     }
     this.#entries.set(id, { content, lastReadAt: now, ...(file && identity ? { file, identity } : {}) });
@@ -177,8 +195,8 @@ class ArtifactStore implements KiroArtifactStore {
     for (const [id, entry] of this.#entries) if (now - entry.lastReadAt > maxAgeMs) this.#remove(id);
     while (this.#entries.size > maxEntries) this.#remove(this.#oldest());
   }
-  #oldest(): string {
-    const entries = [...this.#entries].sort((a, b) => a[1].lastReadAt - b[1].lastReadAt || a[0].localeCompare(b[0]));
+  #oldest(protectedIds: ReadonlySet<string> = new Set()): string {
+    const entries = [...this.#entries].filter(([id]) => !protectedIds.has(id)).sort((a, b) => a[1].lastReadAt - b[1].lastReadAt || a[0].localeCompare(b[0]));
     if (!entries[0]) throw new KiroArtifactStoreError("artifact store is empty");
     return entries[0][0];
   }
@@ -195,9 +213,30 @@ class ArtifactStore implements KiroArtifactStore {
   }
   close(): void {
     if (this.#closed) return;
-    for (const id of [...this.#entries.keys()]) this.#remove(id);
+    const failures: unknown[] = [];
+    for (const id of [...this.#entries.keys()]) {
+      try { this.#remove(id); } catch (error) { failures.push(error); }
+    }
+    for (const [file, owned] of this.#failedWrites) {
+      try {
+        if (!owned.identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
+        this.#removeFile(file, owned.identity);
+        this.#failedWrites.delete(file);
+      } catch (error) { failures.push(new AggregateError([owned.error, error], "artifact write residue cleanup failed", { cause: owned.error })); }
+    }
+    // An uncertain FD close cannot be retried safely even if its path is gone.
+    failures.push(...this.#uncertainCloses);
+    // Retain failed identities/quota for explicit low-level cleanup recovery;
+    // the higher owner has already revoked access and latches its close failure.
+    if (failures.length) throw new AggregateError(failures, "artifact store cleanup failed");
     this.#closed = true;
   }
 }
 
 export const createKiroArtifactStore = (options: KiroArtifactStoreOptions = {}): KiroArtifactStore => new ArtifactStore(options);
+
+/** Checkpoints keep their existing tighter, in-memory-only retention bounds. */
+export const createKiroCheckpointStore = (options: Omit<KiroArtifactStoreOptions, "root"> = {}): KiroArtifactStore =>
+  createKiroArtifactStore({ ...(options.now ? { now: options.now } : {}),
+    maxArtifacts: Math.min(options.maxArtifacts ?? 16, 16), maxArtifactChars: Math.min(options.maxArtifactChars ?? 100_000, 100_000),
+    maxTotalChars: Math.min(options.maxTotalChars ?? 400_000, 400_000), ttlMs: Math.min(options.ttlMs ?? 900_000, 900_000) });

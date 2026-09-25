@@ -1,10 +1,8 @@
-import { removeFixtureSync } from "./fixture-cleanup.mjs";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import childProcess, { execFileSync, spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
+import childProcess, { spawnSync, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { build } from "esbuild";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -29,7 +27,8 @@ const temporary = (): string => {
 };
 afterEach(() => {
   vi.restoreAllMocks();
-  for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true });
+  // Preserve every backup/repository fixture, including early failures.
+  for (const root of roots.splice(0)) console.warn(`[configuration backup fixture] retained ${root}`);
 });
 
 const seedConfiguration = (kiroHome: string): void => {
@@ -146,16 +145,16 @@ describe("configuration backup", () => {
     const backup = backupOf(home, "install"), manifestPath = path.join(backup.path, "backup-manifest.json");
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    if (kind === "missing file") fs.unlinkSync(path.join(backup.path, "executable.sh"));
-    if (kind === "missing link") fs.unlinkSync(path.join(backup.path, "current-settings"));
-    if (kind === "missing directory") fs.rmdirSync(path.join(backup.path, "empty"));
+    if (kind === "missing file") fs.renameSync(path.join(backup.path, "executable.sh"), path.join(temporary(), "retained-entry"));
+    if (kind === "missing link") fs.renameSync(path.join(backup.path, "current-settings"), path.join(temporary(), "retained-entry"));
+    if (kind === "missing directory") fs.renameSync(path.join(backup.path, "empty"), path.join(temporary(), "retained-entry"));
     if (kind === "extra file") fs.writeFileSync(path.join(backup.path, "extra"), "x", { mode: 0o600 });
     if (kind === "extra directory") fs.mkdirSync(path.join(backup.path, "extra"), { mode: 0o700 });
     if (kind === "extra link") fs.symlinkSync("missing", path.join(backup.path, "extra"));
     if (kind === "omitted parent") manifest.directories = manifest.directories.filter((entry: { path: string }) => entry.path !== "settings");
     if (kind === "duplicate") manifest.files.push(manifest.files[0]);
     if (kind === "cross-type duplicate") manifest.symlinks.push({ path: manifest.files[0].path, target: "x" });
-    if (kind === "wrong type") { fs.unlinkSync(path.join(backup.path, "current-settings")); fs.mkdirSync(path.join(backup.path, "current-settings"), { mode: 0o700 }); }
+    if (kind === "wrong type") { fs.renameSync(path.join(backup.path, "current-settings"), path.join(temporary(), "retained-entry")); fs.mkdirSync(path.join(backup.path, "current-settings"), { mode: 0o700 }); }
     if (kind === "bad array") manifest.files = {};
     if (kind === "bad size") manifest.files[0].size = -1;
     if (kind === "bad mode") manifest.directories[0].mode = "700";
@@ -167,6 +166,7 @@ describe("configuration backup", () => {
     if (kind === "depth bound") manifest.symlinks.push({ path: Array(35).fill("deep").join("/"), target: "x" });
     fs.writeFileSync(manifestPath, JSON.stringify(manifest));
     if (kind === "manifest bound") fs.truncateSync(manifestPath, 4 * 1024 * 1024 + 1);
+    expect(listConfigurationBackups(home)).toEqual([]);
     const before = treeDigest(destination);
     const mkdir = vi.spyOn(fs, "mkdirSync"), chmod = vi.spyOn(fs, "chmodSync"), write = vi.spyOn(fs, "writeFileSync"), link = vi.spyOn(fs, "symlinkSync");
     expect(() => restoreConfigurationBackup(backup.path, destination)).toThrow();
@@ -183,8 +183,8 @@ describe("configuration backup", () => {
     const backup = backupOf(home, "install");
     if (synthetic) {
       fs.writeFileSync(path.join(backup.path, "backup-manifest.json"), JSON.stringify({ schemaVersion: 1, files: [], directories: [], symlinks: [{ path: "pivot/restored-link", target: "synthetic-target" }] }));
-      fs.unlinkSync(path.join(backup.path, "pivot/restored-link"));
-      fs.rmdirSync(path.join(backup.path, "pivot"));
+      fs.renameSync(path.join(backup.path, "pivot/restored-link"), path.join(temporary(), "retained-entry"));
+      fs.renameSync(path.join(backup.path, "pivot"), path.join(temporary(), "retained-entry"));
     }
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
     fs.symlinkSync(outside, path.join(destination, "pivot"));
@@ -227,6 +227,7 @@ describe("configuration backup", () => {
     delete manifest.sourceRoot;
     manifest.directories.reverse();
     fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    expect(listConfigurationBackups(home)).toMatchObject([{ name: path.basename(backup.path), complete: true }]);
     fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
     expect(restoreConfigurationBackup(backup.path, destination)).toMatchObject({ restored: 3, symlinks: 2 });
     expect(fs.readdirSync(path.join(destination, "nested/empty"))).toEqual([]);
@@ -425,7 +426,7 @@ describe("configuration backup", () => {
     const kiroHome = temporary(), outside = temporary();
     seedConfiguration(kiroHome);
     const control = path.join(kiroHome, "agents/kiro-fabric.json");
-    fs.unlinkSync(control);
+    fs.renameSync(control, path.join(temporary(), "retained-entry"));
     if (kind === "symlink") fs.symlinkSync(outside, control);
     else fs.mkdirSync(control, { mode: 0o700 });
     expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file agents\/kiro-fabric.json/);
@@ -484,7 +485,10 @@ describe("configuration backup", () => {
     }) as typeof fs.mkdirSync);
     expect(() => createConfigurationBackup(kiroHome, { command: "install" })).toThrow(/unsafe configuration file/);
     expect(injected).toBe(true);
-    expect(fs.readdirSync(backups)).toEqual([]);
+    const retained = fs.readdirSync(backups);
+    expect(retained).toHaveLength(1);
+    expect(fs.existsSync(path.join(backups, retained[0]!, "backup-manifest.json"))).toBe(false);
+    expect(listConfigurationBackups(kiroHome)).toEqual([]);
     expect(fs.lstatSync(file).nlink).toBe(2);
     expect(fs.readFileSync(alias)).toEqual(fs.readFileSync(file));
   });
@@ -498,7 +502,7 @@ describe("configuration backup", () => {
     let injected = false;
     vi.spyOn(fs, "openSync").mockImplementation((...args) => {
       if (args[0] === file && !injected) {
-        fs.unlinkSync(file);
+        fs.renameSync(file, path.join(temporary(), "retained-entry"));
         fs.symlinkSync(secret, file);
         injected = true;
       }
@@ -533,7 +537,7 @@ describe("configuration backup", () => {
     expect(fs.lstatSync(file).size).toBe(65 * 1024 * 1024);
   });
 
-  it.each(["same second", "clock rollback"])("retention protects the returned backup during %s", kind => {
+  it.each(["same second", "clock rollback"])("preserves all snapshots during %s", kind => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
     vi.useFakeTimers();
@@ -548,12 +552,12 @@ describe("configuration backup", () => {
       const fresh = backupOf(kiroHome, "update");
       expect(fs.existsSync(fresh.path)).toBe(true);
       expect(createHash("sha256").update(fs.readFileSync(path.join(fresh.path, "backup-manifest.json"))).digest("hex")).toBe(fresh.manifestSha256);
-      expect(fs.readdirSync(path.dirname(fresh.path))).toHaveLength(20);
+      expect(fs.readdirSync(path.dirname(fresh.path))).toHaveLength(21);
     } finally { vi.useRealTimers(); }
   });
 
   it.each(["unknown", "corrupt", "modified", "extra file", "extra directory", "missing file", "hardlink", "manifest hardlink", "symlink", "manifest symlink", "wrong home", "duplicate path", "oversized manifest", "oversized file", "mode"])(
-    "retention preserves %s evidence in timestamp-shaped directories", kind => {
+    "creation preserves %s evidence and listing refuses it", kind => {
       const kiroHome = temporary(), outside = temporary();
       seedConfiguration(kiroHome);
       const backup = backupOf(kiroHome, "install");
@@ -562,15 +566,15 @@ describe("configuration backup", () => {
       const manifestPath = path.join(old, "backup-manifest.json"), file = path.join(old, "settings/global.json");
       const external = path.join(outside, "evidence");
       fs.writeFileSync(external, "external evidence", { mode: 0o600 });
-      if (kind === "unknown") fs.unlinkSync(manifestPath);
+      if (kind === "unknown") fs.renameSync(manifestPath, path.join(temporary(), "retained-entry"));
       if (kind === "corrupt") fs.writeFileSync(manifestPath, "not JSON");
       if (kind === "modified") { fs.chmodSync(file, 0o600); fs.writeFileSync(file, "changed"); }
       if (kind === "extra file") fs.writeFileSync(path.join(old, "foreign"), "keep", { mode: 0o600 });
       if (kind === "extra directory") fs.mkdirSync(path.join(old, "foreign"), { mode: 0o700 });
-      if (kind === "missing file") fs.unlinkSync(file);
+      if (kind === "missing file") fs.renameSync(file, path.join(temporary(), "retained-entry"));
       if (kind === "hardlink") fs.linkSync(file, path.join(outside, "hardlink"));
       if (kind === "manifest hardlink") fs.linkSync(manifestPath, path.join(outside, "hardlink"));
-      if (kind === "symlink" || kind === "manifest symlink") { const target = kind === "symlink" ? file : manifestPath; fs.unlinkSync(target); fs.symlinkSync(external, target); }
+      if (kind === "symlink" || kind === "manifest symlink") { const target = kind === "symlink" ? file : manifestPath; fs.renameSync(target, path.join(temporary(), "retained-entry")); fs.symlinkSync(external, target); }
       if (kind === "wrong home" || kind === "duplicate path") {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
         if (kind === "wrong home") manifest.kiroHome = outside;
@@ -589,11 +593,12 @@ describe("configuration backup", () => {
       expect(fs.existsSync(old)).toBe(true);
       expect(treeDigest(old)).toBe(before);
       expect(treeDigest(outside)).toBe(externalBefore);
+      expect(listConfigurationBackups(kiroHome).some(item => item.name === path.basename(old))).toBe(false);
     },
   );
 
   it.each(["foreign file", "foreign directory", "foreign symlink", "symlink hardlink", "directory mode", "manifest mode", "deep tree"])(
-    "retention preserves %s without treating it as owned disposable content", kind => {
+    "creation preserves %s and listing rejects unsafe evidence", kind => {
       const kiroHome = temporary(), outside = temporary();
       seedConfiguration(kiroHome);
       const backup = backupOf(kiroHome, "install"), old = path.join(path.dirname(backup.path), "20000101T000000Z-0000000000000000");
@@ -614,12 +619,13 @@ describe("configuration backup", () => {
       for (let index = 0; index < 21; index += 1) backupOf(kiroHome, "update");
       expect(fs.existsSync(old)).toBe(true);
       expect(treeDigest(old)).toBe(before);
+      expect(listConfigurationBackups(kiroHome).some(item => item.name === path.basename(old))).toBe(false);
       vi.restoreAllMocks();
       if (kind === "directory mode") fs.chmodSync(target, 0o700);
     },
   );
 
-  it("bounds retention root enumeration and leaves overflow evidence untouched", () => {
+  it("creation preserves overflow evidence without opening older snapshots", () => {
     const kiroHome = temporary();
     const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
     for (let index = 0; index < 256; index += 1) {
@@ -631,7 +637,7 @@ describe("configuration backup", () => {
     expect(opened.mock.calls.some(([file]) => typeof file === "string" && file.includes("20000101T"))).toBe(false);
   });
 
-  it("does not open oversized retention manifests", () => {
+  it("creation does not open oversized older manifests", () => {
     const kiroHome = temporary();
     const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
     const old = path.join(root, "20000101T000000Z-0000000000000000");
@@ -645,7 +651,7 @@ describe("configuration backup", () => {
     expect(fs.lstatSync(manifest).size).toBe(5 * 1024 * 1024);
   });
 
-  it("bounds a growing retention manifest descriptor read and preserves the changed tree", () => {
+  it("listing bounds a growing manifest descriptor read and preserves the changed tree", () => {
     const kiroHome = temporary();
     const first = backupOf(kiroHome, "install"), root = path.dirname(first.path);
     const old = path.join(root, "20000101T000000Z-0000000000000000");
@@ -672,38 +678,40 @@ describe("configuration backup", () => {
       return count;
     }) as typeof fs.readSync);
     const fresh = backupOf(kiroHome, "update");
+    // Creation no longer scans old backups; exercise the real listing verifier.
+    expect(listConfigurationBackups(kiroHome).some(item => item.name === path.basename(old))).toBe(false);
     expect(injected).toBe(true);
     expect(bytes).toBeLessThanOrEqual(size + 1);
     expect(fs.existsSync(fresh.path)).toBe(true);
     expect(fs.lstatSync(manifest).size).toBe(65 * 1024 * 1024);
   });
 
-  it("retains a bounded number of backups", () => {
+  it("preserves every backup beyond the former automatic-pruning threshold", () => {
     const kiroHome = temporary();
     fs.writeFileSync(path.join(kiroHome, "settings.txt"), "x", { mode: 0o600 });
     for (let index = 0; index < 25; index += 1) backupOf(kiroHome, "install");
     const listed = listConfigurationBackups(kiroHome);
-    expect(listed.length).toBeLessThanOrEqual(20);
-    expect(fs.readdirSync(path.join(kiroHome, "kiro-fabric", "backups")).length).toBeLessThanOrEqual(20);
+    expect(listed).toHaveLength(25);
+    expect(fs.readdirSync(path.join(kiroHome, "kiro-fabric", "backups"))).toHaveLength(25);
   });
 
-  it("records non-regular entries as skipped instead of failing the mutation", async () => {
+  it("classifies a synthetic non-regular entry as skipped without touching its path", () => {
     const kiroHome = temporary();
     seedConfiguration(kiroHome);
-    // A stale daemon socket anywhere in the home must not brick installation.
-    const socketPath = path.join(kiroHome, "daemon.sock");
-    const server = net.createServer();
-    await new Promise<void>(resolve => server.listen(socketPath, resolve));
-    try {
-      const backup = backupOf(kiroHome, "install");
-      if (!backup) throw new Error("expected backup");
-      expect(backup.skipped).toBe(1);
-      const manifest = JSON.parse(fs.readFileSync(path.join(backup.path, "backup-manifest.json"), "utf8"));
-      expect(manifest.skipped).toEqual([{ path: "daemon.sock", reason: "non-regular" }]);
-    } finally {
-      server.close();
-      removeFixtureSync(socketPath, { force: true });
-    }
+    const readdir = fs.readdirSync;
+    // Classification only: no actual socket binding/unlink or lifecycle claim.
+    vi.spyOn(fs, "readdirSync").mockImplementation(((...args: Parameters<typeof fs.readdirSync>) => {
+      const entries = readdir(...args);
+      if (args[0] === kiroHome && typeof args[1] === "object" && args[1]?.withFileTypes) {
+        return [...entries, { name: "daemon.sock", isDirectory: () => false, isSymbolicLink: () => false, isFile: () => false }];
+      }
+      return entries;
+    }) as typeof fs.readdirSync);
+    const backup = backupOf(kiroHome, "install");
+    expect(backup.skipped).toBe(1);
+    const manifest = JSON.parse(fs.readFileSync(path.join(backup.path, "backup-manifest.json"), "utf8"));
+    expect(manifest.skipped).toEqual([{ path: "daemon.sock", reason: "non-regular" }]);
+    expect(fs.existsSync(path.join(kiroHome, "daemon.sock"))).toBe(false);
   });
 
   it("preserves exact recorded modes under umask 077 without chmodding preexisting directories", () => {
@@ -809,40 +817,40 @@ describe("configuration backup", () => {
     expect(operations).not.toContain("rmdir");
   });
 
+  // Parent startup must ALSO be allowlisted (including esbuild binary selection).
+  // These children never inherit preloads, credentials, real-home config or PATH.
+  const cliEnvironment = (root: string) => {
+    for (const name of ["tmp", "config", "cache", "data", "state"]) fs.mkdirSync(path.join(root, name), { mode: 0o700 });
+    return { HOME: root, PATH: "", LANG: "C", LC_ALL: "C", TMPDIR: path.join(root, "tmp"), TMP: path.join(root, "tmp"), TEMP: path.join(root, "tmp"), XDG_CONFIG_HOME: path.join(root, "config"), XDG_CACHE_HOME: path.join(root, "cache"), XDG_DATA_HOME: path.join(root, "data"), XDG_STATE_HOME: path.join(root, "state") };
+  };
   it("exposes list and restore through the module CLI", () => {
-    const kiroHome = temporary();
+    const root = temporary(), env = cliEnvironment(root), kiroHome = temporary();
     seedConfiguration(kiroHome);
-    const backup = backupOf(kiroHome, "uninstall");
-    const module = path.resolve("scripts/installer-configuration-backup.mjs");
-    const listed = execFileSync(process.execPath, [module, "list", kiroHome], { encoding: "utf8" }).trim().split("\n").map(line => JSON.parse(line));
-    if (!backup) throw new Error("expected backup");
+    const backup = backupOf(kiroHome, "uninstall"), module = path.resolve("scripts/installer-configuration-backup.mjs");
+    const listing = spawnSync(process.execPath, [module, "list", kiroHome], { cwd: root, env, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+    expect(listing.error).toBeUndefined(); expect(listing.signal).toBeNull(); expect(listing.status, listing.stderr).toBe(0); expect(listing.stderr).toBe("");
+    const listed = listing.stdout.trim().split("\n").map(line => JSON.parse(line));
     expect(listed.at(-1)?.name).toBe(path.basename(backup.path));
-    const destination = temporary();
-    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    const output = execFileSync(process.execPath, [module, "restore", backup.path, destination], { encoding: "utf8" });
-    expect(output).toContain("Restored 3 files");
-  });
+    const destination = temporary(); fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    const restored = spawnSync(process.execPath, [module, "restore", backup.path, destination], { cwd: root, env, encoding: "utf8", timeout: 240_000, stdio: ["ignore", "pipe", "pipe"] });
+    expect(restored.error).toBeUndefined(); expect(restored.signal).toBeNull(); expect(restored.status, restored.stderr).toBe(0); expect(restored.stderr).toBe("");
+    expect(restored.stdout).toContain("Restored 3 files");
+    expect(fs.readFileSync(path.join(destination, "settings/global.json"), "utf8")).toBe('{"theme":"dark"}\n');
+    expect(fs.existsSync(path.join(destination, "agents/kiro-fabric.json"))).toBe(false);
+  }, 360_000);
 
   it("keeps the backup CLI inactive inside bundled manager commands", async () => {
-    const root = temporary(), manager = path.join(root, "install-manager.mjs");
+    const root = temporary(), env = cliEnvironment(root), manager = path.join(root, "install-manager.mjs");
     await build({ entryPoints: [path.resolve("scripts/install-manager.mjs")], outfile: manager, bundle: true, platform: "node", format: "esm", target: "node24", logLevel: "silent" });
     const kiroHome = temporary();
-    const doctor = spawnSync(process.execPath, [manager, "doctor", "--kiro-home", kiroHome, "--json"], {
-      env: { HOME: root, PATH: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 10000,
-    });
-    expect(doctor.status).toBe(5); // Fabric and Kiro are absent in this fixture.
-    expect(JSON.parse(doctor.stdout)).toMatchObject({ command: "doctor", outcome: "diagnostic-failure" });
-    expect(doctor.stderr).toBe("");
-
+    const doctor = spawnSync(process.execPath, [manager, "doctor", "--kiro-home", kiroHome, "--json"], { cwd: root, env, encoding: "utf8", timeout: 15_000, stdio: ["ignore", "pipe", "pipe"] });
+    expect(doctor.error).toBeUndefined(); expect(doctor.signal).toBeNull(); expect(doctor.status).toBe(5);
+    expect(JSON.parse(doctor.stdout)).toMatchObject({ command: "doctor", outcome: "diagnostic-failure" }); expect(doctor.stderr).toBe("");
     seedConfiguration(kiroHome);
-    const backup = backupOf(kiroHome, "install"), destination = temporary();
-    fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
-    const restored = spawnSync(process.execPath, [manager, "restore", "--backup", backup.path, "--kiro-home", destination, "--yes", "--non-interactive", "--json"], {
-      env: { HOME: root, PATH: "", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 10000,
-    });
-    expect(restored.status, restored.stdout + restored.stderr).toBe(0);
-    expect(JSON.parse(restored.stdout)).toMatchObject({ command: "restore", outcome: "restored", restored: 3 });
-    expect(restored.stderr).toBe("");
+    const backup = backupOf(kiroHome, "install"), destination = temporary(); fs.mkdirSync(path.join(destination, "kiro-fabric"), { mode: 0o700 });
+    const restored = spawnSync(process.execPath, [manager, "restore", "--backup", backup.path, "--kiro-home", destination, "--yes", "--non-interactive", "--json"], { cwd: root, env, encoding: "utf8", timeout: 240_000, stdio: ["ignore", "pipe", "pipe"] });
+    expect(restored.error).toBeUndefined(); expect(restored.signal).toBeNull(); expect(restored.status, restored.stdout + restored.stderr).toBe(0);
+    expect(JSON.parse(restored.stdout)).toMatchObject({ command: "restore", outcome: "restored", restored: 3 }); expect(restored.stderr).toBe("");
     expect(fs.readFileSync(path.join(destination, "settings/global.json"), "utf8")).toBe('{"theme":"dark"}\n');
-  });
+  }, 360_000);
 });

@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fixture, fixtureTools } from './bundle-fixture.js';
 import { signedRelease } from './release-fixture.js';
 import { canonical, createBundleManifest, sha256, compatibilityFor } from '../scripts/bundle-contract.mjs';
-import { createBundleArchive } from '../scripts/bundle-archive.mjs';
+import { writeBundleArchive } from '../scripts/bundle-archive.mjs';
 import { generateInstallerBootstrap, assertProductionBootstrapReady } from '../scripts/generate-installer-bootstrap.mjs';
 import { detectInstallerPlatform } from '../scripts/installer-platform.mjs';
 
@@ -19,7 +19,7 @@ async function bootstrapFixture(target='linux-x64'){
   const node=Buffer.from('#!/bin/bash\nprintf "ARG:%s\\n" "$@"\n');await writeFile(root+'/tools/node',node);
   const member=previous.tools.node.members.find((m:{path:string})=>m.path==='tools/node');member.size=node.length;member.sha256=sha256(node);
   const manifest=await createBundleManifest(root,{...previous,provenance:{kind:'release',sourceCommit:'a'.repeat(40)}});
-  await writeFile(root+'/bundle-manifest.json',canonical(manifest)+'\n');await createBundleArchive(root,temp+'/bundle.tar.gz');
+  await writeFile(root+'/bundle-manifest.json',canonical(manifest)+'\n');await writeBundleArchive(root,temp+'/bundle.tar.gz');
   const archiveBytes=await readFile(temp+'/bundle.tar.gz'),sbomBytes=Buffer.from('fixture SBOM');const capture={...signedRelease(archiveBytes,{sbom:{size:sbomBytes.length,sha256:sha256(sbomBytes)},bundleDigest:manifest.digest,target,compatibility:compatibilityFor(target),archive:{url:'https://github.com/asx8678/kiro-fabric/releases/download/v1.0.0/kiro-fabric-1.0.0-'+target+'.tar.gz',size:archiveBytes.length,sha256:sha256(archiveBytes)}}),sbomBytes};capture.verify(capture.metadataBytes,capture.signatureBytes,{archiveBytes,sbomBytes});
   const script=generateInstallerBootstrap([capture]);await writeFile(temp+'/install.sh',script,{mode:0o600});
   await writeFile(temp+'/bundle.tar.gz.spdx.json',capture.sbomBytes);

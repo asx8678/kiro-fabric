@@ -2,6 +2,9 @@ import https from 'node:https';
 import { LIMITS, TARGETS, isStable, sha256 } from './bundle-contract.mjs';
 import { PRODUCTION_TRUST_ROOT, verifyRelease, checkReleaseSbom, RELEASE_SBOM_SUFFIX } from './release-trust.mjs';
 
+/** @internal Official release API base used by discoverReleaseForTest and production
+ * discovery at :122. Discovery fixtures must build exact asset URLs; a hand mirror would
+ * drift from the live API shape. Not a root/package export. */
 export const RELEASE_API = 'https://api.github.com/repos/asx8678/kiro-fabric/releases';
 const HOSTS = new Set(['github.com','api.github.com','release-assets.githubusercontent.com']);
 const REDIRECTS = new Set([301,302,303,307,308]);
@@ -9,7 +12,10 @@ const REDIRECTS = new Set([301,302,303,307,308]);
 /** @typedef {(url:URL, options:import('node:https').RequestOptions, callback:(response:import('node:http').IncomingMessage)=>void)=>import('node:http').ClientRequest} Request */
 /** @typedef {(url:string, options:DownloadOptions)=>Promise<Buffer>} Download */
 /** @typedef {{target:string,version?:string}} DiscoveryOptions */
-/** Machine-readable failure; transport never silently invokes a source fallback. */
+/** @internal Machine-readable failure; transport never silently invokes a source fallback.
+ * Injected transport tests assert exact failure codes (offline/rate-limited/no-release/
+ * invalid-release) that discoverRelease does not surface without a real network. Not a
+ * root/package export. */
 export class ReleaseDownloadError extends Error {
  /** @param {string} code @param {string} [detail] */
  constructor(code,detail){super(detail?code+': '+detail:code);this.name='ReleaseDownloadError';this.code=code;}
@@ -20,8 +26,10 @@ function approvedURL(value){
  if(url.protocol!=='https:'||!HOSTS.has(url.hostname)||url.username||url.password||url.port||url.hash)throw new ReleaseDownloadError('invalid-release','unapproved HTTPS URL');
  return url;
 }
-/** One bounded capture, with a deadline spanning all redirects. No proxy/env hooks.
+/** @internal One bounded capture, with a deadline spanning all redirects. No proxy/env hooks.
  * Injected request is fixture-only, never exposed by discovery CLI or environment.
+ * Production downloadHttps at :90 binds the real https.request; redirect/status/fragment/
+ * timeout cases require this injectable definition. Not a root/package export.
  * @param {string} url @param {DownloadOptions} options @param {Request} request
  * @returns {Promise<Buffer>} */
 export async function downloadHttpsForTest(url,options,request){
@@ -88,8 +96,11 @@ export async function downloadHttpsForTest(url,options,request){
 /** Builtin Node HTTPS only; captures bytes before the caller verifies or extracts.
  * @param {string} url @param {DownloadOptions} options */
 function downloadHttps(url,options){return downloadHttpsForTest(url,options,https.request);}
-/** Internal pure fixture seam; production always binds verifyRelease, never a test key.
+/** @internal Internal pure fixture seam; production always binds verifyRelease, never a test key.
  * API hints are untrusted until the signature and exact candidate identity agree.
+ * Production discoverRelease at :122 binds real download/verify; offline discovery order,
+ * signature-before-archive and untrusted-hint cases need injected dependencies. Not a
+ * root/package export.
  * @param {DiscoveryOptions} options
  * @param {{download:Download,verify:(metadata:Buffer,signature:Buffer,expected:any)=>any}} dependencies */
 export async function discoverReleaseForTest({target,version},{download,verify}){

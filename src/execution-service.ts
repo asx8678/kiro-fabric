@@ -22,7 +22,7 @@ import { FabricCompilerPool, type FabricTypeError } from "./runtime/type-checker
 
 export const FABRIC_COMPILER_TIMEOUT_MS = 10_000;
 export const FABRIC_APPROVAL_TIMEOUT_MS = 30_000;
-export const FABRIC_PROVIDER_TIMEOUT_GRACE_MS = 2_000;
+const FABRIC_PROVIDER_TIMEOUT_GRACE_MS = 2_000;
 const MAX_MCP_APPROVAL_STAGES = 2;
 
 /** A host policy decision for one exact canonical request, never guest input. */
@@ -33,11 +33,19 @@ export type FabricApprovalPlan =
 
 export interface FabricExecutionApprover {
   /** Legacy entry point; without prepareApproval every call reserves prompt budget. */
-  approve(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): Promise<void>;
+  approve(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<void>;
   /** Evaluate policy once, without interaction. An ask plan must defer interaction
-   * until prompt() and bind it to these exact arguments and signal. The service
-   * invokes it once, only after reserving both approval quotas. */
-  prepareApproval?(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): FabricApprovalPlan | Promise<FabricApprovalPlan>;
+   * until prompt() and bind it to these exact arguments and signal.
+   * The service invokes it once, only after reserving both approval quotas. */
+  prepareApproval?(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): FabricApprovalPlan | Promise<FabricApprovalPlan>;
 }
 
 export interface FabricExecutionOptions {
@@ -49,6 +57,8 @@ export interface FabricExecutionOptions {
   signal?: AbortSignal;
   approver: FabricExecutionApprover;
   bootstrap?: FabricInvocationContext["bootstrap"];
+  /** Trusted owner storage; never reconstructed from guest arguments or metadata. */
+  artifactAccess?: FabricInvocationContext["artifactAccess"];
   /** Kiro explicitly pins availability; omitted retains library-provider behavior. */
   workspaceBound?: boolean;
   workspaceUnavailable?: boolean;
@@ -92,7 +102,7 @@ export const effectiveFabricTimeout = (
   invocationTimeout: number,
 ): number => Math.min(configuredMaximum, Math.max(executorDefault, exactActionFloor, invocationTimeout));
 
-export const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number, args: Record<string, unknown> = {}): number => {
+const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number, args: Record<string, unknown> = {}): number => {
   let remote = false;
   try { remote = parseRemoteRef(ref) !== undefined; } catch { return 0; }
   const method = catalogMethodForBridge(ref);
@@ -104,7 +114,7 @@ export const exactActionTimeoutFloor = (ref: string, mcpCallTimeoutMs: number, a
     ? mcpCallTimeoutMs + FABRIC_APPROVAL_TIMEOUT_MS * MAX_MCP_APPROVAL_STAGES + FABRIC_PROVIDER_TIMEOUT_GRACE_MS : 0;
 };
 
-export const exactHostActionReference = (
+const exactHostActionReference = (
   bridgeRef: string,
   args: Record<string, unknown>,
 ): string | undefined => bridgeRef === "fabric.call"
@@ -327,6 +337,7 @@ export class FabricExecutionService {
       deadline,
       chargeApproval: approvals.chargeApproval,
       ...(options.bootstrap ? { bootstrap: options.bootstrap } : {}),
+      ...(options.artifactAccess ? { artifactAccess: options.artifactAccess } : {}),
     });
     const executeSpan = tracer.enabled ? tracer.span("eval", "execute", execId) : undefined;
     const executeSpanId = executeSpan?.id;
@@ -353,6 +364,17 @@ export class FabricExecutionService {
       let bridgeEnd: Record<string, unknown> = {};
       let catalogReservation: CatalogReservation | undefined;
       try {
+        const dispatchRef = exactHostActionReference(ref, args);
+        // Retain the opt-in privacy restriction even without a browsing provider.
+        // Host shell/probe execution and configured MCP transports have unmediated
+        // host/network authority. Deny before preparation, catalog continuation or
+        // approval, including tools.call aliases and canonical remote references.
+        if (this.config.privacy.mode === "restricted-web" && typeof dispatchRef === "string" &&
+          (dispatchRef === "local.shell" || dispatchRef === "probe.run" || dispatchRef.startsWith("mcp."))) {
+          throw new FabricRepairError(`${dispatchRef} is unavailable in restricted-web privacy mode`, {
+            code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: dispatchRef,
+          });
+        }
         const context = { ...providerContext(signal, deadline), ...(observation ? { foveaObservation: observation } : {}), ...(captureEnabled ? { continuityCapture: () => {
           if (captureFailed || !operation) throw new Error("continuity capture is incomplete: recorder failed; prior checkpoint retained");
           return operation.capture();
@@ -547,16 +569,25 @@ export class FabricExecutionService {
   }
 
   close(): Promise<void> {
+    if (this.#closing) return this.#closing;
+    // Install before abort listeners or worker/provider callbacks can reenter.
+    this.#closing = Promise.resolve().then(async () => {
+      const failures: unknown[] = [];
+      // A compiler failure must not short-circuit the actual execution drain.
+      // Wrap its call as well: synchronous throws still leave every drain owned.
+      const drained = await Promise.allSettled([
+        Promise.resolve().then(() => this.#compiler.close()), ...this.#executions,
+      ]);
+      for (const result of drained) if (result.status === "rejected") failures.push(result.reason);
+      // Preserve ordering: settle executions, then the VM, then providers.
+      // Later cleanup is attempted even when earlier cleanup fails, without
+      // replacing its error or discarding the failed owner's reference.
+      try { await this.#runtime.close(); } catch (error) { failures.push(error); }
+      try { await this.registry.close(); } catch (error) { failures.push(error); }
+      if (failures.length) throw new AggregateError(failures, "Fabric execution service shutdown failed");
+    });
     this.invalidateCatalogs();
-    return this.#closing ??= (async () => {
-      this.#closeController.abort(new Error("Fabric execution service is closed"));
-      try {
-        await Promise.all([this.#compiler.close(), Promise.allSettled([...this.#executions])]);
-      } finally {
-        // The sandbox runtime documents that a caller which stops serving must
-        // close it, or a pooled thread waits out its retirement window.
-        try { await this.#runtime.close(); } finally { await this.registry.close(); }
-      }
-    })();
+    this.#closeController.abort(new Error("Fabric execution service is closed"));
+    return this.#closing;
   }
 }

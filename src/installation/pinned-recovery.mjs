@@ -5,7 +5,9 @@ import childProcess from "node:child_process";
 // No adjacent script, shell, native addon, PATH lookup or caller NODE_OPTIONS.
 // The child inherits a kernel-pinned cwd; it NEVER chdirs or resolves a supplied
 // file path. All file names below are fixed or derived from a bounded index.
-/** @param {typeof import('node:fs')} fs
+/** @internal Live child-protocol implementation, exported for exact protocol tests only.
+ * It is the same closure-free source embedded in `childSource`; no protocol changed.
+ * @param {typeof import('node:fs')} fs
  * @param {typeof import('node:crypto').createHash} createHash
  * @param {any} request */
 export function pinnedRecoveryChild(fs, createHash, request) {

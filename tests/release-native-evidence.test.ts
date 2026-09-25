@@ -1,9 +1,10 @@
 import { removeFixture as rm } from "./fixture-cleanup.mjs";
 import { test, expect } from 'vitest';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { assertNativeHost, checkProbeResult, assertExactArchive, collectNativeBundleEvidence } from '../scripts/release-native-evidence.mjs';
-import { createBundleArchive } from '../scripts/bundle-archive.mjs';
+import { writeBundleArchive } from '../scripts/bundle-archive.mjs';
 import { validateBundle } from '../scripts/bundle-contract.mjs';
 import { fixture } from './bundle-fixture.js';
 
@@ -35,10 +36,13 @@ test('records successful bounded probe output without manufacturing a release pa
 
 test('exact archive is parsed and bound to selected bundle, not merely a supplied digest', async () => {
   const root = await fixture();
-  const archive = `${root}.tar.gz`;
+  // writeBundleArchive requires a private current-user output parent; keep the
+  // archive in its own test-owned directory rather than the shared tmpdir.
+  const output = await mkdtemp(path.join(tmpdir(), 'native-evidence-'));
+  const archive = path.join(output, 'bundle.tar.gz');
   try {
     const bundle = await validateBundle(root);
-    await createBundleArchive(root, archive);
+    await writeBundleArchive(root, archive);
     const bytes = await readFile(archive);
     expect(assertExactArchive(bytes, bundle.digest)).toMatchObject({ size: bytes.length, bundleDigest: bundle.digest });
     expect(() => assertExactArchive(bytes, '0'.repeat(64))).toThrow(/does not match/);
@@ -48,7 +52,7 @@ test('exact archive is parsed and bound to selected bundle, not merely a supplie
     expect(() => assertExactArchive(bytes, bundle.digest)).toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
-    await rm(archive, { force: true });
+    await rm(output, { recursive: true, force: true });
   }
 });
 

@@ -59,18 +59,30 @@ export interface FabricFailureMetadata {
   checkpoints?: FabricCheckpointHandle[];
 }
 
+export interface FabricArtifactReadResult { id: string; text: string; offset: number; nextOffset: number; totalChars: number; done: boolean }
+/** Host-issued artifact authority, scoped independently of replaceable workspaces. */
+export interface FabricArtifactAccess {
+  read(id: string, offset?: number, limit?: number): FabricArtifactReadResult;
+  checkpoint(content: string): string;
+}
+
 export interface FabricInvocationContext {
   /** Host-only trusted facts; never accepted from guest arguments. */
   foveaObservation?: import("./fovea/observations.js").FoveaInvocationObservation;
   cwd: string;
   maxResultChars?: number;
   checkpoints?: { reserve(): (handle: FabricCheckpointHandle) => void };
+  /** Non-serializable owner capability supplied only by the trusted execution host. */
+  artifactAccess?: FabricArtifactAccess;
   /** Host-only closed admission prefix for this call; never supplied by guest arguments. */
   continuityCapture?: () => import("./continuity/execution.js").ContinuityCapture;
   signal?: AbortSignal;
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;
-  approve?(action: ResolvedFabricAction, args: Record<string, unknown>): Promise<void>;
+  approve?(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+  ): Promise<void>;
   /** Charge a provider-owned interactive prompt against this execution's
    * approval budget. The prompt content stays provider-owned. */
   chargeApproval?(prompt: () => Promise<void>): Promise<void>;

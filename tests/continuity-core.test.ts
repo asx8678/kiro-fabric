@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { parseFact, parseTask, snapshot, taskHash, type ContinuityTask } from "../src/continuity/records.js";
+import { parseFacts, parseTask, snapshot, taskHash, type ContinuityTask } from "../src/continuity/records.js";
 import { renderContinuity } from "../src/continuity/render.js";
 
 const task = (count = 12): ContinuityTask => ({ schemaVersion: 1, taskId: `ct_${"a".repeat(32)}`, publications: [],
@@ -57,6 +57,10 @@ describe("deterministic continuity projection", () => {
     expect(result.summary).toContain("Recent next step");
     expect(result.omittedRange).toEqual({ fromSequence: 1, throughSequence: 1 });
   });
+  it("accepts valid declarations through the public parser", () => {
+    const facts = [{ kind: "objective", text: "Valid objective" }];
+    expect(parseFacts(facts)).toEqual(facts);
+  });
   it.each([
     { kind: "decision", text: "test passed", provenance: "host-observed" },
     { kind: "decision", text: "test passed", verified: true },
@@ -64,7 +68,7 @@ describe("deterministic continuity projection", () => {
     { kind: "objective", text: "\ud800" },
     { kind: "objective", text: "😀".repeat(513) },
     { kind: "objective", text: " " },
-  ])("rejects forged or malformed declarations %#", value => expect(() => parseFact(value)).toThrow());
+  ])("rejects forged or malformed declarations %#", value => expect(() => parseFacts([value])).toThrow());
   it("rejects old summaries, unknown versions, duplicate sequences and forged stored provenance", () => {
     expect(() => parseTask({ ...task(), summary: "POISON PREVIOUS SUMMARY" })).toThrow();
     expect(() => parseTask({ ...task(), schemaVersion: 2 })).toThrow();

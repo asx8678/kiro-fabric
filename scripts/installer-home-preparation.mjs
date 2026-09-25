@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
 import { installerSafety as s } from "./install-agent-user.mjs";
-import { acquireInstallationLock } from "./installer-lock.mjs";
+import { acquireInstallationExclusion } from "./installer-lock.mjs";
 import { syncDirectory } from "./install-transaction.mjs";
 
 function readLegacyProfile(kiroHome) {
@@ -70,7 +70,9 @@ export function applyInstallationPermissions(plan) {
 export function preservePiFabricProfile(kiroHome, legacy, configurationBackup) {
   if (!configurationBackup) throw new Error("Pi Fabric migration requires a complete configuration backup");
   const base = path.join(kiroHome, "kiro-fabric");
-  const release = acquireInstallationLock(base);
+  // Maintained writers share the fixed-order exclusion so a held legacy gate
+  // (a paused pre-W5 entrypoint) is honoured with zero effect.
+  const release = acquireInstallationExclusion(base);
   let saved;
   try {
     for (const name of ["install-owner.json", "runtime", ".transactions", "bin"]) {

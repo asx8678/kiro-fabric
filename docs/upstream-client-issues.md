@@ -1,12 +1,68 @@
 # Upstream native Kiro issue drafts
 
-**Unpublished; no issue or PR numbers.** These issue/API drafts use the
-2026-09-21 Darwin arm64 / Kiro CLI **2.22.1** observations, not the earlier Linux
-2.21.1/2.22.0 results. Existing authorized authentication was used; no credentials,
+**Unpublished; no issue or PR numbers.** The approval report now includes the
+2026-09-25 Darwin arm64 / Kiro CLI **2.24.0** retest below. Other issue/API drafts
+retain the dated 2026-09-21 **2.22.1** observations; do not relabel them as fresh
+2.24.0 evidence. Existing authorized authentication was used; no credentials,
 private conversation logs or ordinary user configuration are attached. Every
 probe creates an owned scratch profile and uses native CLI/TUI commands only.
 See [native acceptance](fovea/native-acceptance-2026-09-21.md) for scope and retained
 local evidence. Automatic Fovea remains disabled.
+
+Regression-file pointers below name Vitest tests removed with the later
+test-suite deletion; they are historical references, not runnable tests.
+Current local checks are `pnpm run check:local` and
+`pnpm run verify:offline baseline|installer`.
+
+## 2026-09-25 CLI 2.24.0 retest
+
+The installed client reported `kiro-cli 2.24.0` on macOS 27.2 arm64. The
+[official stable manifest](https://prod.download.cli.kiro.dev/stable/latest/manifest.json)
+also reported **2.24.0** when read on this date; no newer stable client was
+available. Kiro documents [v3 as early release alongside v2](https://kiro.dev/docs/cli/v3/).
+
+An actual read through the installed Fabric profile succeeded. Approval tests
+used the retained, validated source bundle with the **same digest** as that
+installation, separate private data/config and scratch workspaces. Each requested
+one snapshot-bound `local.edit` after `local.read`, with `write`, `execute` and
+`network` set to `ask`. The installed user's approval policy was not changed.
+
+| Native command path | Observed result | Scratch edit |
+| --- | --- | --- |
+| `chat --v3` | Matched `_kiro/mcp/elicitation` request/error: missing handler | Withheld |
+| `chat --v2` | Actual Fabric tool result: form elicitation `unsupported`, `not_dispatched`, effect `none` | Withheld |
+| `chat --legacy-ui` | Fabric trace: read succeeded, approval failed, no form request; no dialog appeared | Withheld |
+
+The legacy UI's assistant text attributed the failure to unsupported forms, but
+no complete MCP capability recording was captured for that path. Its trace and
+unchanged fixture establish failure, not the same native missing-handler diagnosis
+as v3. `--v2 --legacy-ui` is rejected by argument parsing; that preliminary attempt
+is not runtime evidence. No probe accepted an approval, simulated a human response,
+used a native-tool fallback or changed trust. These are diagnostics, not human
+qualification or complete model-tool inventory evidence.
+
+The repair belongs in the native client: implement and route the form handler
+to the initiating conversation, present the exact review, and return the actual
+accept/decline/cancel decision. Fabric already uses standard MCP
+`server.elicitInput`; changing its schema or retrying cannot register a missing
+Kiro UI handler. No supported working CLI fallback was demonstrated. Keep
+approval-dependent effects blocked pending a client fix and accepted/declined
+effect retests. The [updated sanitized report](fovea/upstream-approval-report.md)
+is ready for review, **not published**.
+
+Private local evidence (do not attach raw transcripts to public issues):
+
+- v3: `.tmp/readiness-next-5dZDww/native-terminal-ajwHwb/`
+- v2: `.tmp/approval-fix-HB7W2Z/native-terminal-YE9O1J/`
+- legacy UI: `.tmp/approval-fix-HB7W2Z/native-terminal-1mM5PC/`
+- Bundle digest: `0cf4a27bdf9edb2f75813389f5b3341cf07d25487b86d8fa0a40907bd87c5ee9`
+- Every before/after fixture SHA256:
+  `73cc836b87afeb7110eedea254489a0559cfa4a98c06fabb6aa4a46848d27cf9`
+
+The copied v3 report summarizer does not understand v2 tool titles/result shapes,
+and the classic UI does not emit its expected ACP evidence. Their generic
+`unqualified` report fields must not be read as proof that Fabric never ran;
+the v2 actual tool result and both Fabric traces establish those calls.
 
 ## 1. Native form elicitation has no UI handler
 
@@ -30,7 +86,7 @@ Local report `.tmp/fovea-approval-wYMWdU/report.json`, SHA256
 `8953920a613a57a58bd8099a6c14e58285a67f58e48062b45159f300b8bd7bfa`.
 Native recording SHA256
 `5ff18024b96da917710586d6ca87906c7d9591d650fd372711e004341d74e156`;
-raw recording remains private. Regression: `tests/fovea/native-approval.test.ts`.
+raw recording remains private. Regression (historical; removed with the test suite): `tests/fovea/native-approval.test.ts`.
 After a client fix, use `--interactive` from a human terminal and verify exact
 accepted/declined effects independently. Do not use blanket allow or native tools
 as an approval bypass.
@@ -65,7 +121,7 @@ Local report `.tmp/fovea-lifecycle-FddnQz/report.json`, SHA256
 `8bba004516ca0a4e1e9f436fd7ef1e9f56f7def75c710407fadc6fa11d6354f7`.
 Native recording SHA256
 `91391e62b05e578cf22380e09da5b5ec85af3f1a9c6647f8c91dd4a5a8d2fe77`.
-Regression: `tests/fovea/native-lifecycle.test.ts`. Request supported lifecycle
+Regression (historical; removed with the test suite): `tests/fovea/native-lifecycle.test.ts`. Request supported lifecycle
 wiring and an end-to-end cancellation test; no private cancellation RPC is invoked
 by the harness. This does not claim that every native cancellation path fails.
 
@@ -135,8 +191,9 @@ lifecycle guarantee, not a base-MCP protocol violation. Neither requires rewriti
 Fovea navigation or weakening approvals.
 
 - Official destination: [kirodotdev/Kiro](https://github.com/kirodotdev/Kiro/issues).
-- The official stable manifest currently reports **2.22.1**, matching the tested
+- The official stable manifest reported **2.22.1** on 2026-09-21, matching that tested
   client: <https://prod.download.cli.kiro.dev/stable/latest/manifest.json>.
+  See the 2026-09-25 retest above for the later **2.24.0** result.
   The installer and manifest were read only; no client update was performed.
 - Targeted open/closed issue searches found related scopes, not an exact duplicate:
   [#4580](https://github.com/kirodotdev/Kiro/issues/4580) (general elicitation, later
@@ -163,7 +220,7 @@ After the owner authenticates `gh`, recheck duplicates and review these bodies:
 
 ```sh
 gh issue create --repo kirodotdev/Kiro \
-  --title 'CLI 2.22.1 (--v3): advertised MCP form elicitation has no native handler' \
+  --title 'CLI 2.24.0 (--v3): MCP form elicitation has no native handler' \
   --body-file docs/fovea/upstream-approval-report.md
 gh issue create --repo kirodotdev/Kiro \
   --title 'CLI v3: document or expose native chat ownership to hooks and MCP' \

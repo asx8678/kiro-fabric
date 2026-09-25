@@ -9,8 +9,15 @@ export interface FoveaConfig {
   sync: { mode: "enabled" | "hidden" | "disabled"; scope: "session" | "repository"; budget: number; ackClean: boolean; steerThreshold: number; pushFocus: boolean };
   tools: { defaultBudget: number; grepMode: "off" | "augment" | "replace"; grepAugmentBudget: number };
 }
+/** @internal Qualification-only: the canonical fovea.v1 default profile.
+ * Tests import this exact object where they need the bare defaults before any
+ * private store exists; the public read() path returns a revision/scope/
+ * settingSupport envelope instead. Not a host/guest/package API. */
 export const DEFAULT_FOVEA_CONFIG: FoveaConfig = { schemaVersion: 1, sync: { mode: "enabled", scope: "session", budget: 512, ackClean: false, steerThreshold: 0.15, pushFocus: true }, tools: { defaultBudget: 512, grepMode: "augment", grepAugmentBudget: 512 } };
 const fail = (): never => { throw new Error("Invalid fovea.v1 configuration; unknown versions/fields and executable overrides are not accepted"); };
+/** @internal Qualification-only: strict fovea.v1 validator. Exported so tests
+ * can assert rejection of authority fields/versions directly; production still
+ * only reaches it through FoveaConfiguration. Not a host/guest/package API. */
 export function validateFoveaConfig(value: unknown): FoveaConfig {
   if (!record(value) || value.schemaVersion !== 1 || Object.keys(value).sort().join(",") !== "schemaVersion,sync,tools" || !record(value.sync) || !record(value.tools)) return fail();
   const s = value.sync, t = value.tools;
@@ -20,18 +27,20 @@ export function validateFoveaConfig(value: unknown): FoveaConfig {
   return structuredClone(value) as unknown as FoveaConfig;
 }
 export function privateFoveaDirectory(directory: string): void {
-  if (!path.isAbsolute(directory) || fs.realpathSync(directory) !== directory) throw new Error("Fovea storage must be canonical");
+  if (!path.isAbsolute(directory) || fs.realpathSync(directory) !== directory) throw new Error("Navigator storage must be canonical");
   const s = fs.lstatSync(directory);
-  if (!s.isDirectory() || s.isSymbolicLink() || (s.mode & 0o077) || (process.getuid && s.uid !== process.getuid())) throw new Error("Fovea storage must be private and owned");
+  if (!s.isDirectory() || s.isSymbolicLink() || (s.mode & 0o077) || (process.getuid && s.uid !== process.getuid())) throw new Error("Navigator storage must be private and owned");
 }
 export function createFoveaDirectory(parent: string, name: string): string {
   privateFoveaDirectory(parent);
-  if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(name)) throw new Error("Invalid private Fovea directory name");
+  if (!/^[a-zA-Z0-9_-]{1,100}$/u.test(name)) throw new Error("Invalid private Navigator directory name");
   const directory = path.join(parent, name);
   try { fs.mkdirSync(directory, { mode: 0o700 }); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error; }
   privateFoveaDirectory(directory); return directory;
 }
 const hash = (text: string): string => createHash("sha256").update(text).digest("hex");
+/** @internal Qualification-only: exact-worktree project-profile cap asserted
+ * by configuration tests. Not a host/guest/package API. */
 export const MAX_FOVEA_PROJECT_PROFILES = 128;
 export interface FoveaConfigurationState {
   config: FoveaConfig;
@@ -70,12 +79,12 @@ export class FoveaConfiguration {
       revisions: { global: global?.revision ?? "absent", ...(projectFile ? { project: project?.revision ?? "absent" } : {}), ...(session ? { session: session.revision } : {}) } };
   }
   update(value: unknown, scope: "session" | "global" | "project", expectedRevision: string, worktreeId?: string): FoveaConfigurationState {
-    if (!["session", "global", "project"].includes(scope)) throw new Error("Invalid Fovea configuration scope");
+    if (!["session", "global", "project"].includes(scope)) throw new Error("Invalid Navigator configuration scope");
     const config = validateFoveaConfig(value), projectFile = this.#projectFile(worktreeId);
     if (scope === "project" && !projectFile) throw new Error("Project configuration requires a verified worktree identity");
     const before = this.read(worktreeId);
     const revision = scope === "session" ? before.revision : before.revisions[scope];
-    if (revision !== expectedRevision) throw new Error("Fovea configuration changed; reread settings before retrying");
+    if (revision !== expectedRevision) throw new Error("Navigator configuration changed; reread settings before retrying");
     if (scope === "session") this.#session = config;
     else {
       const target = scope === "project" ? projectFile! : this.file;
@@ -87,7 +96,7 @@ export class FoveaConfiguration {
       const lockIdentity = fs.fstatSync(lock);
       try {
         const check = (): void => {
-          if ((this.#stored(target)?.revision ?? "absent") !== expectedRevision) throw new Error("Fovea configuration changed before publication");
+          if ((this.#stored(target)?.revision ?? "absent") !== expectedRevision) throw new Error("Navigator configuration changed before publication");
         };
         check();
         if (scope === "project") this.#checkProjectCap(target);
@@ -103,7 +112,7 @@ export class FoveaConfiguration {
       } finally {
         fs.closeSync(lock);
         const current = fs.lstatSync(lockPath);
-        if (current.dev !== lockIdentity.dev || current.ino !== lockIdentity.ino) throw new Error("Fovea configuration lock identity changed");
+        if (current.dev !== lockIdentity.dev || current.ino !== lockIdentity.ino) throw new Error("Navigator configuration lock identity changed");
         fs.unlinkSync(lockPath);
       }
     }
@@ -122,12 +131,12 @@ export class FoveaConfiguration {
     try {
       for (let entry = directory.readSync(); entry; entry = directory.readSync()) {
         if (!entry.name.startsWith(prefix)) continue;
-        if (!/^[a-f0-9]{64}\.json$/u.test(entry.name.slice(prefix.length))) throw new Error("Invalid Fovea project profile entry");
-        if (++count > MAX_FOVEA_PROJECT_PROFILES) throw new Error("Fovea project profile limit exceeded");
+        if (!/^[a-f0-9]{64}\.json$/u.test(entry.name.slice(prefix.length))) throw new Error("Invalid Navigator project profile entry");
+        if (++count > MAX_FOVEA_PROJECT_PROFILES) throw new Error("Navigator project profile limit exceeded");
         if (entry.name === path.basename(target)) exists = true;
       }
     } finally { directory.closeSync(); }
-    if (!exists && count >= MAX_FOVEA_PROJECT_PROFILES) throw new Error("Fovea project profile limit reached");
+    if (!exists && count >= MAX_FOVEA_PROJECT_PROFILES) throw new Error("Navigator project profile limit reached");
   }
   #stored(file: string): StoredConfig | undefined {
     privateFoveaDirectory(path.dirname(file));
@@ -136,9 +145,9 @@ export class FoveaConfiguration {
     catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return undefined; throw error; }
     try {
       const s = fs.fstatSync(fd);
-      if (!s.isFile() || s.nlink !== 1 || (s.mode & 0o077) || s.size > 8192 || (process.getuid && s.uid !== process.getuid())) throw new Error("Unsafe Fovea configuration file");
+      if (!s.isFile() || s.nlink !== 1 || (s.mode & 0o077) || s.size > 8192 || (process.getuid && s.uid !== process.getuid())) throw new Error("Unsafe Navigator configuration file");
       const bytes = Buffer.alloc(8193), size = fs.readSync(fd, bytes, 0, bytes.length, 0);
-      if (size > 8192) throw new Error("Fovea configuration size limit");
+      if (size > 8192) throw new Error("Navigator configuration size limit");
       const text = bytes.subarray(0, size).toString("utf8");
       return { config: validateFoveaConfig(JSON.parse(text)), revision: hash(text) };
     } finally { fs.closeSync(fd); }

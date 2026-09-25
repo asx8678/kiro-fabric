@@ -158,9 +158,13 @@ Per process: **15 seconds**, **256 KiB combined stdout/stderr**, and at most
 **256 retained JSON envelope summaries**. Unterminated lines share the byte cap.
 The owned process group is killed on timeout/output limit/completion; the harness
 awaits leader close, with a separate **1-second cleanup bound**. Unconfirmed
-cleanup stops dependent work and retains the private tree rather than deleting
-under a possibly surviving process. Normal completion removes the scope and
-reports `scopeRemoved: true`. There is no claim of OS-level containment of a
+cleanup stops dependent work. Every created private tree is retained, including
+on normal completion: schema-4 reports keep `scopeRemoved: false`, name the path
+in `scopeRetained`, and report `scopeDisposition: "retained"`. `processCleanup`
+separately reports process settlement; it is not deletion authority. Dry runs
+create no scope and keep these scope/process fields null. Retained state is not
+release qualification or permission to publish private witnesses. There is no
+claim of OS-level containment of a
 process that escapes its group. At most ten commands run (the final pair is
 concurrent); no retries or unbounded model loops.
 
@@ -240,6 +244,47 @@ qualification. Hook/session dispatch must not be guessed from cwd.
 
 Full build, suite and installer qualification are coordinated by main serially;
 this harness task runs only its targeted capability tests and direct probes.
+
+## Offline semantic admission (not native qualification)
+
+The explicit `semantic-baseline` selector requires all three operator-supplied
+inputs:
+
+- `KIRO_FABRIC_SEMANTIC_BUNDLE`: canonical retained generation directory.
+- `KIRO_FABRIC_SEMANTIC_EXPECTED_MANIFEST_SHA256`: independently trusted manifest-byte hash.
+- `KIRO_FABRIC_SEMANTIC_EXPECTED_GENERATION_DIGEST`: independently trusted generation digest.
+
+Obtain the two anchors from separately trusted ownership/qualification evidence,
+**not by hashing the candidate you are trying to admit**. Missing/malformed anchors,
+invalid explicit paths, foreign host targets and identity drift fail closed; no
+installed-home discovery or fallback supplies missing authority. The supervised
+runner forwards these three inputs only to this explicit lane.
+
+Before running the engine, recorder-only controls can be invoked with the same
+trusted environment and an existing private task-owned output directory:
+
+```sh
+node scripts/verification/semantic-admission-probe.mjs /absolute/private/fixture-output
+```
+
+This command blocks subprocess execution and native loading, retains fixtures and
+writes an assertion report. Missing positive prerequisites yield a nonzero result;
+skipped controls are not passes. The actual offline engine lane is
+`node scripts/verify-offline.mjs semantic-baseline --json` and must not be substituted
+for these controls or for native qualification.
+
+Admission binds the complete descriptor and serialized parser request to fresh,
+independently anchored validation. Validation and spawn are separate syscalls,
+not descriptor-pinned execution. Current bundled JS may use an older installed C
+binding: evidence records both C identities and observed transitive build inputs,
+not reproducible binary provenance. A separately trusted builder receipt can also
+anchor a private current-source generation: the current seven-case local run
+records matching C identities, independently reviewed against the prior builder
+and pinned-input evidence. Do not derive its expected anchors from an arbitrary
+candidate's own manifest, or reinterpret an older mixed-C run as current-native
+evidence. Normal offline semantics do **not** certify
+forced settlement of detached engines, actual model-input delivery, native TUI
+approval, authenticated client behavior or release readiness.
 
 ## Pinned reference oracle
 

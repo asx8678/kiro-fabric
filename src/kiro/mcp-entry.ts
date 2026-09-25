@@ -2,7 +2,7 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { acquireInstallationLock } from "../installation/installer-lock.mjs";
+import { acquireInstallationExclusion } from "../installation/installer-lock.mjs";
 import { managedInstallationBase, validateManagedAdmission, validateManagedGeneration, resolveManagedFoveaParser } from "./managed-generation.js";
 import { fileURLToPath } from "node:url";
 import { resolveKiroAgentLaunchContext } from "./power/agent-launch-context.js";
@@ -23,7 +23,9 @@ export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
   processServerTask ??= (async () => {
     const launch = resolveKiroAgentLaunchContext();
     const base = launch.managedGeneration ? managedInstallationBase(launch.managedGeneration.bundleRoot) : undefined;
-    const release = base ? acquireInstallationLock(base, { recover: false }) : undefined;
+    // Backend admission shares the fixed-order exclusion, so startup cannot
+    // enter durable-data preparation while a legacy gate is held.
+    const release = base ? acquireInstallationExclusion(base, { recover: false }) : undefined;
     let server: { close(): Promise<void> } | undefined;
     try {
       try {

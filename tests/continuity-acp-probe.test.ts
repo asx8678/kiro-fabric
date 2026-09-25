@@ -9,7 +9,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { runAcpCapabilityProbe, type AcpCapabilityProbeOptions, type AcpProbeFrame, type AcpProbeTransport } from "../src/kiro/acp-capability-probe.js";
 import {
-  ACP_PROTOCOL_VERSION,
   buildCancelNotificationParams,
   buildInitializeParams,
   buildPermissionCancelledReply,
@@ -18,9 +17,7 @@ import {
   buildSessionNewParams,
   inspectIncomingFrame,
   inspectInitializeResult,
-  inspectPermissionReply,
   inspectPermissionRequest,
-  inspectPromptRequestParams,
   inspectSessionIdResult,
   inspectStopReason,
   measureFrameBytes,
@@ -48,6 +45,44 @@ interface Fixture {
   rejectedShapes: Array<{ id: string; frame: AcpProbeFrame; reason: string }>;
 }
 const fixture = JSON.parse(fs.readFileSync(path.resolve("tests/fixtures/acp-v1-wire.json"), "utf8")) as Fixture;
+
+/** Test-local strict validators for the historical ACP v1 prompt/reply shapes.
+ * Production no longer exports prompt/reply semantic validators (no live
+ * consumer), so this oracle lives with the test that asserts it. It mirrors the
+ * fixture's normative shapes and is deliberately separate from the JSON-RPC
+ * envelope-only `inspectIncomingFrame`, which accepts the historical invalid
+ * envelope and is not an equivalent semantic validator. */
+type PromptParamInspection = { ok: true; sessionId: string; text: string } | { ok: false; reason: string };
+const inspectPromptShape = (params: unknown): PromptParamInspection => {
+  if (typeof params !== "object" || params === null) return { ok: false, reason: "session/prompt params must be an object" };
+  const record = params as Record<string, unknown>;
+  if (Object.hasOwn(record, "content")) return { ok: false, reason: "session/prompt params must not use a content field; a prompt array is required" };
+  if (typeof record.sessionId !== "string" || !record.sessionId) return { ok: false, reason: "session/prompt params must bind a session id" };
+  const prompt = record.prompt;
+  if (!Array.isArray(prompt) || prompt.length !== 1 || typeof prompt[0] !== "object" || prompt[0] === null) {
+    return { ok: false, reason: "session/prompt params must carry one prompt content block" };
+  }
+  const block = prompt[0] as Record<string, unknown>;
+  if (block.type !== "text" || typeof block.text !== "string") return { ok: false, reason: "session/prompt prompt block must be text" };
+  return { ok: true, sessionId: record.sessionId, text: block.text };
+};
+
+type PermissionReplyInspection =
+  | { ok: true; outcome: { outcome: "selected"; optionId: string } | { outcome: "cancelled" } }
+  | { ok: false; reason: string };
+const inspectReplyShape = (result: unknown): PermissionReplyInspection => {
+  if (typeof result !== "object" || result === null) return { ok: false, reason: "permission reply must be an object" };
+  const outcome = (result as Record<string, unknown>).outcome;
+  if (typeof outcome !== "object" || outcome === null) return { ok: false, reason: "permission reply must carry an outcome" };
+  const value = outcome as Record<string, unknown>;
+  if (value.outcome === "cancelled") return { ok: true, outcome: { outcome: "cancelled" } };
+  if (value.outcome === "selected") {
+    if (typeof value.optionId !== "string" || !value.optionId) return { ok: false, reason: "selected permission reply must carry an optionId" };
+    return { ok: true, outcome: { outcome: "selected", optionId: value.optionId } };
+  }
+  if (/deny/iu.test(String(value.outcome))) return { ok: false, reason: "permission replies must use selected or cancelled; ACP v1 has no deny outcome" };
+  return { ok: false, reason: `unsupported permission outcome: ${String(value.outcome)}` };
+};
 
 const continuation = "Exact continuation packet bytes\nSecond line \u00e9";
 const responseFrame = (frame: AcpProbeFrame, result: unknown): AcpProbeFrame =>
@@ -114,7 +149,7 @@ describe("ACP v1 wire contract fixture", () => {
   it("encodes the normative shapes the probe and its builders must speak", () => {
     expect(inspectInitializeResult(fixture.initializeResponse.result)).toEqual({ ok: true, agentInfo: { name: "my-agent", version: "1.0.0" } });
     expect(inspectSessionIdResult(fixture.sessionNewResponse.result)).toEqual({ ok: true, sessionId: "sess_abc123def456" });
-    const prompt = inspectPromptRequestParams(fixture.promptRequest.params);
+    const prompt = inspectPromptShape(fixture.promptRequest.params);
     expect(prompt).toEqual({ ok: true, sessionId: "sess_abc123def456", text: "Can you analyze this code for potential issues?" });
     const permission = inspectPermissionRequest(fixture.permissionRequest.params, "sess_abc123def456");
     expect(permission.ok).toBe(true);
@@ -126,8 +161,8 @@ describe("ACP v1 wire contract fixture", () => {
     const beforeSession = inspectPermissionRequest(fixture.permissionRequest.params, null);
     expect(beforeSession).toMatchObject({ ok: false });
     if (!beforeSession.ok) expect(beforeSession.reason).toContain("before the probe created a session");
-    expect(inspectPermissionReply(fixture.permissionResponseSelected.result)).toEqual({ ok: true, outcome: { outcome: "selected", optionId: "reject-once" } });
-    expect(inspectPermissionReply(fixture.permissionResponseCancelled.result)).toEqual({ ok: true, outcome: { outcome: "cancelled" } });
+    expect(inspectReplyShape(fixture.permissionResponseSelected.result)).toEqual({ ok: true, outcome: { outcome: "selected", optionId: "reject-once" } });
+    expect(inspectReplyShape(fixture.permissionResponseCancelled.result)).toEqual({ ok: true, outcome: { outcome: "cancelled" } });
     for (const reason of fixture.stopReasons) expect(inspectStopReason(reason)).toBe(reason);
     expect(inspectStopReason("paused")).toBeNull();
     expect(inspectIncomingFrame(fixture.initializeResponse)).toMatchObject({ ok: true, kind: "response", id: 0 });
@@ -136,11 +171,11 @@ describe("ACP v1 wire contract fixture", () => {
     expect(measureFrameBytes(fixture.cancelNotification)).toBeGreaterThan(0);
     // The historical bug shapes recorded in the fixture are rejected.
     const contentShape = fixture.rejectedShapes.find(shape => shape.id === "prompt-with-content-params")!;
-    const contentInspection = inspectPromptRequestParams(contentShape.frame.params);
+    const contentInspection = inspectPromptShape(contentShape.frame.params);
     expect(contentInspection).toMatchObject({ ok: false });
     if (!contentInspection.ok) expect(contentInspection.reason).toContain("prompt");
     const denyShape = fixture.rejectedShapes.find(shape => shape.id === "permission-deny-outcome")!;
-    const denyInspection = inspectPermissionReply(denyShape.frame.result);
+    const denyInspection = inspectReplyShape(denyShape.frame.result);
     expect(denyInspection).toMatchObject({ ok: false });
     if (!denyInspection.ok) expect(denyInspection.reason).toContain("deny");
     // Builders reproduce the normative frames.
@@ -195,14 +230,14 @@ describe("ACP capability probe (synthetic transport)", () => {
       const params = frame.params as Record<string, unknown> | undefined;
       const reject = (reason: string): void => { violations.push(`${String(frame.method ?? "response")}: ${reason}`); };
       if (frame.method === "initialize") {
-        if (params?.protocolVersion !== ACP_PROTOCOL_VERSION) reject(`initialize must request ACP v${ACP_PROTOCOL_VERSION}`);
+        if (params?.protocolVersion !== fixture.initializeRequest.params.protocolVersion) reject(`initialize must request ACP v${fixture.initializeRequest.params.protocolVersion}`);
         if (params?.clientCapabilities !== undefined && Object.keys(params.clientCapabilities as object).length !== 0) reject("initialize must not advertise client capabilities");
         t.queue(responseFrame(frame, fixture.initializeResponse.result));
       } else if (frame.method === "session/new") {
         if (params?.cwd !== "/workspace/project" || !Array.isArray(params?.mcpServers) || params.mcpServers.length !== 0) reject("session/new must bind the probe cwd and no MCP servers");
         t.queue(responseFrame(frame, { sessionId: "sess-strict-1" }));
       } else if (frame.method === "session/prompt") {
-        const inspected = inspectPromptRequestParams(frame.params);
+        const inspected = inspectPromptShape(frame.params);
         if (!inspected.ok) {
           reject(inspected.reason);
           t.queue({ jsonrpc: "2.0", id: frame.id as number, error: { code: -32602, message: "invalid session/prompt params" } });
@@ -215,7 +250,7 @@ describe("ACP capability probe (synthetic transport)", () => {
         if ((frame.params as { sessionId?: unknown } | undefined)?.sessionId !== "sess-strict-1") reject("session/cancel must target the fresh session");
         t.queue({ jsonrpc: "2.0", ...(promptId !== undefined ? { id: promptId } : {}), result: { stopReason: "cancelled" } });
       } else if (frame.method === undefined && frame.id !== undefined) {
-        const reply = inspectPermissionReply(frame.result);
+        const reply = inspectReplyShape(frame.result);
         if (!reply.ok) { reject(reply.reason); return; }
         if (reply.outcome.outcome === "selected" && reply.outcome.optionId !== "reject-once") reject("the probe must select the advertised reject_once option");
       }

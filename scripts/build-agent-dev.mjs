@@ -11,7 +11,13 @@ import { artifactRecords, cacheDirectory, exists, recordInstallerArtifact, withI
 const scripts = ["agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs"];
 const boundarySource = "src/installation/filesystem-boundary.mjs";
 const boundaryTarget = "scripts/filesystem-boundary.mjs";
-const mappings = [["skills", "skills"], ["agent-product.json", "agent-product.json"], ...scripts.map(name => [`scripts/${name}`, `scripts/${name}`]), [boundarySource, boundaryTarget]];
+const lockSource = "src/installation/installer-lock.mjs";
+const pinnedSource = "src/installation/pinned-recovery.mjs";
+// W5 staged implementation closure: the legacy installer imports the modern
+// compat lock, so its exact dependency bytes are captured and verified below,
+// never a checkout re-export shim.
+const helperSources = [[boundarySource, boundaryTarget], [lockSource, "scripts/installer-lock.mjs"], [pinnedSource, "scripts/pinned-recovery.mjs"]];
+const mappings = [["skills/fabric-exec", "skills/fabric-exec"], ["agent-product.json", "agent-product.json"], ...scripts.map(name => [`scripts/${name}`, `scripts/${name}`]), ...helperSources];
 const copy = (source, target) => {
   const stats = fs.lstatSync(source);
   if (stats.isSymbolicLink() || (!stats.isDirectory() && (!stats.isFile() || stats.nlink !== 1))) throw new Error(`unsafe source: ${source}`);
@@ -40,7 +46,7 @@ export async function buildAgentDev(options = {}) {
       active = validateAgentPackage(stable); // even stale/tampered active generations cannot be hidden by a rebuild
     }
     let selected, generation = "", reused = false;
-    try {
+    {
       for (const record of await artifactRecords(parent, "agent")) {
         if (canonical(record.identity) !== canonical(identity)) continue;
         generation = path.join(parent, record.generation);
@@ -53,13 +59,15 @@ export async function buildAgentDev(options = {}) {
       }
       if (!selected) {
         fs.mkdirSync(building, { mode: 0o700 });
+        console.error("[fabric:task-root] " + JSON.stringify({ path: building, policy: "retain-if-unpublished" }));
         copy(path.join(root, "dist/kiro-agent-closure"), path.join(building, "runtime"));
-        copy(path.join(root, "skills"), path.join(building, "skills"));
+        fs.mkdirSync(path.join(building, "skills"), { mode: 0o700 });
+        copy(path.join(root, "skills", "fabric-exec"), path.join(building, "skills", "fabric-exec"));
         copy(path.join(root, "agent-product.json"), path.join(building, "agent-product.json"));
         fs.mkdirSync(path.join(building, "scripts"), { mode: 0o700 });
         for (const name of scripts) copy(path.join(root, "scripts", name), path.join(building, "scripts", name));
         // Copy implementation bytes, NOT the checkout-only re-export shim.
-        copy(path.join(root, boundarySource), path.join(building, boundaryTarget));
+        for (const [source, target] of helperSources) copy(path.join(root, source), path.join(building, target));
         const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
         fs.writeFileSync(path.join(building, "package.json"), `${JSON.stringify({ name: pkg.name, version: pkg.version, type: "module", private: true, engines: { node: ">=24" }, scripts: { "install:agent": "node scripts/install-agent-user.mjs ." } }, null, 2)}\n`, { mode: 0o600 });
         verifyCapturedInputs(building, initialBuild, mappings);
@@ -105,7 +113,7 @@ export async function buildAgentDev(options = {}) {
         }
         throw error;
       }
-    } finally { if (exists(building)) fs.rmSync(building, { recursive: true }); }
+    }
   });
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

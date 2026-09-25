@@ -5,8 +5,10 @@ import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fixture } from './bundle-fixture.js';
 import { canonical, createBundleManifest, validateBundle, validateInstalledBundle, checkManifest, manifestDigest, sha256 } from '../scripts/bundle-contract.mjs';
-import { installCompleteGeneration, inspectCompleteInstallation, recoverCompleteInstallation, rollbackCompleteGeneration, completeGenerationLauncher } from '../scripts/managed-installation.mjs';
+import { installCompleteGeneration, inspectCompleteInstallation, recoverCompleteInstallation, rollbackCompleteGeneration } from '../scripts/managed-installation.mjs';
 import { doctorInstallation } from '../scripts/install-manager.mjs';
+import { readTransaction } from '../scripts/install-transaction.mjs';
+import { snapshotStagingScope, assertStagingScopeUnchanged } from '../scripts/verification/staging-preservation-snapshot.mjs';
 
 const worker = 'app/runtime/sandbox-worker-entry.js';
 // Construct historical manifest bytes without using the new strict builder.
@@ -53,7 +55,7 @@ async function setup() {
  // Model an already-owned historical installation, including its original
  // generation-bound controls. Production never rewrites retained manifests.
  const profile = (await fs.readFile(installed.paths.profile, 'utf8')).replaceAll(installed.digest, old.digest);
- const launcher = completeGenerationLauncher(old.digest);
+ const launcher = (await fs.readFile(installed.paths.launcher, 'utf8')).replaceAll(installed.digest, old.digest);
  const owner = {...installed.owner, currentRuntime: old.digest, runtimeGenerations: [{name: old.digest, manifestSha256: sha256(canonical(old) + '\n')}], profileSha256: sha256(profile), launcherSha256: sha256(launcher)};
  await fs.writeFile(installed.paths.profile, profile);
  await fs.writeFile(installed.paths.launcher, launcher);
@@ -64,7 +66,7 @@ async function setup() {
   async cleanup() { await removeFixture(root, {recursive: true, force: true}); await removeFixture(bundle, {recursive: true, force: true}); }};
 }
 
-test.each([null, 'profile-published', 'owner-committed'])('upgrades owned pre-worker bundles with exact retention and recovery at %s', async phase => {
+test.each([null, 'profile-published', 'owner-committed'])('preserves owned pre-worker generations on upgrade or fenced interruption at %s', async phase => {
  const f = await setup();
  try {
   const before = await fs.readFile(path.join(f.retained, 'bundle-manifest.json'));
@@ -74,9 +76,35 @@ test.each([null, 'profile-published', 'owner-committed'])('upgrades owned pre-wo
   // Merely being owned does not make an obsolete bundle eligible for activation.
   await expect(installCompleteGeneration(f.retained, f.opts)).rejects.toThrow('Missing required entry: ' + worker);
   if (phase) {
-   await expect(installCompleteGeneration(f.bundle, {...f.opts, onPhase: (name: string) => { if (name === phase) throw Error('interrupted'); }})).rejects.toThrow('interrupted');
-   await recoverCompleteInstallation(f.kiroHome);
-   expect((await inspectCompleteInstallation(f.kiroHome)).owner.currentRuntime).toBe(phase === 'owner-committed' ? f.installed.digest : f.old.digest);
+   const originalOwner = await fs.readFile(f.installed.paths.manifest);
+   const originalProfile = await fs.readFile(f.installed.paths.profile);
+   let reached = false;
+   const failure = await installCompleteGeneration(f.bundle, {...f.opts, onPhase: (name: string) => {
+    if (name === phase) { reached = true; throw Error('interrupted'); }
+   }}).then(() => null, error => error);
+   expect(reached).toBe(true);
+   expect(failure).toMatchObject({message: 'interrupted', recoveryRequired: true, committed: phase === 'owner-committed'});
+   const journal = readTransaction(f.kiroHome);
+   expect(journal.controls.manifest.before).toBe(originalOwner.toString('base64'));
+   expect(journal.controls.profile.before).toBe(originalProfile.toString('base64'));
+   const owner = JSON.parse((await fs.readFile(f.installed.paths.manifest)).toString());
+   expect(owner.currentRuntime).toBe(phase === 'owner-committed' ? f.installed.digest : f.old.digest);
+   expect((await inspectCompleteInstallation(f.kiroHome)).status).toBe('recovery-required');
+   const gate = path.join(f.installed.paths.base, '.install.lock');
+   expect(JSON.parse(await fs.readFile(path.join(gate, 'owner.json'), 'utf8')).pid).toBe(process.pid);
+   expect((await validateInstalledBundle(f.retained)).digest).toBe(f.old.digest);
+   expect((await validateBundle(path.join(f.installed.paths.runtime, f.installed.digest))).digest).toBe(f.installed.digest);
+   expect(await fs.readFile(path.join(f.retained, 'bundle-manifest.json'))).toEqual(before);
+   expect(await fs.readFile(f.data, 'utf8')).toBe('preserve user data');
+   // W5 deliberately retains legacy admission when a journal survives. It has
+   // no safe automatic PID/nonce-only takeover; this is NOT recovery success.
+   const preserved = snapshotStagingScope(f.kiroHome);
+   const busy = {code: 'INSTALL_LOCK_BUSY', message: 'another Kiro Fabric installation mutation is in progress'};
+   await expect(recoverCompleteInstallation(f.kiroHome)).rejects.toMatchObject(busy);
+   assertStagingScopeUnchanged(preserved, snapshotStagingScope(f.kiroHome), 'recovery refusal');
+   await expect(installCompleteGeneration(f.bundle, f.opts)).rejects.toMatchObject(busy);
+   assertStagingScopeUnchanged(preserved, snapshotStagingScope(f.kiroHome), 'repeat-install refusal');
+   return;
   }
   await installCompleteGeneration(f.bundle, f.opts);
   const state = await inspectCompleteInstallation(f.kiroHome);

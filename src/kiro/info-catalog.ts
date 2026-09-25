@@ -1,6 +1,6 @@
 import type { ResolvedFabricAction } from "../protocol.js";
 
-export const MAX_INFO_CATALOG_BYTES = 20_000;
+const MAX_INFO_CATALOG_BYTES = 20_000;
 
 interface FabricInfoCatalogMetadata {
   total: number;

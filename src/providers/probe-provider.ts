@@ -57,6 +57,7 @@ export class ProbeRunExitError extends Error {
 export class ProbeProvider implements FabricProvider {
   readonly name = "probe";
   readonly description = "Explicit approved retained independent probes with declared provenance; host execution, not production proof or network isolation";
+  readonly requirements = { verifiedWorkspace: true, settlement: true };
   readonly #storage: ProbeStorage;
   readonly #options: ProbeProviderOptions;
   readonly #budget: number;

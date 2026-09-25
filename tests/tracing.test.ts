@@ -12,8 +12,15 @@ import {
   DISABLED_TRACER,
   createFabricTracer,
   resolveTraceEnabled,
-  type TraceEvent,
 } from "../src/trace/tracer.js";
+
+// Observed JSONL wire shape for assertions, not an export of tracer internals.
+type TraceEvent = {
+  v: 1; ts: string; monoUs: number; seq: number;
+  cat: Parameters<ReturnType<typeof createFabricTracer>["event"]>[0];
+  ev: string; execId?: string; spanId?: string; parentId?: string;
+  durUs?: number; data?: Record<string, unknown>;
+};
 
 const roots: string[] = [];
 const temporary = (): string => {

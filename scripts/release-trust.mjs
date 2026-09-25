@@ -38,20 +38,19 @@ function verifyWithKey(metadataBytes,signatureBytes,key,expected={}){
 export function verifyRelease(metadataBytes,signatureBytes,expected={}){return verifyWithKey(metadataBytes,signatureBytes,PRODUCTION_TRUST_ROOT,expected);}
 // Internal fixture API only: never selected through environment, CLI, or metadata.
 /** @param {Buffer} metadataBytes @param {Buffer} signatureBytes @param {string | Buffer} publicKey @param {any} [expected] */
-export function verifyReleaseForTest(metadataBytes,signatureBytes,publicKey,expected={}){return verifyWithKey(metadataBytes,signatureBytes,publicKey,expected);}
-/** @param {string} archive @param {any} [expected] */
-export async function verifyReleaseSidecars(archive,expected={}){
- return (await verifyReleaseSidecarsCaptured(archive,expected)).metadata;
-}
-/** Byte identity only, not an authentication bypass or native SPDX qualification.
+export function verifyReleaseForTest(metadataBytes,signatureBytes,publicKey,expected={}){return verifyWithKey(metadataBytes,signatureBytes,publicKey,expected);}/** Byte identity only, not an authentication bypass or native SPDX qualification.
  * The caller must first authenticate metadata using its existing trust policy.
  * @param {any} metadata @param {Buffer} bytes */
 export function checkReleaseSbom(metadata,bytes){
  validateReleaseMetadata(metadata);
  if(!Buffer.isBuffer(bytes)||bytes.length!==metadata.sbom.size||sha256(bytes)!==metadata.sbom.sha256)throw Error('Release SBOM digest/size mismatch');
 }
-/** @param {string} archive @param {(m:Buffer,s:Buffer,e:any)=>any} verifyMetadata @param {any} expected */
-async function captureSidecars(archive,verifyMetadata,expected){
+/** @internal Capture/verify seam. Production verifyReleaseSidecarsCaptured at :64 binds
+ * the production trust root, which is intentionally empty and fails closed, so offline
+ * fixture-key sidecar capture cannot run through the public API. The injected verifier is
+ * fixture-only and never selected by CLI/environment/metadata. Not a root/package export.
+ * @param {string} archive @param {(m:Buffer,s:Buffer,e:any)=>any} verifyMetadata @param {any} expected */
+export async function captureSidecars(archive,verifyMetadata,expected){
  // Authenticate before touching either large artifact, then capture exactly the
  // signed lengths. A failure cannot fall through to source installation.
  const [metadataBytes,signatureBytes]=await Promise.all([readRegular(archive+'.release.json',65536),readRegular(archive+'.release.sig',89)]);
@@ -67,12 +66,9 @@ export async function verifyReleaseSidecarsCaptured(archive,expected={}){
  if(!PRODUCTION_TRUST_ROOT)throw Error('Production release trust root unavailable: distribution blocked');
  return captureSidecars(archive,verifyRelease,expected);
 }
-/** Explicit fixture seam, never selected through environment, CLI or metadata.
- * @param {string} archive @param {string | Buffer} publicKey @param {any} [expected] */
-export async function verifyReleaseSidecarsCapturedForTest(archive,publicKey,expected={}){
- return captureSidecars(archive,(m,s,e)=>verifyReleaseForTest(m,s,publicKey,e),expected);
-}
-/** @param {any} candidate @param {{schema:number,product:string,highestVersion:string,highestDigest:string,accepted:{version:string,digest:string}[]} | null} [state] */
+/** @param {any} candidate
+ * @param {{schema:number,product:string,highestVersion:string,highestDigest:string,accepted:{version:string,digest:string}[]} | null} [state]
+ */
 export function checkReleaseAdmission(candidate,state=null){
  validateReleaseMetadata(candidate);if(state===null||state===undefined)return {outcome:'admit'};
  exactFields(state,['schema','product','highestVersion','highestDigest','accepted']);

@@ -9,8 +9,8 @@ import { extractPrivateEntries } from '../scripts/private-extraction.mjs';
 import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation, writePinnedDirectoryStream } from '../scripts/pinned-directory-child.mjs';
 import { runPinnedDirectoryOperation as runStatePinnedDirectoryOperation } from '../src/installation/pinned-directory-child.mjs';
 import { captureDirectoryAncestry } from '../src/installation/filesystem-boundary.mjs';
-import { createBundleArchive, encodeBundleTar, extractBundleArchiveBytes, extractLegacyAgentArchiveBytes } from '../scripts/bundle-archive.mjs';
-import { fixture } from './bundle-fixture.js';
+import { writeBundleArchive, extractBundleArchiveBytes, extractLegacyAgentArchiveBytes } from '../scripts/bundle-archive.mjs';
+import { fixture, encodeBundleTar } from './bundle-fixture.js';
 
 // Native runnable on BOTH supported POSIX hosts, with no OS/capability skip.
 // Linux also forces missing traversal, exercising actual inherited-fd children.
@@ -105,7 +105,7 @@ test.each(['ENOENT', 'ENOTDIR', 'ENOTSUP', 'EACCES'])('alias traversal %s falls 
 
 test('legacy directories remain directories, and source/release archives use the same real child path', async () => {
   const root = temp(), source = await fixture(); roots.push(source);
-  const archive = path.join(root, 'bundle.tar.gz'); await createBundleArchive(source, archive);
+  const archive = path.join(root, 'bundle.tar.gz'); await writeBundleArchive(source, archive);
   const release = fs.readFileSync(archive), legacy = legacyBytes([entry('dir', Buffer.alloc(0), 0o700), entry('dir/sub', Buffer.alloc(0), 0o700), entry('dir/sub/file')]);
   forceChild(); const spawn = intercept(() => {}), cwd = process.cwd();
   const bundle = await extractBundleArchiveBytes(release, path.join(root, 'release'));

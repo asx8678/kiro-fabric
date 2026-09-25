@@ -8,8 +8,26 @@ import { randomBytes } from "node:crypto";
 import { validateBundle } from "./bundle-contract.mjs";
 import { assertInstallerSmokeResult, installerSmokeInput } from "./installer-smoke-contract.mjs";
 
+/** The candidate workspace is a NEW, exclusively created directory. When the
+ * caller's inherited TMPDIR places it inside an enclosing checkout whose ignore
+ * rules exclude that path, an enclosing repository would make `git ls-files`
+ * hide the fixture files, so Navigator discovery would see an empty workspace.
+ * A minimal unborn repository boundary pins discovery to the owned workspace.
+ * It is written directly with fixed HEAD/config/objects/refs bytes: no Git
+ * executable, no index, no commit, no history, and no change to any user or
+ * enclosing repository. The outer retain-only policy keeps the metadata. */
+function establishOwnedUnbornGitBoundary(workspace) {
+  const git = path.join(workspace, ".git");
+  // Refuse any pre-existing metadata rather than replacing a repository.
+  fs.mkdirSync(git, { mode: 0o700 });
+  for (const directory of ["objects", "refs", "refs/heads"]) fs.mkdirSync(path.join(git, directory), { mode: 0o700 });
+  fs.writeFileSync(path.join(git, "HEAD"), "ref: refs/heads/main\n", { flag: "wx", mode: 0o600 });
+  fs.writeFileSync(path.join(git, "config"), "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n", { flag: "wx", mode: 0o600 });
+}
+
 export async function smokeCandidate(bundleRoot) {
   const bundle = await validateBundle(bundleRoot);
+  const withParser = bundle.manifest.schema === 2;
   const node = path.join(bundle.root, "tools", "node"), rg = path.join(bundle.root, "tools", "rg");
   const version = (executable, args, expected, exact = false) => {
     const probe = runInstallerProbe(executable, args, { env: { PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C" }, encoding: "utf8", timeout: 5000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] });
@@ -17,16 +35,19 @@ export async function smokeCandidate(bundleRoot) {
   };
   version(node, ["--version"], `v${bundle.manifest.tools.node.version}\n`);
   version(rg, ["--no-config", "--version"], `ripgrep ${bundle.manifest.tools.rg.version}`);
-  if (bundle.manifest.schema === 2) version(path.join(bundle.root, "tools", "ast-grep"), ["--version"], "ast-grep 0.45.3\n", true);
+  if (withParser) version(path.join(bundle.root, "tools", "ast-grep"), ["--version"], "ast-grep 0.45.3\n", true);
   const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-candidate-smoke-")));
   fs.chmodSync(temporary, 0o700);
+  // The backend has touched this tree. Process settlement is not authority to
+  // recursively delete unknown contents or repository metadata it may contain.
+  console.error("[fabric:task-root] " + JSON.stringify({ path: temporary, policy: "retain", source: "candidate-smoke" }));
   const workspace = path.join(temporary, "workspace"), data = path.join(temporary, "data"), home = path.join(temporary, "home");
   for (const dir of [workspace, data, home]) fs.mkdirSync(dir, { mode: 0o700 });
+  if (withParser) establishOwnedUnbornGitBoundary(workspace);
   const sentinel = `fabric-smoke-${randomBytes(12).toString("hex")}`;
   fs.writeFileSync(path.join(workspace, "probe.txt"), `${sentinel}\n`, { mode: 0o600 });
-  if (bundle.manifest.schema === 2) fs.writeFileSync(path.join(workspace, "fovea-probe.ts"), "export function foveaInstallerProbe() { return 1; }\n", { mode: 0o600 });
-  try {
-    await new Promise((resolve, reject) => {
+  if (withParser) fs.writeFileSync(path.join(workspace, "fovea-probe.ts"), "export function foveaInstallerProbe() { return 1; }\n", { mode: 0o600 });
+  await new Promise((resolve, reject) => {
       const child = spawn(node, [path.join(bundle.root, "app", "kiro", "mcp-entry.js")], { cwd: workspace,
         env: { HOME: home, KIRO_HOME: path.join(home, ".kiro"), PATH: "/usr/bin:/bin", LANG: "C", LC_ALL: "C", KIRO_FABRIC_BUNDLE_ROOT: bundle.root, KIRO_FABRIC_RUNTIME_ROOT: path.join(bundle.root, "app"), KIRO_FABRIC_EXPECTED_NODE: node, KIRO_FABRIC_RG: rg, KIRO_FABRIC_DATA_ROOT: data }, stdio: ["pipe", "pipe", "pipe"] });
       let buffer = "", diagnostic = "", passed = false, failure, expectedResponse = 1, focusIdentity, snapshotIdentity;
@@ -60,21 +81,21 @@ export async function smokeCandidate(bundleRoot) {
           } else if (frame.id === 3 && !frame.method) {
             try {
               assertInstallerSmokeResult(frame, sentinel); expectedResponse = 4;
-              if (bundle.manifest.schema !== 2) { passed = true; child.stdin.end(); }
+              if (!withParser) { passed = true; child.stdin.end(); }
               else send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "fabric_exec", arguments: { resultFormat: "json", code: 'return {map:await repo.focus({query:"foveaInstallerProbe",maxTokens:256}),health:await repo.status()};' } } });
             } catch (error) { fail(error); }
-          } else if ((frame.id === 4 || frame.id === 5) && !frame.method && bundle.manifest.schema === 2) {
+          } else if ((frame.id === 4 || frame.id === 5) && !frame.method && withParser) {
             try {
               const result = frame.result;
-              if (frame.error || result?.isError || result?.content?.length !== 1 || result.content[0]?.type !== "text" || result.content[0].text.length > 64000) throw new Error("Candidate Fovea checked query failed");
+              if (frame.error || result?.isError || result?.content?.length !== 1 || result.content[0]?.type !== "text" || result.content[0].text.length > 64000) throw new Error("Candidate Navigator checked query failed");
               const value = JSON.parse(result.content[0].text), map = value.map, health = value.health;
-              if (!map || map.status !== "ok" || map.advisory !== true || !/^[a-f0-9]{64}$/u.test(map.sourceSnapshotId) || !map.focusId || health?.engineStarts !== 1 || !health.engineActive) throw new Error("Candidate Fovea engine/state contract failed");
+              if (!map || map.status !== "ok" || map.advisory !== true || !/^[a-f0-9]{64}$/u.test(map.sourceSnapshotId) || !map.focusId || health?.engineStarts !== 1 || !health.engineActive) throw new Error("Candidate Navigator engine/state contract failed");
               if (frame.id === 4) {
-                if (!map.reads?.some(read => read.path === "fovea-probe.ts" && /^[a-f0-9]{64}$/u.test(read.expectedSha256))) throw new Error("Candidate Fovea hash-bound extraction failed");
+                if (!map.reads?.some(read => read.path === "fovea-probe.ts" && /^[a-f0-9]{64}$/u.test(read.expectedSha256))) throw new Error("Candidate Navigator hash-bound extraction failed");
                 focusIdentity = map.focusId; snapshotIdentity = map.sourceSnapshotId; expectedResponse = 5;
                 send({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { name: "fabric_exec", arguments: { resultFormat: "json", code: 'return {map:await repo.dwell({maxTokens:256}),health:await repo.status()};' } } });
               } else {
-                if (map.focusId !== focusIdentity || map.sourceSnapshotId !== snapshotIdentity) throw new Error("Candidate Fovea state lost across checked executions");
+                if (map.focusId !== focusIdentity || map.sourceSnapshotId !== snapshotIdentity) throw new Error("Candidate Navigator state lost across checked executions");
                 expectedResponse = 6; passed = true; child.stdin.end();
               }
             } catch (error) { fail(error); }
@@ -84,7 +105,6 @@ export async function smokeCandidate(bundleRoot) {
       child.once("error", error => { clearTimeout(timer); clearTimeout(killer); reject(error); });
       child.once("close", code => { clearTimeout(timer); clearTimeout(killer); if (failure || !passed || code !== 0) reject(failure ?? new Error(`Candidate shutdown failed (${code}): ${diagnostic.replace(/[\u0000-\u001f\u007f]/gu, " ")}`)); else resolve(undefined); });
       send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: { roots: {}, elicitation: { form: {} } }, clientInfo: { name: "fabric-installer-smoke", version: "1" } } });
-    });
-    return { integrity: "PASS", privateTools: "PASS", backend: "PASS", authenticatedKiro: "NOT TESTED" };
-  } finally { fs.rmSync(temporary, { recursive: true, force: true }); }
+  });
+  return { integrity: "PASS", privateTools: "PASS", backend: "PASS", authenticatedKiro: "NOT TESTED" };
 }

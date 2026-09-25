@@ -7,9 +7,9 @@ import { spawnSync } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { gzipSync } from 'node:zlib';
 import { afterEach, expect, test, vi } from 'vitest';
-import { fixture } from './bundle-fixture.js';
+import { fixture, encodeBundleTar } from './bundle-fixture.js';
 import { canonical, createBundleManifest, validateBundle, readRegular, hashRegular, safePath } from '../scripts/bundle-contract.mjs';
-import { createBundleArchive, extractBundleArchiveBytes, extractLegacyAgentArchiveBytes, encodeBundleTar } from '../scripts/bundle-archive.mjs';
+import { writeBundleArchive, extractBundleArchiveBytes, extractLegacyAgentArchiveBytes } from '../scripts/bundle-archive.mjs';
 import { captureDirectoryAncestry, readDirectoryBounded, readDirectoryBoundedSync, directoryIsEmpty, trustedDirectoryStat } from '../src/installation/filesystem-boundary.mjs';
 import { installerSafety, resolveKiroHome } from '../scripts/install-agent-user.mjs';
 
@@ -28,7 +28,7 @@ test('symlink/.. aliases validate and return precisely the same lexical bundle r
  const alias=parent+'/jump/../bundle',checked=await validateBundle(alias);
  expect(checked.root).toBe(local);expect((await validateBundle(checked.root)).digest).toBe(checked.digest);
  expect(await createBundleManifest(alias,checked.manifest)).toEqual(checked.manifest);
- const archive=path.join(parent,'alias.tar.gz');await createBundleArchive(alias,archive);
+ const archive=path.join(parent,'alias.tar.gz');await writeBundleArchive(alias,archive);
  expect((await extractBundleArchiveBytes(fs.readFileSync(archive),path.join(parent,'out'))).digest).toBe(checked.digest);
  fs.symlinkSync(local,path.join(parent,'direct'));await expect(validateBundle(path.join(parent,'direct'))).rejects.toThrow(/root component/);
  expect(fs.readFileSync(path.join(elsewhere,'bundle','sentinel'),'utf8')).toBe('foreign');
@@ -71,7 +71,7 @@ test('descriptor capture rejects hard-link substitution and in-flight mode chang
  });syncBuiltinESMExports();await expect(readRegular(target,2,{mode:0o600})).rejects.toThrow(/changed/);
 });
 
-async function archive(){const root=await bundle(),parent=temp(),file=path.join(parent,'bundle.tar.gz');await createBundleArchive(root,file);return fs.readFileSync(file);}
+async function archive(){const root=await bundle(),parent=temp(),file=path.join(parent,'bundle.tar.gz');await writeBundleArchive(root,file);return fs.readFileSync(file);}
 function legacyArchive(){
  const raw=encodeBundleTar([{path:'file.json',mode:0o600,data:Buffer.from('fixture')}]);
  raw.write('0000000\0',329);raw.write('0000000\0',337);raw.fill(32,148,156);
@@ -111,7 +111,7 @@ test('rightmost valid USTAR byte split round-trips deep ASCII and UTF-8 names de
  const names=['app/'+'a'.repeat(70)+'/'+'b'.repeat(70)+'/'+'c'.repeat(20)+'/x.js','app/'+'é'.repeat(35)+'/'+'文'.repeat(23)+'/'+'d'.repeat(20)+'/x.js'];
  for(const name of names){expect(safePath(name)).toBe(name);fs.mkdirSync(path.dirname(path.join(root,name)),{recursive:true,mode:0o700});fs.writeFileSync(path.join(root,name),'deep fixture',{mode:0o600});}
  const manifest=await createBundleManifest(root,previous);fs.writeFileSync(path.join(root,'bundle-manifest.json'),canonical(manifest)+'\n');
- await createBundleArchive(root,path.join(parent,'a'));await createBundleArchive(root,path.join(parent,'b'));
+ await writeBundleArchive(root,path.join(parent,'a'));await writeBundleArchive(root,path.join(parent,'b'));
  expect(fs.readFileSync(path.join(parent,'a'))).toEqual(fs.readFileSync(path.join(parent,'b')));
  const listing=spawnSync('tar',['-tzf',path.join(parent,'a')],{encoding:'utf8',timeout:5000});expect(listing.status,listing.stderr).toBe(0);for(const name of names)expect(listing.stdout).toContain(name);
  expect((await extractBundleArchiveBytes(fs.readFileSync(path.join(parent,'a')),path.join(parent,'out'))).digest).toBe(manifest.digest);

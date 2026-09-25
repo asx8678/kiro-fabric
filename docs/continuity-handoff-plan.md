@@ -2,7 +2,7 @@
 
 Status: implemented for review. This is a staged, opt-in foundation, not a replacement for Kiro's compactor.
 
-The subsequent code review found correctness, durability and resource-bound gaps; all nine findings (R1–R9) are implemented with regressions that fail on the prior behavior. The [remediation handoff plan](continuity-remediation-plan.md) now carries the implementation record, verification evidence and the remaining live/platform gates.
+The subsequent code review found correctness, durability and resource-bound gaps; all nine findings (R1–R9) are implemented with regressions that fail on the prior behavior. The remediation handoff plan (archived in Git history) carries the implementation record, verification evidence and the remaining live/platform gates.
 
 ## Scope
 

@@ -557,6 +557,7 @@ type ServerLease = { quiescence: Promise<void> };
 export class KiroMcpProvider implements FabricProvider {
   readonly name = "mcp";
   readonly description = "Approval-gated calls to explicitly configured MCP servers";
+  readonly requirements = { settlement: true };
   readonly #cwd: string;
   readonly #config: FabricMcpConfig;
   readonly #runtimeFactory: McpRuntimeFactory;
@@ -568,6 +569,8 @@ export class KiroMcpProvider implements FabricProvider {
   readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
   readonly #argumentFileBindings = new Map<string, ResolvedStdioArgumentFile[]>();
   #closed = false;
+  #closing: Promise<void> | undefined;
+  #runtimeDisposal: Promise<void> | undefined;
   #revision = 0;
   readonly #observationReservations = new Set<string>();
   readonly #invalidatedReservations = new Set<string>();
@@ -920,29 +923,40 @@ export class KiroMcpProvider implements FabricProvider {
     });
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closing) return this.#closing;
     this.#closed = true;
-    this.#evict();
-    this.#closeController.abort(new Error("MCP provider is closed"));
     const runtime = this.#runtime;
     const creation = this.#runtimeCreation;
-    this.#runtime = undefined;
-    this.#runtimeCreation = undefined;
-    // Do not declare a transport closed or reusable until every contacted
-    // operation is provably quiescent. A stuck runtime intentionally keeps the
-    // provider quarantined instead of enabling a successor with overlapping effects.
-    await Promise.allSettled([...this.#serverTails.values()]);
-    this.#serverTails.clear();
-    this.#snapshotCache.clear();
-    this.#argumentFileBindings.clear();
-    if (runtime) {
-      await runtime.close();
-    } else if (creation) {
-      // A late creation observes #closed in its continuation and closes the
-      // runtime it produced. Do not let a stuck factory make shutdown unbounded.
-      await settleWithin([creation], MCP_CLOSE_GRACE_MS);
-    }
+    // Publish the shared operation before abort listeners or runtime callbacks
+    // can reenter close(). Failure is sticky: never silently retry cleanup.
+    this.#closing = Promise.resolve().then(async () => {
+      // Cancellation can finish a caller before raw transport work settles.
+      // Keep every same-server predecessor owned until that work is quiescent.
+      await Promise.allSettled([...this.#serverTails.values()]);
+      this.#serverTails.clear();
+      this.#snapshotCache.clear();
+      this.#argumentFileBindings.clear();
+      if (runtime) {
+        await this.#disposeRuntime(runtime);
+      } else if (creation && !(await settleWithin([creation], MCP_CLOSE_GRACE_MS))) {
+        // Late creation still disposes its returned runtime, but expiry is not
+        // evidence of successful cleanup and must not authorize replacement.
+        throw new Error("MCP runtime creation cleanup did not settle; provider remains closed");
+      }
+      // Creation intentionally rejects after successful late disposal. Observe
+      // the disposal itself so that rejection cannot hide a real close failure.
+      await this.#runtimeDisposal;
+      this.#runtime = undefined;
+      this.#runtimeCreation = undefined;
+    });
+    this.#evict();
+    this.#closeController.abort(new Error("MCP provider is closed"));
+    return this.#closing;
+  }
+
+  #disposeRuntime(runtime: Runtime): Promise<void> {
+    return this.#runtimeDisposal ??= Promise.resolve().then(() => runtime.close());
   }
 
   #transportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
@@ -1162,15 +1176,21 @@ export class KiroMcpProvider implements FabricProvider {
     if (this.#closed) throw new Error("MCP provider is closed");
     if (this.#runtime) return this.#runtime;
     if (!this.#runtimeCreation) {
-      const creation = this.#runtimeFactory()
-        .then(async (runtime) => {
-          if (this.#closed) {
-            await runtime.close();
-            throw new Error("MCP provider closed during runtime creation");
-          }
+      // Record ownership before invoking an embedding factory, which may throw
+      // synchronously or reenter close(). Never start it after terminal close.
+      const creation = Promise.resolve().then(() => {
+        if (this.#closed) throw new Error("MCP provider is closed");
+        return this.#runtimeFactory();
+      }).then(async (runtime) => {
+        if (this.#closed) {
           this.#runtime = runtime;
-          return runtime;
-        });
+          await this.#disposeRuntime(runtime);
+          this.#runtime = undefined;
+          throw new Error("MCP provider closed during runtime creation");
+        }
+        this.#runtime = runtime;
+        return runtime;
+      });
       this.#runtimeCreation = creation;
       void creation.finally(() => {
         if (this.#runtimeCreation === creation) this.#runtimeCreation = undefined;
@@ -1194,9 +1214,10 @@ export class KiroMcpProvider implements FabricProvider {
       throwIfAbortedOrExpired(signal);
       return await operation(lease);
     } finally {
-      // Caller cancellation may settle after bounded close grace, but the
-      // same-server ownership tail remains until the raw operation itself ends.
-      void lease.quiescence.finally(() => {
+      // A cancelled queued waiter has no raw work of its own, but still owns
+      // its unsettled predecessor. Retiring it early would open a parallel lane
+      // and let close() lose sight of contacted work through the newer tail.
+      void Promise.allSettled([previous, lease.quiescence]).then(() => {
         release();
         if (this.#serverTails.get(server) === tail) this.#serverTails.delete(server);
       });

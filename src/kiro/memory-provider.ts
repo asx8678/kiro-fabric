@@ -18,6 +18,7 @@ const descriptors: FabricActionDescriptor[] = [
 export class KiroMemoryProvider implements FabricProvider {
   readonly name = "memory";
   readonly description = "Private workspace-scoped Fabric memory";
+  readonly requirements = { verifiedWorkspace: true };
   readonly #root: string;
   readonly #namespace: string;
   readonly #maxEntries: number;

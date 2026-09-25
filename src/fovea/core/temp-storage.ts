@@ -4,7 +4,7 @@ import { owned as scoped, context } from "./context.js";
 import { randomUUID } from "node:crypto";
 import { constants, closeSync, fstatSync, lstatSync, openSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import type { Stats } from "node:fs";
-import { lstat, open, opendir, rename, unlink } from "node:fs/promises";
+import { lstat, open, opendir, rename } from "node:fs/promises";
 import { privateTmpdir as tmpdir } from "./context.js";
 import { join } from "node:path";
 
@@ -47,8 +47,9 @@ const dead = (pid: number): boolean => {
 const removeUnchanged = async (path: string, snapshot: Stats): Promise<boolean> => {
   try {
     if (active.has(path) || !same(snapshot, await lstat(path)) || active.has(path)) return false;
-    await unlink(path);
-    return true;
+    // Directory ownership/repository checks belong to the live engine owner.
+    // Without that capability, retain rather than fall back to raw unlink.
+    return await context().cleanupTemporary?.(path, snapshot, () => !active.has(path)) ?? false;
   } catch { return false; }
 };
 

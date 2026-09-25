@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, mkdir, mkdtemp, writeFile, rm, chmod, lstat, realpath } from 'node:fs/promises';
+import { readFile, mkdir, mkdtemp, writeFile, chmod, lstat, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -7,7 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { sha256, TARGETS, checkToolPins } from './bundle-contract.mjs';
 import { captureArtifactTree } from './installer-artifacts.mjs';
 const HOSTS=new Set(['nodejs.org','github.com','release-assets.githubusercontent.com','registry.npmjs.org']);
-/** Bounded upstream acquisition, one overall deadline including redirect bodies.
+/** @internal Bounded upstream acquisition, one overall deadline including redirect bodies.
+ * Production acquirePrivateTools at :42 binds this as its live download seam; the public
+ * function performs real HTTPS, so redirect/timeout/size faults cannot be exercised
+ * offline without it. Not selectable by CLI/environment. Not a root/package export.
  * @param {string} url @param {{sha256:string,size?:number,max?:number}} options */
 export async function downloadVerified(url,{sha256:digest,size,max=96*1024*1024}){
  if(!/^[a-f0-9]{64}$/.test(digest)||!Number.isSafeInteger(max)||max<1||max>192*1024*1024||size!==undefined&&(!Number.isSafeInteger(size)||size<1||size>max))throw Error('Invalid tool download pin');
@@ -26,7 +29,10 @@ export async function downloadVerified(url,{sha256:digest,size,max=96*1024*1024}
  }
  throw Error('Tool redirect limit');
 }
-/** Fixed-member extraction only after whole upstream archive verification.
+/** @internal Fixed-member extraction only after whole upstream archive verification.
+ * Production acquirePrivateTools at :42 binds this as its live extract seam; public
+ * acquisition runs a real /usr/bin/tar subprocess, so fixed-member rejection and exact
+ * byte tests need the injectable definition. Not a root/package export.
  * @param {string} archive @param {string} member @param {number} [max] */
 export function extractPinnedMember(archive,member,max=160*1024*1024){
  if(!/^[A-Za-z0-9._/-]+$/.test(member)||member.split('/').includes('..')||member.startsWith('/'))throw Error('Unsafe fixed upstream member');
@@ -58,7 +64,10 @@ export async function verifyPrivateToolCache(root,pins,target){
  checkToolPins(pins,captured.files,target);
  return captured;
 }
-/** Internal fixture seam for acquisition; never selectable by CLI or environment.
+/** @internal Internal fixture seam for acquisition; never selectable by CLI or environment.
+ * Production acquirePrivateTools at :42 binds this with real download/extract; only this
+ * seam accepts injected fault seams for capture/member/destination cases. Not a
+ * root/package export.
  * @param {string} target @param {string} destination
  * @param {{pins:any,qualification:any,download:typeof downloadVerified,extract:typeof extractPinnedMember}} dependencies */
 export async function acquirePrivateToolsForTest(target,destination,{pins,qualification,download,extract}){
@@ -67,14 +76,16 @@ export async function acquirePrivateToolsForTest(target,destination,{pins,qualif
  const root=await lstat(destination);
  if(!root.isDirectory()||root.isSymbolicLink()||(root.mode&4095)!==448||root.uid!==process.getuid?.()||await realpath(destination)!==path.resolve(destination))throw Error('Unsafe private tool destination');
  const temp=await mkdtemp(path.join(tmpdir(),'fabric-tools-'));
- try{
+ // Retain even on setup failure; report only the path, never task contents.
+console.error("[fabric:task-root] " + JSON.stringify({ path: temp, policy: "retain" }));
+ {
   const files=[];
   for(const tool of Object.keys(pins)){const pin=pins[tool];const archive=await download(pin.url,{...pin,max:tool==='ast-grep'?32*1024*1024:96*1024*1024});if(archive.length!==pin.size||sha256(archive)!==pin.sha256||(pin.integrity&&'sha512-'+createHash('sha512').update(archive).digest('base64')!==pin.integrity))throw Error('Tool archive capture mismatch');const archivePath=path.join(temp,tool+'.tar.gz');await writeFile(archivePath,archive,{mode:384});
    for(const member of pin.members){const bytes=extract(archivePath,member.member,member.size);if(bytes.length!==member.size||sha256(bytes)!==member.sha256)throw Error('Installed tool member mismatch');files.push({path:member.path,bytes,mode:member.path==='tools/'+tool?448:384});}
   }
   for(const file of files){if(!/^(tools\/(node|rg|ast-grep)|notices\/[a-zA-Z0-9._-]+)$/.test(file.path))throw Error('Unsafe pin destination');const parent=path.dirname(path.join(destination,file.path));await mkdir(parent,{recursive:true,mode:448});const s=await lstat(parent);if(!s.isDirectory()||s.isSymbolicLink()||(s.mode&4095)!==448||s.uid!==process.getuid?.())throw Error('Unsafe private tool directory');await writeFile(path.join(destination,file.path),file.bytes,{flag:'wx',mode:file.mode});await chmod(path.join(destination,file.path),file.mode);}
   return {target,tools:pins,bytes:files.reduce((n,f)=>n+f.bytes.length,0),qualification};
- }finally{await rm(temp,{recursive:true,force:true});}
+ }
 }
 if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url)){
  if(process.argv.length!==4)throw Error('Usage: build-private-tools.mjs TARGET DESTINATION');

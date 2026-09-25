@@ -1,8 +1,8 @@
 import { fabricJsonText } from "../runtime/json-budget.js";
 
 const FOVEA_IPC_VERSION = 1;
-export const FOVEA_FRAME_CHARS = 1_000_000;
-export const FOVEA_REQUEST_CHARS = 64_000;
+const FOVEA_FRAME_CHARS = 1_000_000;
+const FOVEA_REQUEST_CHARS = 64_000;
 export interface FoveaParserDescriptor { path: string; sha256: string; version: string; generationRoot?: string | undefined }
 export interface FoveaEngineInitialization { parser: FoveaParserDescriptor; storageRoot: string; gitPath?: string }
 export interface FoveaQuery {
@@ -23,10 +23,10 @@ const epoch = (v: unknown): boolean => Number.isSafeInteger(v) && Number(v) >= 0
 const keys = (v: Record<string, unknown>, names: string[]): boolean => Object.keys(v).every(k => names.includes(k));
 export function encodeFrame(value: FoveaMessage | FoveaResponse): string { return fabricJsonText(value, FOVEA_FRAME_CHARS); }
 export function decodeRequest(raw: unknown): FoveaMessage {
-  if (typeof raw !== "string" || raw.length > FOVEA_REQUEST_CHARS) throw new Error("Fovea request frame limit");
+  if (typeof raw !== "string" || raw.length > FOVEA_REQUEST_CHARS) throw new Error("Navigator request frame limit");
   const v: unknown = JSON.parse(raw);
   fabricJsonText(v, FOVEA_REQUEST_CHARS);
-  if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Fovea protocol identity mismatch");
+  if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Navigator protocol identity mismatch");
   if ((v.type === "cancel" || v.type === "shutdown") && keys(v, ["version", "type", "id"])) return v as unknown as FoveaMessage;
   if (v.type === "retireConversation" && keys(v, ["version", "type", "id", "conversationId", "conversationEpoch"]) && identifier(v.conversationId) && epoch(v.conversationEpoch)) return v as unknown as FoveaMessage;
   if (v.type === "initialize" && keys(v, ["version", "type", "id", "options"]) && record(v.options)) {
@@ -41,16 +41,16 @@ export function decodeRequest(raw: unknown): FoveaMessage {
     const q = v.request;
     if (keys(q, ["conversationId", "conversationEpoch", "rootId", "root", "authorizationEpoch", "operation", "args"]) && identifier(q.conversationId) && epoch(q.conversationEpoch) && identifier(q.rootId) && epoch(q.authorizationEpoch) && typeof q.root === "string" && q.root.length <= 4096 && identifier(q.operation) && record(q.args)) return v as unknown as FoveaMessage;
   }
-  throw new Error("Invalid Fovea private request");
+  throw new Error("Invalid Navigator private request");
 }
 export function decodeResponse(raw: unknown): FoveaResponse {
-  if (typeof raw !== "string" || raw.length > FOVEA_FRAME_CHARS) throw new Error("Fovea response frame limit");
+  if (typeof raw !== "string" || raw.length > FOVEA_FRAME_CHARS) throw new Error("Navigator response frame limit");
   const v: unknown = JSON.parse(raw);
   fabricJsonText(v, FOVEA_FRAME_CHARS);
-  if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Invalid Fovea response identity");
+  if (!record(v) || v.version !== FOVEA_IPC_VERSION || !identifier(v.id)) throw new Error("Invalid Navigator response identity");
   if (v.ok === true && record(v.value) && keys(v, ["version", "id", "ok", "value"])) return v as unknown as FoveaResponse;
   if (v.ok === false && typeof v.error === "string" && v.error.length <= 800 && keys(v, ["version", "id", "ok", "error"])) return v as unknown as FoveaResponse;
-  throw new Error("Invalid Fovea response");
+  throw new Error("Invalid Navigator response");
 }
 
 /** Bounded projection of engine details; optional undefined members are omitted.
@@ -59,26 +59,26 @@ export function projectEngineJson(value: unknown, maxChars = FOVEA_FRAME_CHARS):
   let nodes = 0, chars = 0;
   const active = new Set<object>();
   function walk(v: unknown, depth: number): unknown {
-    if (++nodes > 30_000 || depth > 24) throw new Error("Fovea result structural budget exceeded");
-    if (typeof v === "string") { chars += v.length; if (chars > maxChars) throw new Error("Fovea result budget exceeded"); return v; }
+    if (++nodes > 30_000 || depth > 24) throw new Error("Navigator result structural budget exceeded");
+    if (typeof v === "string") { chars += v.length; if (chars > maxChars) throw new Error("Navigator result budget exceeded"); return v; }
     if (v === null || typeof v === "boolean") return v;
     if (typeof v === "number" && Number.isFinite(v)) return v;
-    if (typeof v !== "object" || !v || active.has(v)) throw new Error("Fovea result is not a JSON tree");
+    if (typeof v !== "object" || !v || active.has(v)) throw new Error("Navigator result is not a JSON tree");
     active.add(v);
     try {
       if (Array.isArray(v)) return v.map(x => walk(x, depth + 1));
-      if (Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null) throw new Error("Fovea result prototype rejected");
+      if (Object.getPrototypeOf(v) !== Object.prototype && Object.getPrototypeOf(v) !== null) throw new Error("Navigator result prototype rejected");
       const out: Record<string, unknown> = {};
       for (const [key, d] of Object.entries(Object.getOwnPropertyDescriptors(v))) {
         if (!d.enumerable) continue;
-        if (!("value" in d)) throw new Error("Fovea result accessor rejected");
+        if (!("value" in d)) throw new Error("Navigator result accessor rejected");
         if (d.value !== undefined) out[key] = walk(d.value, depth + 1);
       }
       return out;
     } finally { active.delete(v); }
   }
   const result = walk(value, 0);
-  if (!record(result)) throw new Error("Fovea result must be an object");
+  if (!record(result)) throw new Error("Navigator result must be an object");
   fabricJsonText(result, maxChars);
   return result;
 }

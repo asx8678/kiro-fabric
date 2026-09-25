@@ -1,7 +1,7 @@
 import os from "node:os";
 import { execFileSync } from "node:child_process";
 
-export const normalizeArchitecture = (arch) => ({ aarch64: "arm64", x86_64: "x64", arm64: "arm64", x64: "x64" })[arch];
+const normalizeArchitecture = (arch) => ({ aarch64: "arm64", x86_64: "x64", arm64: "arm64", x64: "x64" })[arch];
 export const compareVersions = (a, b) => {
   const left = String(a).split(/[.-]/u).slice(0, 3).map(Number), right = String(b).split(/[.-]/u).slice(0, 3).map(Number);
   if (left.some(n => !Number.isSafeInteger(n)) || right.some(n => !Number.isSafeInteger(n))) throw new Error("Unsupported system version");

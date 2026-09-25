@@ -3,8 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { runBounded } from './fovea-capability-probe.mjs';
+/** @internal Qualification-only: the development runner's existing hard
+ * ceiling asserted by native-control-cases. Not a production deadline. */
 export const SESSION_TIMEOUT_MS = 300000; // Development runner's existing hard ceiling; not a production deadline.
+/** @internal Qualification-only: ordered native session phases asserted by
+ * native-control-cases. Not a runtime/package API. */
 export const SESSION_PHASES = ['initial', 'post-compact', 'post-swap', 'post-clear', 'detach', 'post-detach'];
+/** @internal Qualification-only: synthetic guest program generator checked by
+ * native-control-cases. Not a runtime/package API. */
 export function sessionProgram(marker, phase) {
   if (!/^[a-z0-9-]{1,80}$/u.test(marker) || !SESSION_PHASES.includes(phase)) throw Error('Invalid session probe phase');
   const start = `async function attempt(run: () => Promise<JsonValue>): Promise<JsonObject> { try { return {ok:true,value:await run()}; } catch(error) { return {ok:false,error:String(error)}; } }
@@ -39,6 +45,8 @@ function acknowledged(frames, after, before, predicate) {
   const responses = frames.filter((f, i) => i > index && i < before && f?.dir === 'in' && !f.msg?.method && f.msg?.id === requests[0].msg.id);
   return responses.length === 1 && !responses[0].msg.error && responses[0].msg.result !== undefined ? responses[0].msg.result : null;
 }
+/** @internal Qualification-only: transition oracle asserted directly by
+ * native-control-cases. Not a runtime/package API. */
 export function summarizeSessionTransitions({ frames, runs, plans }) {
   const bounds = plans.map(p => promptBounds(frames, p.marker));
   const complete = runs.length === SESSION_PHASES.length && runs.every((r, i) => r.completed === true && r.exactCall === true && r.phase === SESSION_PHASES[i]) &&
@@ -83,6 +91,8 @@ export function sessionProbeExit(report) {
   return report.diagnosticCompleted !== true ? 2 : report.nativeSessionIsolation?.status === 'failed' ? 3 : 0;
 }
 
+/** @internal Qualification-only: expect-driver text asserted by
+ * native-control-cases. Not a runtime/package API. */
 export function sessionDriver(profile, alternate) {
   if (![profile, alternate].every(p => /^[a-z-]+$/u.test(p))) throw Error('Invalid diagnostic profile name');
   return `set timeout 45

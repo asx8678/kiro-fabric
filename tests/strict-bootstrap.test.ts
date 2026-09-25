@@ -22,7 +22,7 @@ vi.mock("@modelcontextprotocol/sdk/server/index.js", () => ({ Server: class {
 } }));
 vi.mock("@modelcontextprotocol/sdk/server/stdio.js", () => ({ StdioServerTransport: class {} }));
 
-import { AGENT_PROMPT } from "../scripts/agent-profile.mjs";
+import { generateAgentProfile } from "../scripts/agent-profile.mjs";
 import { BUNDLED_GUIDANCE } from "../src/kiro/generated-guidance.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { createKiroMcpServer } from "../src/kiro/mcp-server.js";
@@ -106,9 +106,15 @@ describe("strict checked workspace bootstrap", () => {
     const expectedPath = location === "absent" ? undefined : location === "root" ? "README.md" : "app/README.md";
     if (location === "nested") fs.mkdirSync(path.join(root, "app"));
     if (expectedPath) fs.writeFileSync(path.join(root, expectedPath), "# Discovered project\n");
-    expect(AGENT_PROMPT).toContain("compose mechanical dependencies in one execution");
-    expect(AGENT_PROMPT).toContain("use Fovea first inside fabric_exec without being asked");
-    expect(BUNDLED_GUIDANCE.skill).toContain("## Fovea-first code navigation");
+    // The standing prompt is generated publicly; the old private AGENT_PROMPT
+    // constant is gone. Minimal profile inputs still exercise the real generator.
+    const profilePrompt = generateAgentProfile({
+      nodePath: path.resolve("/runtime/node"), runtimeRoot: path.resolve("/runtime/app"),
+      dataRoot: path.resolve("/runtime/data"), skillPath: path.resolve("/runtime/skills/SKILL.md"),
+    }).prompt;
+    expect(profilePrompt).toContain("compose mechanical dependencies in one execution");
+    expect(profilePrompt).toContain("use Navigator first inside fabric_exec without being asked");
+    expect(BUNDLED_GUIDANCE.skill).toContain("## Navigator-first code navigation");
     const code = BUNDLED_GUIDANCE.review.match(/```ts\n(\/\/ Recipe: initial review evidence\n[\s\S]*?)\n```/)?.[1];
     expect(code).toBeDefined();
     const first = await f.call(code!);

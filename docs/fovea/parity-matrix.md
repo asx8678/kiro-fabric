@@ -1,4 +1,4 @@
-# Fovea parity matrix
+# Navigator parity matrix
 
 Pinned reference: monotykamary/pi-fovea@b594483868d27b7eb37a9b185c59ce812f8a9c01.
 A representative fixture pass is not complete-family qualification. Blocked rows never count as passed.

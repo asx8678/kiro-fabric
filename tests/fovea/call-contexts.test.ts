@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { FOVEA_CALL_COLD_MS, FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS, FoveaCallContexts } from '../../src/fovea/call-context.js';
+import { FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS, FoveaCallContexts } from '../../src/fovea/call-context.js';
 import { FabricDeadline } from '../../src/runtime/deadline.js';
+
+// Test-local mirror of the production cold floor (src/fovea/call-context.ts,
+// intentionally module-private). Kept as an independent literal so this test
+// still asserts the 6s floor instead of deriving it from production constants.
+const FOVEA_CALL_COLD_MS = 6_000;
 
 describe('disposable same-call Fovea notices', () => {
   it('isolates cancelled notices from the next invocation and does not fill the sync outbox', () => {

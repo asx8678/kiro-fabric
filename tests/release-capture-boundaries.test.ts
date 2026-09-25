@@ -7,7 +7,7 @@ import { generateKeyPairSync, sign } from 'node:crypto';
 import type https from 'node:https';
 import { afterEach, expect, test, vi } from 'vitest';
 import { canonical, sha256, compatibilityFor } from '../scripts/bundle-contract.mjs';
-import { releaseSigningBytes, verifyReleaseForTest, verifyRelease, verifyReleaseSidecarsCapturedForTest, verifyReleaseSidecarsCaptured, checkReleaseSbom } from '../scripts/release-trust.mjs';
+import { releaseSigningBytes, verifyReleaseForTest, verifyRelease, captureSidecars, verifyReleaseSidecarsCaptured, checkReleaseSbom } from '../scripts/release-trust.mjs';
 import { downloadHttpsForTest, discoverReleaseForTest, discoverRelease, RELEASE_API } from '../scripts/release-download.mjs';
 
 const roots:string[]=[];
@@ -53,7 +53,7 @@ function local(){
  return {...f,root,archive};
 }
 test('local signed sidecar capture binds and returns both artifacts; pathname changes cannot change returned bytes',async()=>{
- const f=local(),capture=await verifyReleaseSidecarsCapturedForTest(f.archive,f.publicKey,{target:'linux-x64'});
+ const f=local(),capture=await captureSidecars(f.archive,(m,s,e)=>verifyReleaseForTest(m,s,f.publicKey,e),{target:'linux-x64'});
  expect(capture.metadata).toEqual(f.metadata);expect(capture.sbomBytes).toEqual(f.sbomBytes);expect(capture.archiveBytes).toEqual(f.archiveBytes);
  fs.writeFileSync(f.archive+'.spdx.json','changed');fs.writeFileSync(f.archive,'changed');
  expect(capture.sbomBytes).toEqual(f.sbomBytes);expect(capture.archiveBytes).toEqual(f.archiveBytes);
@@ -68,12 +68,12 @@ test.each(['missing','short','same-size','oversized','symlink','hardlink'])('loc
  if(kind==='oversized')fs.appendFileSync(sbom,'x');
  if(kind==='symlink'){fs.renameSync(sbom,sbom+'.original');fs.symlinkSync(sbom+'.original',sbom);}
  if(kind==='hardlink')fs.linkSync(sbom,sbom+'.link');
- const error=await verifyReleaseSidecarsCapturedForTest(f.archive,f.publicKey).then(()=>null,e=>e as Error);
+ const error=await captureSidecars(f.archive,(m,s,e)=>verifyReleaseForTest(m,s,f.publicKey,e),{}).then(()=>null,e=>e as Error);
  expect(error).toBeInstanceOf(Error);expect(error!.message).toMatch(/SBOM|oversized|Unsafe|spdx[.]json/);
 });
 test('signature failure and production refusal precede artifact access; fixture keys never enable production',async()=>{
  const f=local();fs.unlinkSync(f.archive);fs.unlinkSync(f.archive+'.spdx.json');fs.writeFileSync(f.archive+'.release.sig',Buffer.alloc(89));
- await expect(verifyReleaseSidecarsCapturedForTest(f.archive,f.publicKey)).rejects.toThrow(/Signature/);
+ await expect(captureSidecars(f.archive,(m,s,e)=>verifyReleaseForTest(m,s,f.publicKey,e),{})).rejects.toThrow(/Signature/);
  expect(()=>verifyRelease(f.metadataBytes,f.signatureBytes)).toThrow(/blocked/);
  await expect(verifyReleaseSidecarsCaptured('/nonexistent/fixture')).rejects.toThrow(/blocked/);
  await expect(discoverRelease({target:'linux-x64'})).rejects.toThrow(/trust-root blocked/);

@@ -1,6 +1,6 @@
 # src/fovea
 
-Native Fovea subsystem for Kiro Fabric.
+Native Navigator subsystem for Kiro Fabric.
 
 This directory is the behavior-preserving TypeScript port of `pi-fovea`
 (`b594483868d27b7eb37a9b185c59ce812f8a9c01`) with the hosting/state/scheduling/
@@ -23,7 +23,7 @@ Implemented responsibilities (qualification and remaining gaps: `docs/fovea/impl
 - `observations.ts`  compact trusted host-operation events
 - `delivery.ts`      result/context preparation and emission state
 - `result-store.ts`  immutable bounded packets and continuations
-- `config.ts`        separate versioned Fovea configuration
+- `config.ts`        separate versioned Navigator configuration
 - `host.ts` / `engine-process.ts` sanitized health and recovery status
 - `provenance-journal.ts` bounded worktree-scoped committed transitions; no private navigation sharing
 

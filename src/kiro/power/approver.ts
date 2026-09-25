@@ -41,7 +41,10 @@ const isSecretKey = (key: string): boolean => SECRET_KEY.test(key.replace(/[_\-\
 const bounded = (value: string, maximum = 1_500): string => value.replace(/[\u0000-\u001f\u007f]/gu, " ").slice(0, maximum);
 const APPROVAL_MESSAGE_CHARS = 1_500;
 
-const fabricApprovalIdentity = (action: ResolvedFabricAction, args: Record<string, unknown>) => {
+const fabricApprovalIdentity = (
+  action: ResolvedFabricAction,
+  args: Record<string, unknown>,
+) => {
   const canonical = fabricJsonText({ schemaVersion: 1, ref: action.ref, risk: action.risk, args });
   return {
     digest: createHash("sha256").update("kiro-fabric-approval-v1\0").update(canonical).digest("hex"),
@@ -144,30 +147,36 @@ const summarize = (args: Record<string, unknown>, cwd: string): string => {
 };
 
 export class KiroPowerFabricApprover implements FabricExecutionApprover {
-  constructor(readonly config: FabricApprovalConfig, readonly elicitation: KiroPowerApprover, readonly cwd: string) {}
-  async approve(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): Promise<void> {
+  constructor(
+    readonly config: FabricApprovalConfig,
+    readonly elicitation: KiroPowerApprover,
+    readonly cwd: string,
+  ) {}
+  async approve(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const plan = this.prepareApproval(action, args, signal);
     if (plan.decision === "deny") throw new Error(plan.reason);
     if (plan.decision === "ask") await plan.prompt();
   }
 
-  prepareApproval(action: ResolvedFabricAction, args: Record<string, unknown>, signal?: AbortSignal): FabricApprovalPlan {
+  prepareApproval(
+    action: ResolvedFabricAction,
+    args: Record<string, unknown>,
+    signal?: AbortSignal,
+  ): FabricApprovalPlan {
     signal?.throwIfAborted();
     const mode = this.config[action.risk];
-    if (mode === "allow") return { decision: "allow" };
     if (mode === "deny") return { decision: "deny", reason: `${action.ref} is denied by Fabric policy` };
-    if (mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
+    if (mode !== "allow" && mode !== "ask") return { decision: "deny", reason: `${action.ref} has invalid Fabric approval policy` };
+    if (mode === "allow") return { decision: "allow" };
     const identity = fabricApprovalIdentity(action, args);
     const localReview = action.provider === "local" && (action.risk === "write" || action.risk === "execute")
       ? typeof args.review === "string" ? args.review : (() => { throw new Error("Local effect lacks canonical review material"); })()
       : undefined;
-    // Web previews must show the exact outbound query/URL, not a redacted
-    // URL whose hidden parameters could be mistaken for a harmless request.
-    // Provider preparation rejects recognized secrets before this point.
-    const webReview = action.provider === "web" && (action.name === "search" || action.name === "open")
-      ? `Exact web arguments (sent to external sites): ${fabricJsonText(args)}`
-      : undefined;
-    const exactReview = localReview ?? webReview;
+    const exactReview = localReview;
     // Capture review/identity now, without prompting or re-reading policy later.
     const ref = action.ref;
     const request = {

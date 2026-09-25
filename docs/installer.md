@@ -12,13 +12,17 @@ Successful stale-lock reclamation requires inode-pinned access. Linux uses `/pro
 
 Native macOS ARM64 component tests now exercise real installer SIGKILL, concurrent reclamation, partial-claim preservation and transaction replay. This is not full release/platform certification. Unknown partial claims, changed boot evidence, unavailable helpers and indeterminate ownership still preserve the lock/journal and fail closed. Do not delete recovery evidence blindly.
 
+### Browser integration removed
+
+New generations no longer ship the browser runtime, skill pack or browser operator commands. No browser executable is required. Obsolete browser/web configuration fails with migration instructions; existing user profiles and data are not deleted automatically. See [configuration migration](configuration.md#privacy-compatibility-after-browser-removal).
+
 ### Linux and macOS source prerequisites
 
 See [Linux validation](linux-validation.md) for kernel suffix support, bounded cleanup/search/startup contracts and reproducible native checks. Contract coverage is not release qualification.
 
 | System | Architectures | Minimum system |
 | --- | --- | --- |
-| Linux | x64, ARM64 | glibc 2.34 on x64 (Fovea parser), 2.28 on ARM64; kernel 4.18; musl/Alpine is not supported |
+| Linux | x64, ARM64 | glibc 2.34 on x64 (Navigator parser), 2.28 on ARM64; kernel 4.18; musl/Alpine is not supported |
 | macOS | Intel x64, Apple Silicon ARM64 | macOS 13.5 |
 
 Use Bash (the macOS system Bash is sufficient), Git, Node >=24, pnpm **11.20.0**, tar/gzip, and a trusted Kiro CLI >=2.21.1 with v3 support on PATH. Development also requires ripgrep. Authenticate Kiro separately if needed with `kiro-cli login`; do not run the installer with sudo. The source installer and generated release bootstrap select native ARM64 on Apple Silicon even when launched under Rosetta. Native macOS/ARM execution qualification is still pending.
@@ -71,7 +75,7 @@ configuration-backup root. After bundle verification and before activation, the
 installer reports the exact target version, private Node/ripgrep versions and
 whether this is a fresh install, upgrade, downgrade, same-version replacement or
 already-installed generation. The guided frontend, `node scripts/install-tui.mjs`,
-shows the same version, the full resolved destination paths, Fovea's private parser,
+shows the same version, the full resolved destination paths, Navigator's private parser,
 and the skills/runtime preservation policy before confirmation. `--kiro-home`
 takes precedence over `KIRO_HOME`, which takes precedence over `~/.kiro`.
 An alternative such as `--kiro-home "$HOME/.kiro-fabric"` selects the entire Kiro
@@ -122,7 +126,7 @@ Agent staging and complete bundles reuse only independently validated generation
 
 `pnpm run agent:cache:gc` previews checkout-cache collection; `node scripts/installer-cache.mjs --apply` opts into deletion. `--keep COUNT` defaults to two generations per kind/target and `--max-bytes BYTES` to 2 GiB of validated retained artifacts. This is a non-destructive preview, not the manager's strictly read-only `--dry-run`: a transient coordination gate is used. Only recorded, independently verified `.tmp` Agent/bundle/private-tool generations are eligible. Current pointers, referenced/current tool pins, unknown or modified files and all installed data are preserved; active entries can exceed the requested budget. Archives are not pruned.
 
-Builders and the source frontend hold per-consumer leases through final artifact use, including activation. GC refuses any lease, including stale or malformed evidence; no age/PID cleanup or force bypass exists. Interrupted gates/leases require inspection. `pnpm run test:installer` runs the centralized offline installer acceptance suite; native/authenticated release qualification is separate.
+Builders and the source frontend hold per-consumer leases through final artifact use, including activation. GC refuses any lease, including stale or malformed evidence; no age/PID cleanup or force bypass exists. Interrupted gates/leases require inspection. The retired `pnpm run test:installer` command no longer exists; the maintained local installer acceptance cases run via `pnpm run verify:offline installer` (local-development coverage only, currently partial, and not release qualification). Native/authenticated release qualification is separate.
 
 The selected global home is explicit --kiro-home, supplied KIRO_HOME, then the current user's home/.kiro. Empty/relative/control-bearing and unsafe destinations fail. Installer cwd is never stored as the coding workspace. The generated profile explicitly authorizes Kiro's per-session MCP launch directory when client roots are absent. Install/update also configure a backed-up bash/zsh default-agent/workspace-handoff block (opt out with --no-shell-integration). No default-agent setting or authentication changes occur.
 
@@ -243,10 +247,16 @@ foreign profiles, and other configuration remain covered. Ordinary homes have
 no inferred source exclusions, and excluded source artifacts are not restorable
 from a configuration backup.
 
-- Backup failure aborts before backend activation: a partial backup is never
-  trusted or left behind. Explicitly approved permission preparation may already
-  have tightened the home/agents directories; failure diagnostics retain these
-  preparation changes rather than claiming that nothing changed.
+- Backup failure aborts before backend activation but **preserves all produced
+  evidence**. Once destination creation is attempted, errors report its path as
+  `configurationBackup: { path, status: "unverified" }`, with the underlying
+  failure retained as the cause. The path may exist even if mkdir/write/close
+  reported failure. Explicitly approved permission preparation may also have
+  happened; failure is not a no-change guarantee.
+- `backup-manifest.json` is a reserved top-level source name: it is refused before
+  copying. The bounded manifest is published exclusively after payload sync,
+  never by replacement rename. The exact completed tree is verified before
+  success. There is no failed-copy rollback deletion.
 - Backups never follow symlinks; links are recreated verbatim on restore.
 - Directories are 0700, backup files are read-only owner modes; a tampered
   backup fails verification instead of restoring.
@@ -254,21 +264,28 @@ from a configuration backup.
   configuration files are recorded as `skipped`, not copied. Managed controls,
   unsafe ownership/modes, and unexpected filesystem changes still fail closed.
   Skipped entries are not restorable from that backup.
-- Retention targets 20 verified backups, always reserving a slot for the fresh
-  returned destination (including same-second names and clock rollback). Other
-  verified backups are ordered by their timestamp-shaped names. A name alone is
-  not ownership: retention checks the same-home manifest, exact tree inventory,
-  ownership, modes, link counts and content hashes before deletion. Unknown,
-  corrupt, modified, foreign-owned or unexpectedly linked material is preserved
-  and does not count toward the target. Recorded symlinks are checked without
-  following them; skipped hardlinks must remain absent from the snapshot.
-- Housekeeping examines at most 256 root entries, with a shared 20,000-entry /
-  256 MiB read budget, a 4 MiB manifest limit, and the normal file/depth bounds.
-  Exceeding a bound preserves evidence rather than forcing the retention target;
-  disk usage can therefore grow beyond 20 backups. Retention is best-effort and
-  never deletes the fresh backup. Remove ambiguous material only after review.
-- The JSON result reports the backup as `configurationBackup`, and human
-  output prints `Prior configuration backup: <path>`.
+- **Preserve-all policy:** creation never prunes older backups, even beyond the
+  former 20-backup threshold. Validity is not deletion authority. Repository
+  metadata, unknown snapshots and failed attempts remain untouched. Storage can
+  grow without a retention cap; plan capacity and preserve recovery evidence.
+- Listing now validates the same-home manifest and exact snapshot closure,
+  ownership, modes, link counts and content hashes before returning `complete`.
+  It skips invalid snapshots and never follows manifest symlinks. Global listing
+  limits are explicit: 256 root entries, 20,001 physical enumerated entries
+  (including manifests) and 256 MiB of charged reads, with a 4 MiB per-manifest limit. Exhaustion throws instead of
+  silently returning an incomplete or empty list. These are listing limits, not
+  creation/restore caps: an explicit valid larger backup can still be restored
+  under the existing per-backup bounds.
+- `complete` means verified current contents, **not** proof that an earlier
+  creation call acknowledged success or all fsyncs completed. A failed sync can
+  leave fully valid bytes; they may pass subsequent verification. Partial or
+  malformed copies fail exact verification before restore writes. This is not
+  an atomic snapshot or hostile-filesystem race-containment guarantee. A manifest
+  and its own hashes establish consistency, not independent author authenticity.
+- Successful results retain `configurationBackup` and the human label
+  `Prior configuration backup: <path>`. Unverified errors instead print
+  `Unverified configuration backup evidence: <path>`. Inspect such evidence
+  before retrying; do not treat the failure detail as a successful backup receipt.
 
 The legacy `install-agent-user.mjs` update path likewise retains **all** owned
 runtime generations: an active session may still open files from any older
@@ -305,6 +322,8 @@ New sessions adopt the updated profile. Existing sessions keep their exact retai
 Uninstall deregisters the verified agent and publishes retired ownership, retaining data, immutable generations and the verified management launcher for doctor, repeat uninstall or explicit reinstall. It does not claim complete disk erasure. Foreign/modified files are preserved and reported as conflicts. `--purge-data` is explicit but currently **refused**: complete process-inactivity visibility is not qualified. No negative process snapshot is treated as proof that deleting live data is safe.
 
 Schema-2 legacy trees are verified; schema-1 limited evidence remains explicitly unverified where appropriate. Migration preserves old runtimes and shared skills at their original paths. Legacy code cannot participate in the new startup fence, so automatic legacy/data deletion is prohibited.
+
+After macOS device renumbering, a schema-1 profile snapshot can be verified through a schema-2 snapshot from the same installation only when both exact historical directory device/inode pairs match and both saved volume UUIDs verify against the live directories. All snapshot ownership, content and profile bindings must pass first. This corroboration leaves original snapshots unchanged; legacy-only histories, null-volume evidence, changed directories and transaction/candidate journals retain their strict identity checks.
 
 ## Trust and recovery
 

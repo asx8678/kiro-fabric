@@ -5,7 +5,10 @@ import { spawnSync } from 'node:child_process';
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 /** Build-time only. Never imported by the runtime or installed manager. No
- * downloads, runtime compiler discovery or guest/environment-selected helper. */
+ * downloads, runtime compiler discovery or guest/environment-selected helper.
+ * @internal Qualification-only export: native C build tests compile isolated
+ * test binaries through this exact function instead of duplicating compiler
+ * discovery. Not a runtime/package API. */
 export function compileSourceBinding(root, output) {
   if (!['darwin', 'linux'].includes(process.platform)) throw Error('Unsupported native source build host');
   const headers = [path.resolve(path.dirname(fs.realpathSync(process.execPath)), '../include/node'),

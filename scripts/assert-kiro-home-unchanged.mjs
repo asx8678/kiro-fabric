@@ -7,6 +7,8 @@ import path from "node:path";
 
 if (process.argv.length < 4) throw new Error("Usage: assert-kiro-home-unchanged <command> <args...>");
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "kiro-home-sentinel-"));
+// Retain even on setup failure; report only the path, never task contents.
+console.error("[fabric:task-root] " + JSON.stringify({ path: temporary, policy: "retain" }));
 const home = path.join(temporary, "home");
 const kiroHome = path.join(temporary, "kiro-home");
 const toolCache = path.join(temporary, "tool-cache");
@@ -55,7 +57,7 @@ const result = spawnSync(process.argv[2], process.argv.slice(3), {
   },
 });
 const after = { home: snapshot(home), kiroHome: snapshot(kiroHome) };
-fs.rmSync(temporary, { recursive: true, force: true });
+// Preserve snapshots, repositories and unknown child-created state on every outcome.
 if (before.home !== after.home) throw new Error("quality command modified HOME");
 if (before.kiroHome !== after.kiroHome) throw new Error("quality command modified KIRO_HOME");
 if (result.error) throw result.error;

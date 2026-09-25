@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 import { openKiroMemory } from "../src/kiro/memory.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
-import { StateCommitAcknowledgementError, StateProvider } from "../src/providers/state-provider.js";
+import { fabricCommitAcknowledgement } from "../src/protocol.js";
+import { StateProvider } from "../src/providers/state-provider.js";
 import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 
 const roots: string[] = [];
@@ -15,6 +16,7 @@ afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) remo
 
 const inject = (method: "write" | "permissions" | "sync" | "close", matches: (file: string) => boolean) => {
   let target: number | undefined;
+  let targetCloses = 0;
   const open = fs.openSync;
   vi.spyOn(fs, "openSync").mockImplementation((file, flags, mode) => {
     const fd = open(file, flags, mode);
@@ -33,8 +35,9 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
     vi.spyOn(fs, "fsyncSync").mockImplementation((fd) => { if (fd === target) fail(); sync(fd); });
   } else {
     const close = fs.closeSync;
-    vi.spyOn(fs, "closeSync").mockImplementation((fd) => { close(fd); if (fd === target) fail(); });
+    vi.spyOn(fs, "closeSync").mockImplementation((fd) => { close(fd); if (fd === target) { targetCloses += 1; fail(); } });
   }
+  return { targetCloses: () => targetCloses };
 };
 
 const temporaryWriter = async (kind: "memory" | "mcp") => {
@@ -253,10 +256,20 @@ describe("operation-owned storage failure cleanup", () => {
       else if (operation === "close") store.close();
       else store.write(operation === "size eviction" ? "next" : "new");
     };
+    // store.close() wraps the retained deletion failure in an AggregateError,
+    // while per-operation removal still throws the exact cause.
+    const expectRetainedFailure = (): void => {
+      if (operation === "close") {
+        let caught: unknown;
+        try { attempt(); } catch (error) { caught = error; }
+        expect(caught).toBeInstanceOf(AggregateError);
+        expect((caught as AggregateError).errors).toContain(failure);
+      } else expect(attempt).toThrow(failure);
+    };
     try {
-      expect(attempt).toThrow(failure);
+      expectRetainedFailure();
       // A persistent failure must not silently free a slot, quota, or shutdown.
-      expect(attempt).toThrow(failure);
+      expectRetainedFailure();
       expect(fs.readFileSync(path.join(root, id), "utf8")).toBe("old");
       expect(fs.readdirSync(root).sort()).toEqual([id, otherId].sort());
       vi.restoreAllMocks();
@@ -284,11 +297,31 @@ describe("operation-owned storage failure cleanup", () => {
   it.each(["write", "permissions", "sync", "close"] as const)("cleans only its failed artifact after %s failure without charging quota", (method) => {
     const root = temporary(); const store = createKiroArtifactStore({ root, maxArtifacts: 3, maxTotalChars: 10 });
     const existing = store.write("old");
-    inject(method, (file) => path.basename(file).startsWith("ka_") && path.basename(file) !== existing);
+    const injected = inject(method, (file) => path.basename(file).startsWith("ka_") && path.basename(file) !== existing);
     expect(() => store.write("new")).toThrow("owned-file failure");
+    if (method === "close") {
+      // The descriptor was really released, then close reported failure: the
+      // store must not retry a possibly reused descriptor.
+      expect(injected.targetCloses()).toBe(1);
+    }
     vi.restoreAllMocks();
+    // Only the definitely-owned partial path is removed; the old artifact and
+    // the unrelated owner are untouched.
     expect(fs.readdirSync(root)).toEqual([existing]);
     expect(store.read(existing).text).toBe("old");
+    if (method === "close") {
+      // An uncertain fd close poisons acquisition: no new file is opened, the
+      // failed descriptor is never closed again, and retirement keeps reporting it.
+      let rejected: unknown;
+      try { store.write("1234567"); } catch (error) { rejected = error; }
+      expect(rejected).toBeInstanceOf(AggregateError);
+      expect((rejected as AggregateError).message).toContain("uncertain");
+      expect(fs.readdirSync(root)).toEqual([existing]);
+      expect(injected.targetCloses()).toBe(1);
+      expect(() => store.close()).toThrow("artifact store cleanup failed");
+      expect(fs.readdirSync(root)).toEqual([]);
+      return;
+    }
     const next = store.write("1234567");
     expect(store.read(next).text).toBe("1234567");
     store.close(); expect(fs.readdirSync(root)).toEqual([]);
@@ -316,8 +349,9 @@ describe("operation-owned storage failure cleanup", () => {
       rename(from, to); controller.abort(new Error("cancelled after commit"));
     });
     const error = await provider.invoke("set", { key: "fixture", value: "committed" }, { cwd: root, signal: controller.signal }).catch((error: unknown) => error);
-    expect(error).toBeInstanceOf(StateCommitAcknowledgementError);
-    expect(error).toMatchObject({ committed: true, revision: 1 });
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toMatchObject({ name: "StateCommitAcknowledgementError", committed: true, revision: 1 });
+    expect(fabricCommitAcknowledgement(error)).toEqual({ version: 1, operation: "set" });
     vi.restoreAllMocks();
     await expect(provider.invoke("get", { key: "fixture" }, { cwd: root })).resolves.toMatchObject({ value: "committed", revision: 1 });
     await expect(provider.invoke("set", { key: "fixture", value: "retry", expectedRevision: 0 }, { cwd: root })).rejects.toThrow("revision conflict");

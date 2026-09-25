@@ -117,7 +117,7 @@ const resolveKiroCli = (pathValue = process.env.PATH ?? "", explicit = process.e
 };
 
 /** @param {string | undefined} requested @param {string | undefined} [apiKey] @returns {"api-key" | "subscription"} */
-export const resolveRealClientAuthMode = (requested, apiKey = process.env.KIRO_API_KEY) => {
+const resolveRealClientAuthMode = (requested, apiKey = process.env.KIRO_API_KEY) => {
   const hasApiKey = typeof apiKey === "string" && apiKey.trim().length > 0;
   const mode = requested ?? (hasApiKey ? "api-key" : undefined);
   if (mode !== "api-key" && mode !== "subscription") {
@@ -139,7 +139,7 @@ const boundedLoginValue = (name, value) => {
 };
 
 /** @param {{ license?: string, identityProvider?: string, region?: string }} [options] @returns {string[]} */
-export const subscriptionLoginArgv = ({ license = "free", identityProvider, region } = {}) => {
+const subscriptionLoginArgv = ({ license = "free", identityProvider, region } = {}) => {
   if (license !== "free" && license !== "pro") throw new Error("--subscription-license must be free or pro");
   const provider = identityProvider === undefined ? undefined : boundedLoginValue("--identity-provider", identityProvider);
   const selectedRegion = region === undefined ? undefined : boundedLoginValue("--region", region);
@@ -199,7 +199,7 @@ const runInherited = (executable, argv, options = {}) => {
 const UNAUTHENTICATED_WHOAMI = /not logged in|unauthenticated|login required/iu;
 
 /** @param {{ error?: Error | null, status?: number | null, stdout?: Buffer | null, stderr?: Buffer | null } | null | undefined} result */
-export const subscriptionWhoamiAuthenticated = (result) => {
+const subscriptionWhoamiAuthenticated = (result) => {
   if (!result || result.error || result.status !== 0) return false;
   const combined = Buffer.concat([result.stdout ?? Buffer.alloc(0), result.stderr ?? Buffer.alloc(0)]).toString("utf8");
   return !UNAUTHENTICATED_WHOAMI.test(combined);
@@ -534,7 +534,7 @@ const canonicalValue = (value) => {
   throw new Error("qualification value is not JSON-serializable");
 };
 
-export const qualificationValueDigest = (value) => hash(Buffer.from(JSON.stringify(canonicalValue(value))));
+const qualificationValueDigest = (value) => hash(Buffer.from(JSON.stringify(canonicalValue(value))));
 
 /** @param {unknown} value @returns {Record<string, unknown> | undefined} */
 const recordValue = (value) => typeof value === "object" && value !== null && !Array.isArray(value)
@@ -543,7 +543,7 @@ const recordValue = (value) => typeof value === "object" && value !== null && !A
 
 const jsonRpcIdKey = (value) => `${typeof value}:${JSON.stringify(value)}`;
 
-export const parseAcpJsonlFrames = (bytes, startOffset = 0, endOffset = bytes.length) => {
+const parseAcpJsonlFrames = (bytes, startOffset = 0, endOffset = bytes.length) => {
   if (!Buffer.isBuffer(bytes) || !Number.isSafeInteger(startOffset) || !Number.isSafeInteger(endOffset) ||
       startOffset < 0 || endOffset < startOffset || endOffset > bytes.length) {
     throw new Error("Kiro ACP recording byte interval is invalid");
@@ -578,7 +578,7 @@ const acpFrames = (file, startOffset = 0, endOffset = undefined) => {
   return frames;
 };
 
-export const acpFormInteractionObserved = (frames) => {
+const acpFormInteractionObserved = (frames) => {
   const pending = new Set();
   for (const frame of frames) {
     const envelope = recordValue(frame);
@@ -598,7 +598,7 @@ export const acpFormInteractionObserved = (frames) => {
   return false;
 };
 
-export const acpSessionLoadObserved = (frames, sessionId) => {
+const acpSessionLoadObserved = (frames, sessionId) => {
   const pending = new Set();
   for (const frame of frames) {
     const envelope = recordValue(frame);
@@ -623,7 +623,7 @@ const directTextContains = (value, expected) => {
   return record?.type === "text" && typeof record.text === "string" && record.text.includes(expected);
 };
 
-export const acpPriorUserMessageObserved = (frames, historyNonce) => frames.some((frame) => {
+const acpPriorUserMessageObserved = (frames, historyNonce) => frames.some((frame) => {
   const envelope = recordValue(frame);
   const message = envelope?.direction === "server-to-client" ? recordValue(envelope.message) : undefined;
   const params = recordValue(message?.params);
@@ -654,14 +654,14 @@ const structuralCompletedAcpCompactions = (frames) => {
   return notifications;
 };
 
-export const completedAcpCompactionNotifications = (frames, expectedSessionIds) => {
+const completedAcpCompactionNotifications = (frames, expectedSessionIds) => {
   if (!Array.isArray(expectedSessionIds) || expectedSessionIds.length < 1 ||
       expectedSessionIds.some((sessionId) => typeof sessionId !== "string" || !sessionId)) return [];
   const allowedSessions = new Set(expectedSessionIds);
   return structuralCompletedAcpCompactions(frames).filter((event) => allowedSessions.has(event.sessionId));
 };
 
-export const completedAcpManualCompactions = (frames, sessionId) => {
+const completedAcpManualCompactions = (frames, sessionId) => {
   if (!Array.isArray(frames) || typeof sessionId !== "string" || !sessionId) return [];
   const requests = [];
   const responses = [];
@@ -710,7 +710,7 @@ export const completedAcpManualCompactions = (frames, sessionId) => {
   }];
 };
 
-export const completedAcpAutomaticCompactions = (frames, sessionId, pressureMarker) => {
+const completedAcpAutomaticCompactions = (frames, sessionId, pressureMarker) => {
   if (!Array.isArray(frames) || typeof sessionId !== "string" || !sessionId ||
       typeof pressureMarker !== "string" || pressureMarker.length < 16) return [];
   const prompts = [];
@@ -800,7 +800,7 @@ const normalizedFabricExecOutput = (rawOutput) => {
  * @param {unknown[]} frames
  * @param {{sessionId: string, expectedArguments: unknown, expectedResult: unknown}} options
  */
-export const completedAcpFabricExecCalls = (frames, options) => {
+const completedAcpFabricExecCalls = (frames, options) => {
   if (!Array.isArray(frames) || typeof options?.sessionId !== "string" || !options.sessionId) return [];
   const expectedArgumentsDigest = qualificationValueDigest(options.expectedArguments);
   const expectedResultDigest = qualificationValueDigest(options.expectedResult);
@@ -873,7 +873,7 @@ export const completedAcpFabricExecCalls = (frames, options) => {
   });
 };
 
-export const acpToolDataContaining = (frames, expected) => {
+const acpToolDataContaining = (frames, expected) => {
   if (!Array.isArray(frames) || typeof expected !== "string" || !expected) return [];
   return frames.flatMap((frame) => {
     const envelope = recordValue(frame);
@@ -890,7 +890,7 @@ export const acpToolDataContaining = (frames, expected) => {
   });
 };
 
-export const acpUserPromptFacts = (frames, sessionId, fact) => {
+const acpUserPromptFacts = (frames, sessionId, fact) => {
   if (!Array.isArray(frames) || typeof sessionId !== "string" || typeof fact !== "string" || !fact) return [];
   return frames.flatMap((frame) => {
     const envelope = recordValue(frame);
@@ -923,7 +923,7 @@ const waitForAcpCompactionInterval = async (file, startOffset, sessionId, timeou
   throw new Error("Kiro ACP recording did not contain a causally paired manual /compact request, status sequence, and response");
 };
 
-export const automaticCompactionInInterval = (file, startOffset, sessionId, pressureMarker) => {
+const automaticCompactionInInterval = (file, startOffset, sessionId, pressureMarker) => {
   const bytes = lstat(file)?.isFile() ? fs.readFileSync(file) : Buffer.alloc(0);
   const frames = bytes.length >= startOffset ? parseAcpJsonlFrames(bytes, startOffset, bytes.length) : [];
   const events = completedAcpAutomaticCompactions(frames, sessionId, pressureMarker);
@@ -1058,7 +1058,7 @@ const maybeTrustWorkspace = async (session) => {
   }
 };
 
-export const codingApprovalInputObserved = (frames, expectedInput) => {
+const codingApprovalInputObserved = (frames, expectedInput) => {
   const ids = new Set();
   const sessions = new Set();
   let named = false;
@@ -1203,7 +1203,7 @@ const manualCompactionCycle = async ({ session, recordFile, dataRoot, traceId, s
 
 // The pressure collector is also exercised offline with an in-process ACP
 // recorder. Production always uses the real TUI sender and recording observer.
-export const collectAutomaticCompactionPressure = async ({ recordFile, sessionId, sendPressure,
+const collectAutomaticCompactionPressure = async ({ recordFile, sessionId, sendPressure,
   observePressure = (start, marker) => waitForAutomaticCompactionInInterval(recordFile, start, sessionId, marker) }) => {
   const attempts = [];
   // The gate covers ALL bounded attempts, not just the successful prompt.
@@ -1334,14 +1334,14 @@ const durableSentinelMismatch = `nestedString(memoryValue, "value", "nonce") !==
     nestedString(stateValue, "value", "nonce") !== payloads.nonce ||
     nestedString(stateValue, "value", "kind") !== "durable-state"`;
 
-export const sentinelVerificationCode = (includeArtifact) => `${sentinelSetup}${includeArtifact ? "const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });" : ""}
+const sentinelVerificationCode = (includeArtifact) => `${sentinelSetup}${includeArtifact ? "const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });" : ""}
 if (${durableSentinelMismatch}${includeArtifact ? " ||\n    !(typeof field(artifactValue, \"text\") === \"string\" && (field(artifactValue, \"text\") as string).includes(payloads.nonce))" : ""}) {
   throw new Error("qualification sentinel mismatch");
 }
 return { verified: true${includeArtifact ? ", artifactVerified: true" : ""} };
 `;
 
-export const postCompactionVerificationCode = `${sentinelSetup}const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });
+const postCompactionVerificationCode = `${sentinelSetup}const artifactValue = await artifacts.read({ id: payloads.artifactId, limit: 16000 });
 if (${durableSentinelMismatch} ||
     !(typeof field(artifactValue, "text") === "string" && (field(artifactValue, "text") as string).includes(payloads.nonce)) ||
     payloads.contextFact.length < 32) {
@@ -1351,7 +1351,7 @@ await state.set({ key: payloads.contextKey, value: { fact: payloads.contextFact,
 return { verified: true, artifactVerified: true, contextCaptured: true };
 `;
 
-export const resumeVerificationCode = `${sentinelSetup}let artifactUnavailable = false;
+const resumeVerificationCode = `${sentinelSetup}let artifactUnavailable = false;
 try { await artifacts.read({ id: payloads.artifactId, limit: 16000 }); }
 catch { artifactUnavailable = true; }
 if (${durableSentinelMismatch} ||
@@ -1399,6 +1399,8 @@ const runCodingAndFormQualification = async ({
   const codingSpec = codingFixtureSpec(nonce);
   const codingDirectory = path.join(workspaceRoot, codingSpec.directory);
   fs.mkdirSync(codingDirectory, { mode: 0o700 });
+  // Retain fixture state inside the private wrapper root, including failures.
+  // Do not log paths/content or dispose files while the client is still running.
   fs.writeFileSync(path.join(workspaceRoot, codingSpec.source), codingSpec.before, { flag: 'wx', mode: 0o600 });
   fs.writeFileSync(path.join(codingDirectory, 'test.mjs'), codingSpec.test, { flag: 'wx', mode: 0o600 });
   const codingProbe = () => {
@@ -1462,7 +1464,7 @@ const runCodingAndFormQualification = async ({
   coding.afterSha256 = hash(fs.readFileSync(path.join(workspaceRoot, codingSpec.source)));
   if (hash(fs.readFileSync(path.join(codingDirectory, 'test.mjs'))) !== coding.testSha256) throw new Error('coding fixture test was modified');
   coding.probes.after = codingProbe();
-  fs.rmSync(codingDirectory, { recursive: true });
+  // Fixture retention is separate from the exact-process shutdown below.
   const formProcess = validateObservedProcess(formObserver, formFinalTrace, {
     executable,
     requiredArgs: ["--v3", "--agent", "kiro-fabric"],
@@ -1725,7 +1727,7 @@ const finalizeCompactionSeries = (interactiveRecord, manualCompactions, automati
 
 /** Serialize the driver's named captures through one production seam.
  * @param {Record<string, string | Buffer>} captures */
-export const buildRealClientTranscript = (captures) => {
+const buildRealClientTranscript = (captures) => {
   // Capture chronology is not wire order. Keep the validator's exact ordered
   // contract, rejecting drift rather than silently dropping unknown captures.
   if (Object.keys(captures).length !== REAL_CLIENT_TRANSCRIPT_KINDS.length ||
@@ -2750,7 +2752,7 @@ const runRealKiroAgentDriverImplementation = async ({
   fs.writeFileSync(output, evidenceBytes, { mode: 0o600, flag: "wx" });
 };
 
-export const runRealKiroAgentDriver = async (options) => {
+const runRealKiroAgentDriver = async (options) => {
   if (options.failureOutput) assertExternalDiagnosticPath(options.failureOutput, [options.kiroHome, options.isolatedHome, options.workspace, options.installCwd]);
   return withQualificationFailureReport({ output: options.failureOutput, component: "driver", cleanupKind: "processes", cleanup: terminateQualificationChildren }, async record => {
     record.cleanup("processes", "pending");
@@ -2787,3 +2789,44 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     },
   }); } catch { process.stderr.write("Kiro qualification failed; inspect the nonqualifying sanitized diagnostic. Raw output suppressed.\n"); process.exitCode = 1; }
 }
+
+// ---------------------------------------------------------------------------
+// @internal Test-facing seam (module-local; not a package entrypoint)
+// ---------------------------------------------------------------------------
+// These definitions are the live production implementations used by the native
+// qualification driver. They are exported only so fully synthetic offline tests
+// (`tests/qualification-driver-capture.test.ts` for the automatic-compaction
+// pressure-interval state machine, and `tests/release-evidence.test.ts` for
+// ACP collector/transcript/auth oracles) can exercise them without launching
+// kiro-cli or touching a real client, auth, home, network or filesystem path.
+// Every added symbol is a pure parser/observer/formatter or a default-only auth
+// resolver: none performs IO, spawns a process, reads a recording path or reaches
+// the network. The public driver entrypoint (`runRealKiroAgentDriver`) is
+// deliberately NOT exported, and no root/package/CLI surface is added. They are
+// intentionally NOT re-exported from `src/index.ts` or `package.json` (which
+// publishes only the root entry). Importing this module never runs the native
+// driver: its main branch is guarded by
+// `process.argv[1] === fileURLToPath(import.meta.url)`.
+export {
+  collectAutomaticCompactionPressure,
+  parseAcpJsonlFrames,
+  completedAcpAutomaticCompactions,
+  acpToolDataContaining,
+  automaticCompactionInInterval,
+  resolveRealClientAuthMode,
+  subscriptionLoginArgv,
+  subscriptionWhoamiAuthenticated,
+  qualificationValueDigest,
+  acpFormInteractionObserved,
+  acpSessionLoadObserved,
+  acpPriorUserMessageObserved,
+  completedAcpCompactionNotifications,
+  completedAcpManualCompactions,
+  completedAcpFabricExecCalls,
+  acpUserPromptFacts,
+  codingApprovalInputObserved,
+  sentinelVerificationCode,
+  postCompactionVerificationCode,
+  resumeVerificationCode,
+  buildRealClientTranscript,
+};

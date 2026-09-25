@@ -12,6 +12,7 @@ import { buildContinuityHandoff, HANDOFF_PACKET_DEFAULT_BYTES, HANDOFF_PACKET_MI
 export class ContinuityProvider implements FabricProvider {
   readonly name = "continuity";
   readonly description = "Opt-in durable task checkpoints with explicit host operation capture (not native compaction)";
+  readonly requirements = { verifiedWorkspace: true };
   readonly #store: ContinuityStore;
   readonly #maxSummaryBytes: number;
   readonly #maxResultBytes: number;
