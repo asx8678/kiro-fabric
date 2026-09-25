@@ -25,7 +25,7 @@
       },
       {
         "path": "scripts/agent-profile.mjs",
-        "sha256": "c9489bf6d6c038a73e65a485c6e34017e5040b746a150a246901cc0d214ff79a"
+        "sha256": "664b32ecb014a793bfae323a8639c18e294bb08f9e27c466de4b9398e48f93c4"
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
@@ -233,7 +233,7 @@
       },
       {
         "path": "skills/fabric-exec/references/workflow.md",
-        "sha256": "a7f53119e30a88d50003c2e96352287fda1fa27cbc503dc8834819e3f98e082c"
+        "sha256": "af36d7788fba5e0572b77ab62a693dbc858ea09789ff288ab9806559ba39d97a"
       },
       {
         "path": "src/async-settlement.ts",
@@ -629,7 +629,7 @@
       },
       {
         "path": "src/kiro/generated-guidance.ts",
-        "sha256": "c2ad5afab1dccf244005b91132ce727fc56c35422eea6840784567d503e8377c"
+        "sha256": "aadfa1ba954b334e1eef24921441bff621389848807ce7c74c6dbc0b7848314f"
       },
       {
         "path": "src/kiro/host-session-adapter.ts",
@@ -880,7 +880,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "59af69d9e963ac1e9a195fa24f1b0050849bdb51221f943928dfe2d0e655a378"
+    "digest": "f9b21ee15e0c5793fd7daaea4f6496a9da60c3d3177f60b8c159c9f5623cb215"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1580,9 +1580,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-FYFISQ7W.js",
-      "bytes": 1144948,
-      "sha256": "37c426600e8761756fc3295674f4be2e02c0ffc8859231ff1c78f2ba62340f4b"
+      "path": "chunks/mcp-server-TWADY2NT.js",
+      "bytes": 1145088,
+      "sha256": "b4500f7bfbf5549ce53b8e04c0baad373e323fca71a3fdd5bfa1370403d2ff90"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1642,7 +1642,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 69213,
-      "sha256": "11896f5a7951589d5fa39549522d4eb9a54581423cf58ca58ceb106de2769d81"
+      "sha256": "72f1bf9da1ad39b3dbf4dfa0c7186ab66aaa823111ac03c3c46c7d5a80c9a3f0"
     },
     {
       "path": "package.json",
@@ -1660,5 +1660,5 @@
       "sha256": "d0cc927eab9fbae8ce1381936936cb7a1d3afe7cad07945c5301006e1653e0dc"
     }
   ],
-  "contentDigest": "519df9f7f7d9d71b284c48914cd86d7b90ee7df7c51d70a80f049dfa97cea0d1"
+  "contentDigest": "9680ba3a40a82c9fc63a5e15681c17c86de33507663a09c9756e936f98a2fccc"
 }

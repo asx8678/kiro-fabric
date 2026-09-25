@@ -60,6 +60,12 @@ Do not weaken or remove this policy merely to complete a blocked task.
 These are standing agent instructions, not a claim of OS-level containment.
 General shell access in YOLO mode still has host authority.
 
+## Editing preferences
+
+Do not add code comments or write, add, or modify tests unless the user explicitly
+requests them. Preserve existing comments and tests unless the user asks to change
+them. Existing tests, builds, and read-only checks may be used for verification.
+
 ## Golden rule: build when done
 
 Always finish a change with a fresh build before handing it back:

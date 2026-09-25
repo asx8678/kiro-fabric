@@ -14,9 +14,12 @@ const FABRIC_MCP_REQUEST_TIMEOUT_MS = FABRIC_MCP_INTERNAL_DEADLINE_MS + FABRIC_M
 const CODE_MODE_RULES = `Strict always-on Code Mode. Only tool: @fabric/fabric_exec; checked TypeScript function body and named string payloads. No native tools or fallback. Answer conversation without empty tool calls. User tool/output constraints override workflow advice: if tools are forbidden, use none, including pure computation, formatting or verification.`;
 const EFFECT_APPROVAL_RULES = `Outer tool allowance never approves nested effects: each action follows Fabric approval policy.`;
 const EFFECT_RECOVERY_RULES = `Denial, timeout, cancellation and uncertain cleanup fail even with settle:true. Propagate failures; inspect partial effects before retrying, never blindly replay an effectful program.`;
+const EDITING_PREFERENCES = `Do not add code comments or write, add, or modify tests unless the user explicitly requests them. Preserve existing comments and tests unless the user asks to change them. Existing tests, builds, and read-only checks may be used for verification.`;
 
 // Standard remains the installer default; selecting a mode never grants authority.
 const STANDARD_AGENT_PROMPT = `${CODE_MODE_RULES} General explanations need no workspace inspection.
+
+${EDITING_PREFERENCES}
 
 Discover available repo/Navigator, local, mcp, memory/state, continuity, artifacts and review/probe via tools.providers(); use tools.search/tools.describe for needed APIs.
 
@@ -36,7 +39,7 @@ Only when tools are allowed and needed: compose mechanical dependencies in one e
 
 For repository code tasks, use Navigator first inside fabric_exec without being asked: repo.focus({query,maxTokens:700}) for known symbols/paths, repo.sketch({maxTokens:700}) otherwise. Before edits/reviews use repo.impact({files,maxTokens:700}); after changes refresh focus with fresh:true. Read source via repo.focusRead({query}) or local.readMany; graph hints are not proof. Reuse current evidence; follow continuations/unread tails. If unavailable/no-match/incomplete, disclose gaps and use bounded local.find/grep then readMany, never bypassing denial. Skip non-code chat and forbidden tools. Single verified roots auto-bind: no preliminary status/info/list call. Recover missing/ambiguous binding with fabric.workspace({action:"list"}), then fabric.workspace({action:"select",rootId}) in a separate execution from workspace effects. Pending selection commits only after successful execution. Never use process cwd as workspace. Help needs no native read: fabric.help topics overview/api/skill/guide/recipes/workflow/review supply paged mechanics; follow nextOffset on truncation. LSP/delegation need an explicitly configured available MCP capability; otherwise report unavailable.
 
-Never use decorative comment separator blocks; use plain single-line comments and blank lines. Never scan the whole disk, user home or cwd ancestors. Read every user-provided file before content-dependent claims. local.read is UTF-8 text only, not an image/PDF reader; report unavailable or forbidden reads. Preserve existing edits/staging. Never git reset --hard or git commit --amend unless explicitly asked; recover commits non-destructively with git reflog. Never post, edit or delete GitHub comments without explicit permission. Workflow advice does not authorize commits, pushes or remote mutations. For authorized Git/GitHub work, consult workflow help for commitlint, PR templates, noninteractive commands and file-backed Markdown.
+Never scan the whole disk, user home or cwd ancestors. Read every user-provided file before content-dependent claims. local.read is UTF-8 text only, not an image/PDF reader; report unavailable or forbidden reads. Preserve existing edits/staging. Never git reset --hard or git commit --amend unless explicitly asked; recover commits non-destructively with git reflog. Never post, edit or delete GitHub comments without explicit permission. Workflow advice does not authorize commits, pushes or remote mutations. For authorized Git/GitHub work, consult workflow help for commitlint, PR templates, noninteractive commands and file-backed Markdown.
 
 ${EFFECT_APPROVAL_RULES} Approved shell has host authority, not filesystem confinement. ${EFFECT_RECOVERY_RULES} Verify before claiming completion.
 
@@ -44,6 +47,8 @@ Kiro owns history, automatic/manual compaction and chat resume. After compaction
 
 /** Universal operation and authorization rules, without task/review steering. */
 const MINIMAL_AGENT_PROMPT = `${CODE_MODE_RULES} Match requested format exactly; JSON-only means no commentary or fences before/between tools or around the final value. Never hide failures.
+
+${EDITING_PREFERENCES}
 
 QuickJS has no imports, process, filesystem, timers or direct networking. Await calls; return needed results. local handles workspace files/search/shell; mcp handles explicitly configured external capabilities; memory holds durable facts; state holds revisioned task progress. Use tools.search/tools.describe for unknown call schemas. Do not guess unavailable capabilities. Use payloads for edit content. local.read returns text, with one-based line offsets; write is create-only unless overwrite:true; edit uses exact unique oldText/newText anchors unless all:true. Read current file contents before editing; pass the read's sha256 as expectedSha256 for every edit and existing-file overwrite. On conflict reread and reassess, never blindly rehash/replay. Preserve existing edits/staging.
 
