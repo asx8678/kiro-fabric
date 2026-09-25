@@ -7,10 +7,10 @@ Requires Bash, Git, Node >=24, pnpm **11.20.0**, tar/gzip, and Kiro CLI >=2.21.1
 From your Kiro Fabric checkout, run:
 
 ```sh
-bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}"
+bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --no-shell-integration
 ```
 
-The installer builds and installs Fabric with Navigator, backs up existing configuration, and makes the selected Kiro home and its `agents` directory private (0700). Source upgrades replace an old Fabric profile only when its recorded ownership and checksum match. Existing user skills, other agents, configuration and runtime generations are preserved. Do not use `sudo`. Executable ancestry and shell configuration must already have safe ownership and permissions; see the preflight troubleshooting below.
+The installer builds and installs Fabric with Navigator, backs up existing configuration, and makes the selected Kiro home and its `agents` directory private (0700). Source upgrades replace an old Fabric profile only when its recorded ownership and checksum match. Existing user skills, other agents, configuration and runtime generations are preserved. Do not use `sudo`. Executable ancestry must already have safe ownership and permissions, as must shell configuration if shell integration is enabled; see the preflight troubleshooting below.
 
 The default installation is `~/.kiro/kiro-fabric/`, with the active profile at
 `~/.kiro/agents/kiro-fabric.json`. To use a separate Kiro home, pass
@@ -18,7 +18,7 @@ The default installation is `~/.kiro/kiro-fabric/`, with the active profile at
 For a guided overview with the current version, exact paths and upgrade policy,
 run `node scripts/install-tui.mjs` from the checkout.
 
-For unattended installation, add `--yes --non-interactive`. To leave shell configuration untouched, add `--no-shell-integration`.
+For unattended installation, add `--yes --non-interactive`. The command above leaves shell configuration untouched; use the installed launcher below. To configure the optional bash/zsh shortcut, omit `--no-shell-integration`. Existing aliases or unowned/modified Fabric shell blocks must be reconciled before enabling that shortcut.
 
 After installation, start a new session from your project directory:
 
@@ -38,7 +38,7 @@ KIRO_HOME="${KIRO_HOME:-$HOME/.kiro}" KIRO_FABRIC_LAUNCH_WORKSPACE="$(pwd -P)" \
 
 On Kiro CLI 2.21.1, putting `--agent kiro-fabric` before an explicit `chat` subcommand selected the default agent in our probes. Confirm the selected mode is `kiro-fabric` and the stream contains an actual `@fabric/fabric_exec` call and successful result; a native file read is not a Fabric check. Correctly selected Fabric worked on the first turn—warm-up prompts are not a verified remedy. Profile validation and doctor do not establish full tool filtering or interactive approval readiness.
 
-Restart existing Kiro sessions after an update. Open a new terminal to load the installed shortcut that selects Fabric for `kiro-cli --v3`.
+Restart existing Kiro sessions after an update. If you enabled the optional shell shortcut, open a new terminal to load it before running `kiro-cli --v3`.
 
 **Current client limitations:** the 2026-09-25 macOS retest on Kiro CLI **2.24.0** still returned `No handler registered for method: _kiro/mcp/elicitation` in v3; v2 rejected form approval as unsupported, and the legacy UI also failed the approval test. Reads succeeded, but the approval-dependent edit stayed blocked in all three paths. See the [current evidence and client fix required](docs/upstream-client-issues.md#2026-09-25-cli-2240-retest). Earlier Linux tests also observed `disclose_context` outside the strict single-tool profile; complete tool filtering remains unqualified on 2.24.0. Do not treat the `/tools` view or a model-authored tool list as complete filtering evidence, or enable blanket trust to bypass a missing approval UI.
 
@@ -62,7 +62,9 @@ kiro-cli agent validate --help
 
 Confirm that Kiro CLI is available, its version is >=2.21.1, and the validation help includes `--path`. If a command fails, resolve that CLI error first. If both CLI commands succeed but preflight still fails, report the outputs above and the installer error; normal CLI checks can pass while isolated checks fail. The bounded timeout retry is already automatic; do not repeatedly rerun the whole installation.
 
-If the installer instead reports `Unsafe Kiro CLI directory ancestry` or `unsafe shell integration file permissions`, inspect the named path's ownership and permissions. For your own trusted path, remove group/other write access (`chmod go-w <path>`); for shell configuration you can instead use `--no-shell-integration`. `umask 022` affects newly created paths only—it does not repair existing permissions. Preview the install with `bash ./install.sh --source --dry-run --json`.
+If the installer instead reports `Unsafe Kiro CLI directory ancestry` or `unsafe shell integration file permissions`, inspect the named path's ownership and permissions. For your own trusted path, remove group/other write access (`chmod go-w <path>`); for shell configuration you can instead use `--no-shell-integration`. `umask 022` affects newly created paths only—it does not repair existing permissions. Preview the install with `bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --no-shell-integration --dry-run --json`.
+
+If you see `Unowned or modified Fabric shell block preserved`, rerun the install command above with `--no-shell-integration`. The installer preserves the existing shell block; the installed launcher works without changing it.
 
 For `doctor --source-root <checkout>` reporting `unsafe diagnostic metadata permissions`, check `package.json`, `install.sh`, `README.md`, `pnpm-lock.yaml` and `tsconfig.json` in that trusted checkout. Remove group/other write access from the reported metadata; do not bypass ownership checks.
 
