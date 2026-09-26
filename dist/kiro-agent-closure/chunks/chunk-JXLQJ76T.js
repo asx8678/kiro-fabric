@@ -6,10 +6,8 @@ globalThis.__dirname = __dirnameOf(globalThis.__filename);
 const require = __createRequire(import.meta.url);
 
 import {
-  assertFabricTranspiledWrapper,
-  fabricFailureMetadata,
-  transpileFabricCodeWithSourceMap
-} from "./chunk-DXQKJEC3.js";
+  fabricFailureMetadata
+} from "./chunk-ODEJLNJ5.js";
 import {
   MAX_FABRIC_JSON_CHARS,
   assertFabricJsonBudget,
@@ -10279,6 +10277,7 @@ var runQuickJsSandbox = async (code, hostCall, options, cancellationFlag) => {
   if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 4294967295) {
     return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
   }
+  const { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } = await import("./type-checker-3YIHH47E.js");
   const bundle = options.transpiledCode === void 0 ? transpileFabricCodeWithSourceMap(code) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
   assertFabricTranspiledWrapper(bundle.code);
   const transpiledError = fabricTranspiledLimitError(bundle.code);

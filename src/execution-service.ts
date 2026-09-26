@@ -18,7 +18,7 @@ import { assertFabricJsonBudget, fabricJsonText, MAX_FABRIC_JSON_CHARS } from ".
 import { QuickJsRuntime, type FabricSandboxTerminationReason } from "./runtime/quickjs-runtime.js";
 import { fabricPayloadsLimitError, fabricSourceLimitError } from "./runtime/source-limit.js";
 import { DISABLED_TRACER, traceFailureMetadata, type FabricTracer } from "./trace/tracer.js";
-import { FabricCompilerPool, type FabricTypeError } from "./runtime/type-checker.js";
+import { FabricCompilerPool, type FabricTypeError } from "./runtime/compiler-pool.js";
 
 export const FABRIC_COMPILER_TIMEOUT_MS = 10_000;
 export const FABRIC_APPROVAL_TIMEOUT_MS = 30_000;

@@ -29,7 +29,7 @@
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
-        "sha256": "2d252619ac7d1ed541c7d7c67b88ba27640050c926372d641480b455560709a6"
+        "sha256": "25f127864ab1281258e969c3a389e4132ccd9c399566eb5227545d39ddce5338"
       },
       {
         "path": "scripts/atomic-file.mjs",
@@ -329,7 +329,7 @@
       },
       {
         "path": "src/execution-service.ts",
-        "sha256": "44ae65e042e184037238f1b54239f57db0b026495e466ab14a495a58e16ebb1b"
+        "sha256": "ff437660fa19e423a9d7ad1e21ac8d7b0bff88df68f37a7a01dae17c9b88aaaf"
       },
       {
         "path": "src/fovea/README.md",
@@ -820,6 +820,10 @@
         "sha256": "21f30f5d9413452242d030358b442ee5641a068a5b5a00ccec481950cc1b6dad"
       },
       {
+        "path": "src/runtime/compiler-pool.ts",
+        "sha256": "49c2e71c9951030af2c37668f2f951439755aad47d6555896c4111320eadc5f4"
+      },
+      {
         "path": "src/runtime/compiler-worker-entry.ts",
         "sha256": "cd97a07bc1e80f0306d23eac70c7aed21b5917a07bc41ef81e988b25d384d20d"
       },
@@ -845,7 +849,7 @@
       },
       {
         "path": "src/runtime/quickjs-runtime.ts",
-        "sha256": "79a54099ef316f1b73c9099674eb4fdce6817367fdbcce94e0c72e361431b8b4"
+        "sha256": "c438445a93d4b04f77cdf853c50eac06b6ad888f6865872b49bd2631e06af76c"
       },
       {
         "path": "src/runtime/sandbox-worker-entry.ts",
@@ -857,7 +861,7 @@
       },
       {
         "path": "src/runtime/type-checker.ts",
-        "sha256": "bb4480ba5e2447543ce39f7372d5f02cfd24fe24da9be5979934a89da3d904e5"
+        "sha256": "0f2b58c8920adfba288e7854b32df15e7871cc905add5d8b020a2fa32fae1ee0"
       },
       {
         "path": "src/schema-validation.ts",
@@ -880,7 +884,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "c298fd4e35f1783ce9a81934472d09fee1e42d4bacf5d43aa3ae7fb5fc33b1d7"
+    "digest": "6827150dacfbb8fae3657e9a016b5390bf58859dff9fb4c1e56fb6bb95a0ac12"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1020,6 +1024,7 @@
     "src/providers/review-contract.ts",
     "src/providers/review-provider.ts",
     "src/providers/state-provider.ts",
+    "src/runtime/compiler-pool.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/deadline.ts",
     "src/runtime/guest-bootstrap.ts",
@@ -1225,19 +1230,14 @@
       "sha256": "dd5c2650ca7bd1ecc4fb6e0100d212e1b18a4266f7d13ccd1e697521a7d0ddda"
     },
     {
-      "path": "chunks/chunk-CTYWZZSA.js",
-      "bytes": 531442,
-      "sha256": "91e5f1d624d6ec9e78170cb4eddbb61945be92a42280c401d06caf6dae522fc7"
-    },
-    {
-      "path": "chunks/chunk-DXQKJEC3.js",
-      "bytes": 9997597,
-      "sha256": "8c9c8cd28278be430284663a3906bc58b4e161cfab0e7458fe2e19c42740f4ac"
-    },
-    {
       "path": "chunks/chunk-G3LABT6U.js",
       "bytes": 845,
       "sha256": "6dc6eeff440eb4fffa4714ec7c315318a60b4ac00f0917ed6217a3d64882e81d"
+    },
+    {
+      "path": "chunks/chunk-JXLQJ76T.js",
+      "bytes": 531495,
+      "sha256": "5fb45715331eec090dbdee632500f4e55381754fd1c71d9859341293c0fd4a19"
     },
     {
       "path": "chunks/chunk-K2USGJPF.js",
@@ -1248,6 +1248,21 @@
       "path": "chunks/chunk-NWYPLJ5N.js",
       "bytes": 55190,
       "sha256": "525ad8dfa5132c9706d6057efb5fe914ba20c1db3b8004029a69a2a6bab7e011"
+    },
+    {
+      "path": "chunks/chunk-ODEJLNJ5.js",
+      "bytes": 3594,
+      "sha256": "25134e77f51d3540dea670fa09a5d889140d83f20122d51edd84a7f16265eb63"
+    },
+    {
+      "path": "chunks/chunk-TIFOU53F.js",
+      "bytes": 7670,
+      "sha256": "59ccbd12973c46a12b889e38e145107eb7c561a29127741eff2ef2878ba81793"
+    },
+    {
+      "path": "chunks/chunk-TVIJCO2F.js",
+      "bytes": 9987148,
+      "sha256": "991803871f247b6275d97a199e949da5616635db02108840c08385b3dec5690f"
     },
     {
       "path": "chunks/chunk-U22TRE4R.js",
@@ -1580,9 +1595,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-TWADY2NT.js",
-      "bytes": 1145088,
-      "sha256": "b4500f7bfbf5549ce53b8e04c0baad373e323fca71a3fdd5bfa1370403d2ff90"
+      "path": "chunks/mcp-server-N34BV4DU.js",
+      "bytes": 1145126,
+      "sha256": "a6e59f96e897f74429021d525082c7df4d4cbab4a4953a173393b003f5d90cf6"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1593,6 +1608,11 @@
       "path": "chunks/module-asyncify-2EFITU5U-EH2GYZRG.js",
       "bytes": 506,
       "sha256": "325c0d8b5f25f02223dc5bb95e5878773dda4ddff3273ec817326251cb2d9607"
+    },
+    {
+      "path": "chunks/type-checker-3YIHH47E.js",
+      "bytes": 720,
+      "sha256": "c2081939e37b64d1854aeebf54846300d296be923517756b11c295c03e286ff5"
     },
     {
       "path": "chunks/webapi-BPKL2YBQ.js",
@@ -1642,7 +1662,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 69213,
-      "sha256": "72f1bf9da1ad39b3dbf4dfa0c7186ab66aaa823111ac03c3c46c7d5a80c9a3f0"
+      "sha256": "57dd68e3c1fd94b5b4e893d0e23e75205ea71d4cf7a1c9d91129dd8eef582f78"
     },
     {
       "path": "package.json",
@@ -1651,14 +1671,14 @@
     },
     {
       "path": "runtime/compiler-worker-entry.js",
-      "bytes": 902,
-      "sha256": "1401037bc429f8ae7cfb55952a6ad96789bb3f481efef56a4f24783a9c8ae979"
+      "bytes": 978,
+      "sha256": "311961c02bfc7f2062a5093cbbe6852cb29989188a94cb9fb635c993620f29e2"
     },
     {
       "path": "runtime/sandbox-worker-entry.js",
       "bytes": 4993,
-      "sha256": "d0cc927eab9fbae8ce1381936936cb7a1d3afe7cad07945c5301006e1653e0dc"
+      "sha256": "113f4fc5b37ec7e0bee9b83c7e42fc92916c2c664da8c4808692f77965e4778a"
     }
   ],
-  "contentDigest": "155e233e0dd908bada59aaeb20f22f3a1808130a02ebe7fc25a213da2b861e69"
+  "contentDigest": "bb124c60c49751da94f60e5d7aab85ba7b114999487d68f7783ddb7ae8393110"
 }

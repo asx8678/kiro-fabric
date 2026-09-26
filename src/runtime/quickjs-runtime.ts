@@ -22,7 +22,6 @@ import {
 } from "./source-limit.js";
 import { FabricDeadline } from "./deadline.js";
 import { DISABLED_TRACER, type FabricTracer } from "../trace/tracer.js";
-import { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } from "./type-checker.js";
 import { GUEST_SETUP } from "./guest-bootstrap.js";
 import type { QuickJSContext, QuickJSDeferredPromise, QuickJSHandle } from "quickjs-emscripten-core";
 
@@ -163,6 +162,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
     // synchronous CPU work, and on a cold worker it can exceed a short guest
     // timeout on its own; charging it to the guest would expire the deadline
     // before a single guest instruction ran.
+    const { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } = await import("./type-checker.js");
     const bundle = options.transpiledCode === undefined
       ? transpileFabricCodeWithSourceMap(code)
       : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };

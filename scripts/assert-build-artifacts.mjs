@@ -70,3 +70,31 @@ for (const entry of [
 ]) {
   await import(`${pathToFileURL(path.resolve(entry)).href}?build-audit=${Date.now()}`);
 }
+
+// The TypeScript compiler belongs to the compiler worker and is loaded lazily
+// by the sandbox. Keep it out of the static graph of MCP server startup.
+const staticImports = (file) => {
+  const text = fs.readFileSync(file, "utf8");
+  return [...text.matchAll(/^(?:import|export)\s[^;]*?from\s*"([^"]+)"|^import\s*"([^"]+)"/gm)].map((match) => match[1] ?? match[2]);
+};
+const loadsTypeScript = (file) => fs.readFileSync(file, "utf8").includes("require_typescript()");
+const closureChunks = "dist/kiro-agent-closure/chunks";
+for (const root of [
+  "dist/runtime/sandbox-worker-entry.js",
+  "dist/kiro-agent-closure/kiro/mcp-entry.js",
+  "dist/kiro-agent-closure/runtime/sandbox-worker-entry.js",
+  ...fs.readdirSync(closureChunks).filter((name) => name.startsWith("mcp-server-")).map((name) => path.join(closureChunks, name)),
+]) {
+  const seen = new Set();
+  const pending = [path.resolve(root)];
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (loadsTypeScript(file)) throw new Error(`Startup graph of ${root} statically loads the TypeScript compiler: ${path.relative(".", file)}`);
+    for (const specifier of staticImports(file)) {
+      if (specifier === "typescript") throw new Error(`Startup graph of ${root} statically imports typescript: ${path.relative(".", file)}`);
+      if (specifier.startsWith(".")) pending.push(path.resolve(path.dirname(file), specifier));
+    }
+  }
+}

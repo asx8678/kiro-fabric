@@ -35,6 +35,9 @@ import {
   verifySearchExecutable
 } from "./chunk-762YYRNE.js";
 import {
+  FabricCompilerPool
+} from "./chunk-TIFOU53F.js";
+import {
   Any,
   BigInt as BigInt2,
   Boolean as Boolean2,
@@ -179,17 +182,16 @@ import {
   traceFailureMetadata,
   validateSchemaValue,
   value_exports
-} from "./chunk-CTYWZZSA.js";
+} from "./chunk-JXLQJ76T.js";
 import "./chunk-XJTFSUKV.js";
 import {
-  FabricCompilerPool,
   FabricCompilerTimeoutError,
   FabricRepairError,
   argumentRepairError,
   createCheckpointJournal,
   fabricFailureMetadata,
   repairSchema
-} from "./chunk-DXQKJEC3.js";
+} from "./chunk-ODEJLNJ5.js";
 import {
   FoveaConfiguration,
   FoveaProvenanceJournal,
