@@ -31,7 +31,7 @@ export interface FoveaSession {
   tkKey: string;
 }
 
-export const FOCUS_T0 = 2;
+const FOCUS_T0 = 2;
 
 const sessions = owned('session.ts:sessions', () => new Map<string, FoveaSession>(), true);
 const attention = owned('session.ts:attention', () => new Map<string, Set<string>>(), true);
@@ -117,10 +117,3 @@ export const retainSessionVectors = (root: string): void => {
   for (const session of others.slice(Math.max(0, ROOT_CACHE_LIMIT - 1))) { session.tk = []; session.tkKey = ""; }
 };
 
-// `/new` and friends: same repo, fresh eyes.
-export const resetSessions = (root?: string): void => {
-  if (root !== undefined) { sessions.delete(sessionKey(root)); return; }
-  // A fresh conversation cannot reuse disclosure or Chebyshev vectors; drop
-  // the entries outright so large Float64Array stacks become collectible.
-  sessions.clear(); attention.clear();
-};

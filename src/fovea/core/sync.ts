@@ -18,7 +18,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { ROOT_CACHE_LIMIT, OBSERVED_ROOT_LIMIT, envInt, forEachChunked, mapLimit } from "./asyncutil.js";
+import { OBSERVED_ROOT_LIMIT, envInt, forEachChunked, mapLimit } from "./asyncutil.js";
 import { gitProbe, gitReflogAction } from "./git.js";
 import { discoverFiles, filterSupported } from "./build.js";
 import { loadRepoRules } from "./anchors.js";
@@ -84,13 +84,6 @@ const setBaseline = (root: string, baseline: SyncBaseline): void => {
   while (baselines.size > OBSERVED_ROOT_LIMIT) baselines.delete(baselines.keys().next().value!);
 };
 
-export const resetSyncBaselines = (root?: string): void => {
-  if (root !== undefined) {
-    baselines.delete(root); warmCache.delete(root); lastProbe.delete(root); coldSweeps.delete(root); boundaryProbes.delete(root); return;
-  }
-  baselines.clear(); warmCache.clear(); lastProbe.clear(); coldSweeps.clear(); boundaryProbes.clear();
-};
-
 // Send-path drift probe TTL. The at-most-once-per-window git porcelain probe
 // on before_agent_start trades external-edit freshness for responsiveness:
 // consecutive pure-conversation sends inside the window cost ~0ms, and any
@@ -151,46 +144,15 @@ const CHANNEL_UNKNOWN = 0.5;
 // matter how many times its cascade is re-seeded (the ping-pong constructor
 // dies here); across hours it finally cools, so a structurally re-heated
 // neighborhood can earn a fresh verdict on a later day.
-export const MEMORY_HALF_LIFE_HOURS = envInt("FOVEA_MEMORY_HALF_LIFE_HOURS", 48, 1, 8760);
+const MEMORY_HALF_LIFE_HOURS = envInt("FOVEA_MEMORY_HALF_LIFE_HOURS", 48, 1, 8760);
 const HALF_LIFE_MS = MEMORY_HALF_LIFE_HOURS * 3600_000;
-export const decayedMass = (entry: { m: number; t: number }, nowMs: number): number =>
+const decayedMass = (entry: { m: number; t: number }, nowMs: number): number =>
   entry.m * Math.pow(0.5, Math.max(0, nowMs - entry.t) / HALF_LIFE_MS);
 // Ledger bound: prune cooled entries and cap size, evicting the weakest mass.
 const MEMORY_MAX_NODES = 4096;
 // Hysteresis re-arm band, as a fraction of the steer threshold.
 const REARM_FRACTION = 0.5;
 const round4 = (x: number): number => Math.round(x * 1e4) / 1e4;
-
-// Background warm. The blocking `sync` call on the user-perceived send path
-// (before_agent_start / turn_end) recomputes extraction, graph assembly, the
-// baseline fingerprint, and the impact cascade whenever the repo drifted.
-// `warmSync` runs those heavyweight ingredients eagerly as soon as edits land
-// (tool_execution_end), keyed by state version + changed-file set, so the same
-// drift's sync call reuses them and stays verdict-only. Never advances the
-// baseline, never reports, never throws; a drift without a warm (external
-// edits between turns) falls back to the inline compute in `sync`.
-
-interface WarmCompute {
-  /** State version this computation fingerprints. */
-  version: string;
-  /** Canonical key of the changed-file set this warm covers. */
-  filesKey: string;
-  /** Full next-baseline snapshot, identical to snapshot(state). */
-  snapshot: SyncBaseline;
-  /** impact() outputs for the changed set. */
-  warmedFiles: string[];
-  warmedMass: Record<string, number>;
-  warmReasons: Record<string, string[]>;
-  warmedNodes: Record<string, { file: string; m: number; r: string[] }>;
-}
-
-const warmCache = owned('sync.ts:warmCache', () => new Map<string, WarmCompute>(), true);
-
-/** Tests poll this to know a background warm actually landed (fixed sleeps
- * race the debounce + impact compute under load). */
-export const warmCacheHas = (root: string): boolean => warmCache.has(root);
-
-const filesKey = (files: readonly string[]): string => [...new Set(files)].sort().join("\n");
 
 /** Files whose extracted facts moved since a baseline, in canonical order. */
 const semanticDrift = (state: RepoState, prev: SyncBaseline): string[] => {
@@ -200,46 +162,6 @@ const semanticDrift = (state: RepoState, prev: SyncBaseline): string[] => {
   return changed.filter(
     (file) => prev.semantics.get(file) !== semanticFacts(state, file) && state.graph.byFile.has(file),
   );
-};
-
-export interface WarmParams {
-  /** Optional drift hints, same role as sync hints; the probe stays the oracle. */
-  files?: (string[]) | undefined;
-  /** Token budget for the impact cascade (mirrors sync.budget). */
-  budget: number;
-}
-
-export const warmSync = async (root: string, params: WarmParams, state?: RepoState): Promise<void> => {
-  try {
-    const cur = state ?? (await ensureState(root, { hints: params.files ?? [], force: false }));
-    const prev = getBaseline(root);
-    if (!prev || prev.version === cur.version) return;
-    // A checkout generation re-baselines silently in sync: no cascade to
-    // prepare, and precomputing one over the branch diff would be waste.
-    if (cur.checkout) return;
-    const files = semanticDrift(cur, prev);
-    if (!files.length) return;
-    const key = filesKey(files);
-    const cached = warmCache.get(root);
-    if (cached && cached.version === cur.version && cached.filesKey === key) return;
-    const next = await snapshot(cur);
-    // The impact cascade runs against the same immutable state snapshot the
-    // fingerprint used, so the cached pair is consistent for cur.version.
-    const result = await impact(root, { files, includeUncommitted: false, budget: params.budget }, cur);
-    warmCache.set(root, {
-      version: cur.version,
-      filesKey: key,
-      snapshot: next,
-      warmedFiles: (result.details.warmedFiles as string[] | undefined) ?? [],
-      warmedMass: (result.details.warmedMass as Record<string, number> | undefined) ?? {},
-      warmReasons: (result.details.warmedReasons as Record<string, string[]> | undefined) ?? {},
-      warmedNodes: (result.details.warmedNodes as Record<string, { file: string; m: number; r: string[] }> | undefined) ?? {},
-    });
-    while (warmCache.size > ROOT_CACHE_LIMIT) warmCache.delete(warmCache.keys().next().value!);
-  } catch {
-    // Best-effort: a failed warm just means the next blocking sync computes
-    // inline (with its own error reporting), exactly as before.
-  }
 };
 
 export interface SyncParams {
@@ -500,7 +422,6 @@ export const sync = async (
   const outsideAttentionOnly = scopedSync && ignoredFiles.length > 0 &&
     changed.length === 0 && deleted.length === 0 && added.length === 0 && removed.length === 0;
   if (outsideAttentionOnly) {
-    warmCache.delete(root);
     commitBaseline({
       ...(await snapshot(state)),
       heat: prev.heat,
@@ -534,23 +455,8 @@ export const sync = async (
 
   let warmReasons: Record<string, string[]> = {};
   let warmNodes: Record<string, { file: string; m: number; r: string[] }> = {};
-  let preparedBaseline: SyncBaseline | undefined;
   if (files.length) {
-    // Edit-time `warmSync` may have precomputed the heavyweight ingredients —
-    // the next baseline fingerprint and the impact cascade — so this blocking
-    // hook only renders the verdict. Keyed by state version + changed set, a
-    // stale warm (more drift landed since) falls through to the inline compute.
-    const prepared = warmCache.get(root);
-    const preparedHit =
-      prepared !== undefined &&
-      prepared.version === state.version &&
-      prepared.filesKey === filesKey(files);
-    if (preparedHit) {
-      warmCache.delete(root);
-      preparedBaseline = prepared.snapshot;
-      warmReasons = prepared.warmReasons;
-      warmNodes = prepared.warmedNodes;
-    } else if (opts?.probe === "defer") {
+    if (opts?.probe === "defer") {
       // No prepared verdict and real drift on the send path: never run the
       // impact cascade under the TUI's finger. Leave the baseline untouched
       // so turn_end's full sync (the cheap backstop) reports and steers it.
@@ -632,7 +538,7 @@ export const sync = async (
     .sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([file]) => file);
   commitBaseline({
-    ...(preparedBaseline ?? (await snapshot(state))),
+    ...(await snapshot(state)),
     heat: memory.size ? memory : undefined,
     warmthArmed,
     pushed,

@@ -1,13 +1,11 @@
-import { owned } from "./context.js";
 // Derived from pi-fovea b594483868d27b7eb37a9b185c59ce812f8a9c01 (MIT); see UPSTREAM-LICENSE.txt.
 import { createHash } from "node:crypto";
-import { readFile, readdir } from "node:fs/promises";
-import { JOURNAL_TTL_MS, maintainTempStorage, readTempText, writeAtomicTemp } from "./temp-storage.js";
+import { readdir } from "node:fs/promises";
+import { JOURNAL_TTL_MS, maintainTempStorage, readTempText } from "./temp-storage.js";
 import { privateTmpdir as tmpdir } from "./context.js";
-import { isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, resolve } from "node:path";
 
 const JOURNAL_VERSION = 1;
-const JOURNAL_MAX_RECORDS = 256;
 
 interface MutationRecord {
   file: string;
@@ -26,20 +24,6 @@ interface MutationJournal {
   records: MutationRecord[];
 }
 
-export interface MutationCapture {
-  root: string;
-  file: string;
-  absolutePath: string;
-  beforeSha?: (string) | undefined;
-}
-
-export interface MutationTransition {
-  path: string;
-  beforeSha?: string | undefined;
-  afterSha?: string | undefined;
-  commitOrder?: number | undefined;
-}
-
 type ProvenanceKind = "current-session" | "other-session" | "mixed" | "unattributed";
 
 export interface SyncProvenance {
@@ -55,112 +39,9 @@ const prefixFor = (root: string): string => `pi-fovea-provenance-${rootKey(root)
 export const provenancePathFor = (root: string, sessionId: string): string =>
   join(tmpdir(), `${prefixFor(root)}${ownerFor(sessionId)}.json`);
 
-const hashFile = async (path: string): Promise<string | undefined> => {
-  try {
-    return createHash("sha1").update(await readFile(path)).digest("hex");
-  } catch {
-    return undefined;
-  }
-};
-
-const repoPath = (root: string, path: string): { file: string; absolutePath: string } | undefined => {
-  const absolutePath = resolve(root, path);
-  const file = relative(resolve(root), absolutePath);
-  if (!file || file === ".." || file.startsWith(`..${sep}`) || isAbsolute(file)) return undefined;
-  return { file: file.split(sep).join("/"), absolutePath };
-};
-
-export const captureMutation = async (root: string, path: string): Promise<MutationCapture | undefined> => {
-  const located = repoPath(root, path);
-  if (!located) return undefined;
-  return { root: resolve(root), ...located, beforeSha: await hashFile(located.absolutePath) };
-};
-
-const writeQueues = owned('provenance.ts:writeQueues', () => new Map<string, Promise<void>>());
-
-const persistRecords = async (
-  target: string,
-  journal: MutationJournal,
-  additions: readonly MutationRecord[],
-): Promise<void> => {
-  const cutoff = Date.now() - JOURNAL_TTL_MS;
-  let records: MutationRecord[] = [];
-  try {
-    const existing = JSON.parse(await readTempText(target, Infinity)) as MutationJournal;
-    if (existing.version === JOURNAL_VERSION && existing.root === journal.root && existing.owner === journal.owner) {
-      records = existing.records.filter((item) => item.at >= cutoff);
-    }
-  } catch {
-    // Missing and torn journals both recover as a fresh per-session file.
-  }
-  records.push(...additions);
-  journal.records = records.slice(-JOURNAL_MAX_RECORDS);
-  // Attribution is not a regenerable cache: never impose a pressure/byte cap.
-  await writeAtomicTemp(target, JSON.stringify(journal), Infinity);
-};
-
-export const recordMutationTransitions = async (
-  root: string,
-  transitions: readonly MutationTransition[],
-  sessionId: string,
-  toolCallId: string,
-): Promise<number> => {
-  const resolvedRoot = resolve(root);
-  const owner = ownerFor(sessionId);
-  const at = Date.now();
-  const records = transitions.flatMap((transition): MutationRecord[] => {
-    const located = repoPath(root, transition.path);
-    if (!located || transition.beforeSha === transition.afterSha) return [];
-    return [{
-      file: located.file,
-      beforeSha: transition.beforeSha,
-      afterSha: transition.afterSha,
-      owner,
-      toolCallId,
-      ...(transition.commitOrder === undefined ? {} : { commitOrder: transition.commitOrder }),
-      at,
-    }];
-  });
-  if (records.length === 0) return 0;
-  const target = provenancePathFor(resolvedRoot, sessionId);
-  const previous = writeQueues.get(target) ?? Promise.resolve();
-  const queued = previous.catch(() => {}).then(() => persistRecords(target, {
-    version: JOURNAL_VERSION, root: resolvedRoot, owner, records: [],
-  }, records));
-  writeQueues.set(target, queued);
-  try {
-    await queued;
-    return records.length;
-  } finally {
-    if (writeQueues.get(target) === queued) writeQueues.delete(target);
-  }
-};
-
-export const recordMutationTransition = async (
-  root: string,
-  path: string,
-  beforeSha: string | undefined,
-  afterSha: string | undefined,
-  sessionId: string,
-  toolCallId: string,
-): Promise<boolean> => (await recordMutationTransitions(
-  root, [{ path, beforeSha, afterSha }], sessionId, toolCallId,
-)) === 1;
-
-export const finishMutation = async (
-  capture: MutationCapture,
-  sessionId: string,
-  toolCallId: string,
-): Promise<boolean> => recordMutationTransition(
-  capture.root, capture.file, capture.beforeSha, await hashFile(capture.absolutePath), sessionId, toolCallId,
-);
-
 const readRecords = async (root: string, since: number): Promise<MutationRecord[]> => {
   void maintainTempStorage();
   const prefix = prefixFor(root);
-  await Promise.all([...writeQueues.entries()]
-    .filter(([path]) => path.split(/[/\\]/u).at(-1)?.startsWith(prefix))
-    .map(([, pending]) => pending.catch(() => {})));
   const cutoff = Math.max(since, Date.now() - JOURNAL_TTL_MS);
   let names: string[];
   try {

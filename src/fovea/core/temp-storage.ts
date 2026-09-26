@@ -139,10 +139,6 @@ const sweep = async (directory: string, now: number, dryRun = false): Promise<st
   return removed;
 };
 
-/** Explicit maintenance is preview-only unless apply is deliberately requested. */
-export const pruneTempStorage = (options: { directory: string; dryRun?: (boolean) | undefined; now?: (number) | undefined }): Promise<string[]> =>
-  sweep(options.directory, options.now ?? Date.now(), options.dryRun ?? true);
-
 const maintenanceHolder = scoped("maintenance", () => ({ value: undefined as { directory: string; at: number; pending?: Promise<void> | undefined } | undefined }));
 /** Coalesced, at most once / five minutes per process, only on actual activity. */
 export const maintainTempStorage = (directory = tmpdir(), now = Date.now()): Promise<void> => {

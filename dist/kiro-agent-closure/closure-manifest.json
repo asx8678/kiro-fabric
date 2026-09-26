@@ -425,7 +425,7 @@
       },
       {
         "path": "src/fovea/core/provenance.ts",
-        "sha256": "e03fa3d6306cb3a0133ff1897c45b72e0d5877d7111a9e0a10b6eea4857df3f8"
+        "sha256": "906afab659a88753b2b9b49cb6987a620283c70861e96aef0391ad887ff9482b"
       },
       {
         "path": "src/fovea/core/render.ts",
@@ -437,7 +437,7 @@
       },
       {
         "path": "src/fovea/core/session.ts",
-        "sha256": "a4cda48173bf09c064dea54c4743507ca855c63f2278b181932201951ff5e649"
+        "sha256": "121c8a182531cdc1393971d8f62dc4b1a24025b720f269ca09d6d677ce687479"
       },
       {
         "path": "src/fovea/core/source.ts",
@@ -449,11 +449,11 @@
       },
       {
         "path": "src/fovea/core/sync.ts",
-        "sha256": "6caa8433c760c35aeb4eca76b4a5573385694dbfe6f16aa119d255e83395fb69"
+        "sha256": "6495d189dfcf2b49122c681646442739a80e954ffd18fc44185b03e90d4dd98e"
       },
       {
         "path": "src/fovea/core/temp-storage.ts",
-        "sha256": "95ead1a5ad5c4f43d91d33de000a769ccaa37655e00223ec9ce34ccb53f80c14"
+        "sha256": "df2c393b146f6148241d6e5cb6f5634d3af5c159059da769fc5e84064c4a90fa"
       },
       {
         "path": "src/fovea/core/types.ts",
@@ -880,7 +880,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "d7b48e7e2cdf836c0a980578b2ecc87b2f3c05d371d936baa16a4463a1120e7d"
+    "digest": "c298fd4e35f1783ce9a81934472d09fee1e42d4bacf5d43aa3ae7fb5fc33b1d7"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1616,8 +1616,8 @@
     },
     {
       "path": "fovea/engine-entry.js",
-      "bytes": 325068,
-      "sha256": "0fa1936b4d7b198d69eca48d1e6bd4e8570500fe21f73e126bddfd1805affc4a"
+      "bytes": 324157,
+      "sha256": "69aaceeb4158e13d5d10f1e6da3421fb9ef335970bb2f21c37f0861358bd98f6"
     },
     {
       "path": "fovea/source-platform.json",
@@ -1660,5 +1660,5 @@
       "sha256": "d0cc927eab9fbae8ce1381936936cb7a1d3afe7cad07945c5301006e1653e0dc"
     }
   ],
-  "contentDigest": "9680ba3a40a82c9fc63a5e15681c17c86de33507663a09c9756e936f98a2fccc"
+  "contentDigest": "155e233e0dd908bada59aaeb20f22f3a1808130a02ebe7fc25a213da2b861e69"
 }

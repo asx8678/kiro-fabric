@@ -267,7 +267,7 @@ var FoveaScratchOwner = class {
 };
 
 // src/fovea/engine.ts
-import { isAbsolute as isAbsolute7, join as join11, resolve as resolve5 } from "node:path";
+import { isAbsolute as isAbsolute6, join as join11, resolve as resolve5 } from "node:path";
 
 // src/fovea/core/context.ts
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -621,8 +621,8 @@ var parseZeroContextDiff = (patch, prefix = "", maxHunksPerFile = MAX_DIFF_HUNKS
     const decoded = decodeGitPath(raw);
     if (decoded === void 0 || decoded === "/dev/null") return void 0;
     const repoPath = side && decoded.startsWith(`${side}/`) ? decoded.slice(2) : decoded;
-    const relative7 = gitRelativePath(repoPath, prefix);
-    return relative7 ? posix.normalize(relative7) : void 0;
+    const relative6 = gitRelativePath(repoPath, prefix);
+    return relative6 ? posix.normalize(relative6) : void 0;
   };
   const merge = (path, hunks, fallback) => {
     const previous = result.get(path);
@@ -6615,25 +6615,22 @@ var impact = async (root, args, ensured) => {
 // src/fovea/core/sync.ts
 import { createHash as createHash7 } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile as readFile6, stat as stat4 } from "node:fs/promises";
+import { readFile as readFile5, stat as stat4 } from "node:fs/promises";
 import { join as join8 } from "node:path";
 
 // src/fovea/core/provenance.ts
 import { createHash as createHash6 } from "node:crypto";
-import { readFile as readFile5, readdir as readdir2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute4, join as join7, relative as relative4, resolve as resolve4, sep as sep4 } from "node:path";
+import { readdir as readdir2 } from "node:fs/promises";
+import { join as join7, resolve as resolve4 } from "node:path";
 var JOURNAL_VERSION = 1;
 var sha1 = (value) => createHash6("sha1").update(value).digest("hex");
 var ownerFor = (sessionId) => sha1(sessionId).slice(0, 16);
 var rootKey = (root) => sha1(resolve4(root)).slice(0, 16);
 var prefixFor = (root) => `pi-fovea-provenance-${rootKey(root)}-`;
 var provenancePathFor = (root, sessionId) => join7(privateTmpdir(), `${prefixFor(root)}${ownerFor(sessionId)}.json`);
-var writeQueues = owned("provenance.ts:writeQueues", () => /* @__PURE__ */ new Map());
 var readRecords = async (root, since) => {
   void maintainTempStorage();
   const prefix = prefixFor(root);
-  await Promise.all([...writeQueues.entries()].filter(([path]) => path.split(/[/\\]/u).at(-1)?.startsWith(prefix)).map(([, pending]) => pending.catch(() => {
-  })));
   const cutoff = Math.max(since, Date.now() - JOURNAL_TTL_MS);
   let names;
   try {
@@ -6725,7 +6722,7 @@ var gitDriftSince = async (root, shas) => {
     const st = await stat4(join8(root, rel)).catch(() => void 0);
     if (st?.isDirectory()) return true;
     try {
-      const buf = await readFile6(join8(root, rel));
+      const buf = await readFile5(join8(root, rel));
       const sha = createHash7("sha1").update(buf).digest("hex");
       if (shas.get(rel) !== sha) return true;
     } catch {
@@ -6751,8 +6748,6 @@ var decayedMass = (entry, nowMs) => entry.m * Math.pow(0.5, Math.max(0, nowMs - 
 var MEMORY_MAX_NODES = 4096;
 var REARM_FRACTION = 0.5;
 var round4 = (x) => Math.round(x * 1e4) / 1e4;
-var warmCache = owned("sync.ts:warmCache", () => /* @__PURE__ */ new Map(), true);
-var filesKey = (files) => [...new Set(files)].sort().join("\n");
 var semanticDrift = (state, prev) => {
   const changed = Object.keys(state.facts).filter(
     (file) => prev.shas.get(file) !== state.facts[file].sha1
@@ -6801,7 +6796,7 @@ var coldManifestDrift = async (root, baseline, routes) => {
     try {
       const info = await stat4(join8(root, file)), before = baseline.meta.get(file);
       if (!before || info.size !== before.size || info.mtimeMs !== before.mtime) return true;
-      return sweep2 && baseline.shas.has(file) && createHash7("sha1").update(await readFile6(join8(root, file))).digest("hex") !== baseline.shas.get(file);
+      return sweep2 && baseline.shas.has(file) && createHash7("sha1").update(await readFile5(join8(root, file))).digest("hex") !== baseline.shas.get(file);
     } catch {
       return true;
     }
@@ -6822,7 +6817,7 @@ var coldDrift = async (root, baseline) => {
     if (info?.isDirectory() || file.endsWith("/")) return coldManifestDrift(root, baseline, routes);
     if (!baseline.shas.has(file) && !filterSupported([file], routes).length) continue;
     try {
-      if (createHash7("sha1").update(await readFile6(path)).digest("hex") !== baseline.shas.get(file)) return true;
+      if (createHash7("sha1").update(await readFile5(path)).digest("hex") !== baseline.shas.get(file)) return true;
     } catch {
       if (baseline.shas.has(file)) return true;
     }
@@ -6963,7 +6958,6 @@ var sync = async (root, params, now, opts) => {
   const files = [.../* @__PURE__ */ new Set([...semanticChanged, ...hinted])];
   const outsideAttentionOnly = scopedSync && ignoredFiles.length > 0 && changed.length === 0 && deleted.length === 0 && added.length === 0 && removed.length === 0;
   if (outsideAttentionOnly) {
-    warmCache.delete(root);
     commitBaseline({
       ...await snapshot(state),
       heat: prev.heat,
@@ -6995,16 +6989,8 @@ var sync = async (root, params, now, opts) => {
   ]) : void 0;
   let warmReasons = {};
   let warmNodes = {};
-  let preparedBaseline;
   if (files.length) {
-    const prepared = warmCache.get(root);
-    const preparedHit = prepared !== void 0 && prepared.version === state.version && prepared.filesKey === filesKey(files);
-    if (preparedHit) {
-      warmCache.delete(root);
-      preparedBaseline = prepared.snapshot;
-      warmReasons = prepared.warmReasons;
-      warmNodes = prepared.warmedNodes;
-    } else if (opts?.probe === "defer") {
+    if (opts?.probe === "defer") {
       return { structural: true, red: false, tokens: 0, details: { version: state.version, deferred: true } };
     } else {
       const result = await impact(root, { files, includeUncommitted: false, budget: params.budget });
@@ -7058,7 +7044,7 @@ var sync = async (root, params, now, opts) => {
   }
   const orderedWarm = [...surprise.entries()].sort((a, b) => b[1] - a[1] || Number(isTestScope(a[0])) - Number(isTestScope(b[0])) || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)).map(([file]) => file);
   commitBaseline({
-    ...preparedBaseline ?? await snapshot(state),
+    ...await snapshot(state),
     heat: memory.size ? memory : void 0,
     warmthArmed,
     pushed
@@ -7215,18 +7201,18 @@ function boundResultDetails(input, maxChars = 4e5, maxNodes = 18e3) {
 
 // src/fovea/source-access.ts
 import { lstat as lstat4, mkdir, writeFile as writeFile2 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, join as join10, relative as relative6, sep as sep6 } from "node:path";
+import { isAbsolute as isAbsolute5, join as join10, relative as relative5, sep as sep5 } from "node:path";
 import { createHash as createHash9 } from "node:crypto";
 
 // src/fovea/parser-executable.ts
 import { createHash as createHash8 } from "node:crypto";
 import { constants as constants2 } from "node:fs";
 import { open as open2, realpath as realpath2, writeFile, chmod } from "node:fs/promises";
-import { isAbsolute as isAbsolute5, relative as relative5, sep as sep5, join as join9 } from "node:path";
+import { isAbsolute as isAbsolute4, relative as relative4, sep as sep4, join as join9 } from "node:path";
 import { execFile as execFile3 } from "node:child_process";
 var sha256 = (bytes) => createHash8("sha256").update(bytes).digest("hex");
 async function readVerifiedExecutable(path, maxBytes = 128 * 1024 * 1024) {
-  if (!isAbsolute5(path)) throw new Error("Executable path must be absolute");
+  if (!isAbsolute4(path)) throw new Error("Executable path must be absolute");
   const canonical = await realpath2(path);
   if (canonical !== path) throw new Error("Executable path must be canonical and cannot contain symlinks");
   const handle = await open2(path, constants2.O_RDONLY | constants2.O_NOFOLLOW);
@@ -7252,8 +7238,8 @@ async function resolveParserDescriptor(descriptor, storageRoot, signal) {
   }
   if (descriptor.generationRoot) {
     const root = await realpath2(descriptor.generationRoot);
-    const rel = relative5(root, descriptor.path);
-    if (!rel || rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute5(rel)) throw new Error("Parser is outside its generation");
+    const rel = relative4(root, descriptor.path);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep4}`) || isAbsolute4(rel)) throw new Error("Parser is outside its generation");
   }
   signal?.throwIfAborted();
   const bytes = await readVerifiedExecutable(descriptor.path);
@@ -7528,9 +7514,9 @@ var SourceAccess = class {
   /** Bounded Git shallow-ledger reader; same ancestor/no-follow boundary as capture. */
   async readScopeSafeFile(root, path, maxBytes) {
     sourceLimit(maxBytes, 128 * 1024 * 1024, "metadata bytes");
-    const rel = relative6(root, path);
-    if (!rel || rel === ".." || rel.startsWith(`..${sep6}`) || isAbsolute6(rel)) throw new Error("Git metadata is outside authorized scope");
-    const segments = rel.split(sep6);
+    const rel = relative5(root, path);
+    if (!rel || rel === ".." || rel.startsWith(`..${sep5}`) || isAbsolute5(rel)) throw new Error("Git metadata is outside authorized scope");
+    const segments = rel.split(sep5);
     let directory = await openSourceDirectory(this.platform, root);
     try {
       for (const segment of segments.slice(0, -1)) {
@@ -7566,9 +7552,9 @@ var SourceAccess = class {
   }
 };
 function relativeStorageExclusion(root, storageRoot) {
-  const rel = relative6(root, storageRoot);
+  const rel = relative5(root, storageRoot);
   if (!rel) throw new Error("Storage root cannot be the authorized source root");
-  return rel !== ".." && !rel.startsWith(`..${sep6}`) && !isAbsolute6(rel) ? [rel.split(sep6).join("/")] : [];
+  return rel !== ".." && !rel.startsWith(`..${sep5}`) && !isAbsolute5(rel) ? [rel.split(sep5).join("/")] : [];
 }
 
 // src/fovea/engine.ts
@@ -7603,7 +7589,7 @@ var FoveaEngine = class {
   cleanupFailure;
   constructor(options) {
     this.options = { ...options, parser: { ...options.parser } };
-    if (!isAbsolute7(options.storageRoot)) throw new Error("Navigator storageRoot must be absolute");
+    if (!isAbsolute6(options.storageRoot)) throw new Error("Navigator storageRoot must be absolute");
   }
   query(request, signal) {
     const input = structuredClone(request);
@@ -7711,7 +7697,7 @@ var FoveaEngine = class {
       return { status: "ok", operation, reset: "conversation-root", ...operation === "reload" ? { graphInvalidated: true } : {} };
     }
     await this.initialize(signal);
-    if (!isAbsolute7(request.root) || await realpath3(request.root) !== request.root) throw new Error("Navigator root must be canonical");
+    if (!isAbsolute6(request.root) || await realpath3(request.root) !== request.root) throw new Error("Navigator root must be canonical");
     let root = this.roots.get(rootKey2);
     if (!root) {
       if (this.roots.size >= 32) {
