@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="950" viewBox="0 0 1200 950" role="img" aria-labelledby="title desc">
+<title id="title">One call: from TypeScript to evidence</title>
+<desc id="desc">Sequence: Kiro submits code and payloads; Fabric validates limits, workspace and admission; successful exact source and declarations may reuse compiler output; otherwise a worker checks TypeScript. A fresh QuickJS context calls ActionRegistry through JSON. Canonical arguments, reservations and approval precede provider invocation. Results return to guest code, then selected values and logs are projected into a bounded MCP response. Compilation failure invokes no providers; later failures do not roll back earlier effects.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#2563eb"/></marker></defs>
+<rect width="1200" height="950" fill="#f8fafc"/>
+<path d="M0 0H1200V110H0Z" fill="#172554"/>
+<text x="32" y="47" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="700" fill="#ffffff" text-anchor="start">One call: from TypeScript to evidence</text>
+<text x="32" y="84" font-family="Arial,Helvetica,sans-serif" font-size="21" font-weight="400" fill="#dbeafe" text-anchor="start">Read downward. Each nested provider action passes through the host policy boundary.</text>
+<rect x="32" y="138" width="220" height="58" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+<rect x="290" y="138" width="240" height="58" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+<rect x="584" y="138" width="260" height="58" rx="12" fill="#dbeafe" stroke="#93c5fd" stroke-width="2"/>
+<rect x="900" y="138" width="268" height="58" rx="12" fill="#ccfbf1" stroke="#5eead4" stroke-width="2"/>
+<text x="142" y="175" font-family="Arial,Helvetica,sans-serif" font-size="23" font-weight="700" fill="#172554" text-anchor="middle">Kiro agent</text>
+<text x="410" y="175" font-family="Arial,Helvetica,sans-serif" font-size="23" font-weight="700" fill="#172554" text-anchor="middle">Fabric service</text>
+<text x="714" y="175" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" fill="#172554" text-anchor="middle">Compiler + QuickJS</text>
+<text x="1034" y="175" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" fill="#0f766e" text-anchor="middle">Registry + providers</text>
+<path d="M142 204 V856" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="5 7"/>
+<path d="M410 204 V856" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="5 7"/>
+<path d="M714 204 V856" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="5 7"/>
+<path d="M1034 204 V856" fill="none" stroke="#cbd5e1" stroke-width="2.5" stroke-linejoin="round" stroke-dasharray="5 7"/>
+<path d="M142 246 H404" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="158" y="232" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">1. code + payloads</text></g>
+<g data-card="true"><rect x="290" y="270" width="240" height="90" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/><path d="M306 270 H514" stroke="#2563eb" stroke-width="4"/><text x="312" y="310" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" fill="#2563eb" text-anchor="start">Validate + admit</text><text x="312" y="348" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Limits + workspace</text></g>
+<path d="M410 398 H708" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="433" y="384" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">2. compile / reuse</text></g>
+<g data-card="true"><rect x="584" y="420" width="260" height="124" rx="12" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/><path d="M600 420 H828" stroke="#2563eb" stroke-width="4"/><text x="606" y="460" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="700" fill="#2563eb" text-anchor="start">Checked JavaScript</text><text x="606" y="498" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Fresh QuickJS context</text><text x="606" y="527" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Types fail before effects</text></g>
+<path d="M714 576 H1028" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="738" y="562" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">3. JSON host call</text></g>
+<g data-card="true"><rect x="900" y="598" width="268" height="148" rx="12" fill="#f0fdfa" stroke="#cbd5e1" stroke-width="2"/><path d="M916 598 H1152" stroke="#0f766e" stroke-width="4"/><text x="922" y="638" font-family="Arial,Helvetica,sans-serif" font-size="21" font-weight="700" fill="#0f766e" text-anchor="start">Prepare, reserve, gate</text><text x="922" y="676" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Canonical args + schema</text><text x="922" y="705" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Policy: allow / ask / deny</text><text x="922" y="734" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#142338" text-anchor="start">Then invoke the provider</text></g>
+<path d="M1034 776 H720" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="738" y="764" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">4. bounded result</text></g>
+<path d="M714 804 H416" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="434" y="792" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">5. selected value + logs</text></g>
+<path d="M410 848 H148" fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)" stroke-dasharray="7 5"/>
+<g><text paint-order="stroke" stroke="#f8fafc" stroke-width="8" stroke-linejoin="round" x="162" y="836" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="400" fill="#475569" text-anchor="start">6. projected response</text></g>
+<rect x="32" y="882" width="1136" height="46" rx="8" fill="#fff7ed" stroke="#fed7aa" stroke-width="2"/>
+<text x="50" y="911" font-family="Arial,Helvetica,sans-serif" font-size="19" font-weight="400" fill="#92400e" text-anchor="start">Defaults: 4 admitted executions  |  8 concurrent host calls per execution  |  50,000 visible characters</text>
+</svg>
