@@ -1,10 +1,50 @@
 # Kiro Fabric
 
-Kiro Fabric pairs Kiro's conversation and planning with a checked TypeScript execution backend. The agent profile exposes `@fabric/fabric_exec`: Kiro sends a program, Fabric runs its provider calls through workspace and approval checks, and selected evidence returns to the conversation.
+Kiro decides what to do next. Fabric runs the TypeScript program behind that step, checks each provider action, and returns the evidence Kiro needs to continue. The agent profile exposes one tool: `@fabric/fabric_exec`.
 
-![Runtime topology showing Kiro's stdio connection to Fabric, compiler and QuickJS workers, the action registry, provider namespaces, and the separate Navigator engine.](docs/images/runtime-topology.svg)
+[Install](#install) | [Architecture details](docs/architecture.md) | [Diagram text and source references](docs/diagram-descriptions.md)
 
-[Full-size topology](docs/images/runtime-topology.svg) | [Text description and source references](docs/diagram-descriptions.md#runtime-topology) | [Technical walkthrough](#how-kiro-and-fabric-work-together)
+## How Kiro and Fabric work together
+
+### 1. System map: who runs what
+
+Kiro and the private Fabric MCP backend are separate processes. Inside Fabric, a compiler worker checks TypeScript and a sandbox worker runs a fresh QuickJS guest. Guest calls reach host capabilities through `ActionRegistry`; selected results return through the output formatter. Solid arrows show calls, dashed arrows show returned data.
+
+![System schematic separating Kiro from the Fabric process, showing compilation, QuickJS, the action registry, provider routes, and the return path through bounded output.](docs/images/runtime-topology.svg)
+
+[Open system map](docs/images/runtime-topology.svg) | [Text and implementation links](docs/diagram-descriptions.md#runtime-topology)
+
+### 2. One read: code in, evidence out
+
+This example follows `local.read` from a TypeScript function body to its response fields. A type error stops before provider calls. A policy denial stops the provider invocation. Successful compiler output can be reused for identical source and guest declarations; the guest context and action checks are fresh each time.
+
+![A concrete local.read call for README.md passes admission, compilation, QuickJS and registry policy, then returns text, a file hash and continuation fields; separate branches show type errors and policy denial.](docs/images/checked-call-sequence.svg)
+
+[Open read trace](docs/images/checked-call-sequence.svg) | [Text and implementation links](docs/diagram-descriptions.md#checked-call-sequence)
+
+The displayed response is illustrative. `sha256` identifies the whole file; `truncated` means an unread suffix remains, and `nextOffset` gives the next line. Guest variables last for one execution. Only the returned value and printed logs become ordinary output; Fabric also preserves relevant failure diagnostics and overflow information.
+
+### 3. Navigator: a map becomes a reading plan
+
+`repo.focus` uses a repository graph to suggest source windows. Each window carries a path, line range and expected content hash. `local.readMany` checks those windows against the source; `repo.focusRead` composes both steps. The graph relations and window below illustrate this repository's code, rather than a captured Navigator response.
+
+![Navigator schematic showing createKiroRuntime constructing two components, an illustrative hash-bound read window, the local.readMany validation step, and returned source with coverage and continuation metadata.](docs/images/navigator-evidence-flow.svg)
+
+[Open Navigator schematic](docs/images/navigator-evidence-flow.svg) | [Text and implementation links](docs/diagram-descriptions.md#navigator-evidence)
+
+Inspect the actual source and its coverage before making code claims. A stale hash requires refreshed navigation and a new read. `H1` abbreviates a complete SHA-256 value; a graph version or relevance score cannot substitute for it. See [Navigator usage and qualification](skills/fabric-exec/references/fovea.md) for coverage and delivery limits.
+
+### 4. Edits: keep the version you read
+
+`local.edit` carries the read's hash as `expectedSha256`. Fabric prepares the exact diff, reserves write intent and applies the current policy. Immediately before publication it rechecks the source snapshot. The diagram separates the matching-file path from the stale-file path.
+
+![Edit decision flow carrying hash H1 from the source read into the prepared request: a matching current snapshot can publish H2, while a changed hash Hx refuses publication and requires a reread.](docs/images/edit-consistency-flow.svg)
+
+[Open edit decision flow](docs/images/edit-consistency-flow.svg) | [Text and implementation links](docs/diagram-descriptions.md#version-bound-edits)
+
+The default write policy is `ask`; missing approval support blocks the action. A later failure does not undo earlier effects. These file-provider checks do not confine shell commands, which run with host OS authority.
+
+These schematics describe repository contracts. Native-client tool filtering, interactive approval and lifecycle qualification have separate limits; see the [current client evidence](docs/upstream-client-issues.md#2026-09-25-cli-2240-retest).
 
 ## Install
 
@@ -49,40 +89,6 @@ On Kiro CLI 2.21.1, putting `--agent kiro-fabric` before an explicit `chat` subc
 Restart existing Kiro sessions after an update. If you enabled the optional shell shortcut, open a new terminal to load it before running `kiro-cli --v3`.
 
 **Current client limitations:** the 2026-09-25 macOS retest on Kiro CLI **2.24.0** still returned `No handler registered for method: _kiro/mcp/elicitation` in v3; v2 rejected form approval as unsupported, and the legacy UI also failed the approval test. Reads succeeded, but the approval-dependent edit stayed blocked in all three paths. See the [current evidence and client fix required](docs/upstream-client-issues.md#2026-09-25-cli-2240-retest). Earlier Linux tests also observed `disclose_context` outside the strict single-tool profile; complete tool filtering remains unqualified on 2.24.0. Do not treat the `/tools` view or a model-authored tool list as complete filtering evidence, or enable blanket trust to bypass a missing approval UI.
-
-## How Kiro and Fabric work together
-
-These diagrams describe the repository's execution contracts. Native-client qualification remains subject to the limitations above. Open an image at full size for its technical labels; each has a selectable text version with implementation links.
-
-### From one tool call to checked actions
-
-A `fabric_exec` request carries a TypeScript function body and optional named string `payloads`, `resultFormat`, and `timeoutMs`. New programs are checked against Fabric's guest declarations; successful exact source and declarations can reuse cached compiler output. Every execution gets a fresh QuickJS context, and every nested provider action still passes through the registry's validation, reservations and approval policy.
-
-![Sequence diagram following code and payloads from Kiro through Fabric validation, compilation, fresh QuickJS, checked provider invocation, and the bounded result returned to Kiro.](docs/images/checked-call-sequence.svg)
-
-[Full-size execution sequence](docs/images/checked-call-sequence.svg) | [Text description and source references](docs/diagram-descriptions.md#checked-call-sequence)
-
-Independent I/O can overlap inside one program; read-dependent edits and verification stay ordered. Intermediate values remain in the guest unless returned or printed. The default visible response budget is 50,000 UTF-16 code units, including logs; overflow uses a bounded preview and an artifact when retention succeeds. This is a bounded execution model, not a claim of measured speed or token savings.
-
-### From Navigator hints to actual source
-
-Navigator (`repo.*`, implemented under `src/fovea/`) builds advisory maps from verified source snapshots. `repo.focus` returns suggested source windows with content hashes; `local.readMany` reads those windows through the ordinary registry. `repo.focusRead` composes both steps. Inspect the returned source, failures and continuation metadata before making code claims or edits.
-
-![Navigator pipeline from a verified workspace snapshot through ast-grep extraction and graph navigation to hash-bound windows, approved local reads, and source evidence.](docs/images/navigator-evidence-flow.svg)
-
-[Full-size Navigator pipeline](docs/images/navigator-evidence-flow.svg) | [Text description and source references](docs/diagram-descriptions.md#navigator-evidence)
-
-The graph reports coverage gaps; it does not establish correctness or complete inspection. A stale hash requires refreshed navigation and a new read. Analysis availability, same-call advisory suffixes, and native prompt/stop delivery are separate capabilities; see [Navigator usage and qualification](skills/fabric-exec/references/fovea.md).
-
-### From a source read to a version-bound edit
-
-`local.edit` requires `expectedSha256` from the read that supplied its replacement anchors. Fabric prepares the complete diff, freezes the canonical request, and reserves write intent before applying policy. After approval, it rechecks the snapshot before publishing the prepared bytes. The default write policy is `ask`; missing approval support blocks that action.
-
-![Six-step edit flow: read a file hash, prepare exact replacements, reserve write intent, apply approval policy, revalidate and publish, then verify; detected source drift requires a reread.](docs/images/edit-consistency-flow.svg)
-
-[Full-size edit flow](docs/images/edit-consistency-flow.svg) | [Text description and source references](docs/diagram-descriptions.md#version-bound-edits)
-
-A program can commit several separate actions. A later failure does not undo earlier effects, so inspect current source or durable state before retrying. Shell execution has host OS authority; these file-provider checks do not confine shell commands.
 
 ## If the CLI preflight fails
 
