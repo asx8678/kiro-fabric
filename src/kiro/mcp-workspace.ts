@@ -69,7 +69,7 @@ export const callWorkspace = async (context: WorkspaceTransitionContext, args: u
       verification: binding.workspaceObservation().status,
     }) }] };
     if (parsed.action === "list") return { content: [{ type: "text" as const, text: JSON.stringify({
-      ...binding.list(),
+      ...binding.list(parsed),
       context: snapshot()?.status ?? "temporarily-unavailable",
     }) }] };
     action = parsed.action;

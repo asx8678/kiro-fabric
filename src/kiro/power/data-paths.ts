@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { CURRENT_FABRIC_CONFIG_SCHEMA_VERSION } from "../../config.js";
+import { initializeOwnedFile, type OwnedFile } from "../../providers/owned-file.js";
 
 export interface KiroPowerDataPaths {
   root: string;
@@ -75,21 +76,67 @@ const fsyncDirectory = (directory: string): void => {
   const descriptor = fs.openSync(directory, "r");
   try { fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
 };
+const withInitializationLock = <T>(directory: string, name: string, operation: () => T): T => {
+  const root = assertPrivateDirectory(directory);
+  const lock = path.join(directory, name);
+  const owned: OwnedFile = { created: false };
+  const deadline = performance.now() + 5_000;
+  const pause = new Int32Array(new SharedArrayBuffer(4));
+  const assertRoot = (): void => {
+    const current = assertPrivateDirectory(directory);
+    if (current.dev !== root.dev || current.ino !== root.ino) throw new Error("Fabric initialization directory identity changed");
+  };
+  let failed = false;
+  let failure: unknown;
+  try {
+    for (;;) {
+      assertRoot();
+      try {
+        initializeOwnedFile(lock, owned, descriptor => {
+          fs.writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid })}\n`);
+          fs.fsyncSync(descriptor);
+        });
+        break;
+      } catch (error) {
+        if (owned.created || errorCode(error) !== "EEXIST") throw error;
+        try { privateFile(lock); }
+        catch (inspection) { if (errorCode(inspection) === "ENOENT") continue; throw inspection; }
+        if (performance.now() >= deadline) throw new Error(`Fabric initialization lock unavailable; concurrent or uncertain owner: ${lock}`);
+        Atomics.wait(pause, 0, 0, 10);
+      }
+    }
+    assertRoot();
+    return operation();
+  } catch (error) { failed = true; failure = error; throw error; }
+  finally {
+    if (owned.created) {
+      try {
+        assertRoot();
+        const current = privateFile(lock);
+        if (!owned.identity || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
+          throw new Error("Fabric initialization lock ownership changed; operator recovery required");
+        }
+        fs.unlinkSync(lock);
+        fsyncDirectory(directory);
+      } catch (cleanup) {
+        if (failed) throw new AggregateError([failure, cleanup], "Fabric initialization and lock cleanup failed", { cause: failure });
+        throw cleanup;
+      }
+    }
+  }
+};
 const writeJsonAtomic = (target: string, value: unknown, exclusive = false): string => {
   const bytes = `${JSON.stringify(value, null, 2)}\n`;
   if (exclusive) {
-    try {
-      const descriptor = fs.openSync(target, "wx", 0o600);
-      try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-    } catch (error) { if (errorCode(error) !== "EEXIST") throw error; }
-  } else {
-    const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
-    try {
-      const descriptor = fs.openSync(temporary, "wx", 0o600);
-      try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
-      fs.renameSync(temporary, target);
-    } catch (error) { fs.rmSync(temporary, { force: true }); throw error; }
+    try { privateFile(target); return target; }
+    catch (error) { if (errorCode(error) !== "ENOENT") throw error; }
   }
+  const temporary = `${target}.${process.pid}.${randomBytes(8).toString("hex")}.tmp`;
+  try {
+    const descriptor = fs.openSync(temporary, "wx", 0o600);
+    try { fs.writeFileSync(descriptor, bytes); fs.fsyncSync(descriptor); } finally { fs.closeSync(descriptor); }
+    fs.renameSync(temporary, target);
+  } catch (error) { fs.rmSync(temporary, { force: true }); throw error; }
   privateFile(target);
   fs.chmodSync(target, 0o600);
   fsyncDirectory(path.dirname(target));
@@ -183,25 +230,27 @@ const migrateLegacyFabricConfiguration = (root: string, config: string): { migra
 
 export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPaths => {
   const root = privateDirectory(path.join(pluginData, "fabric"), pluginData);
-  const config = privateDirectory(path.join(root, "config"), root);
-  const mcpMigrated = migrateMcpConfiguration(config);
-  const policy = migrateLegacyFabricConfiguration(root, config);
-  if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
-    writeJsonAtomic(path.join(root, "migration-report.json"), {
-      schemaVersion: 2,
-      migrated: [...mcpMigrated, ...policy.migrated],
-      ignoredFields: policy.ignored.sort(),
-      quarantined: policy.quarantined,
-    });
-  }
-  return {
-    root,
-    config,
-    configFile: path.join(config, "config.json"),
-    mcpConfig: privateJson(path.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
-    artifacts: privateDirectory(path.join(root, "artifacts"), root),
-    projects: privateDirectory(path.join(root, "projects"), root),
-  };
+  return withInitializationLock(root, ".initialize.lock", () => {
+    const config = privateDirectory(path.join(root, "config"), root);
+    const mcpMigrated = migrateMcpConfiguration(config);
+    const policy = migrateLegacyFabricConfiguration(root, config);
+    if (mcpMigrated.length || policy.migrated.length || policy.quarantined.length) {
+      writeJsonAtomic(path.join(root, "migration-report.json"), {
+        schemaVersion: 2,
+        migrated: [...mcpMigrated, ...policy.migrated],
+        ignoredFields: policy.ignored.sort(),
+        quarantined: policy.quarantined,
+      });
+    }
+    return {
+      root,
+      config,
+      configFile: path.join(config, "config.json"),
+      mcpConfig: privateJson(path.join(config, "mcp.json"), { mcpServers: {}, imports: [] }),
+      artifacts: privateDirectory(path.join(root, "artifacts"), root),
+      projects: privateDirectory(path.join(root, "projects"), root),
+    };
+  });
 };
 
 const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity, generation: 2 | 3 = 3): string => createHash("sha256")
@@ -280,15 +329,17 @@ const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspa
 
 export const prepareKiroPowerProjectPaths = (projects: string, rawIdentity: KiroPowerWorkspaceIdentity) => {
   const identity = projectKiroPowerWorkspaceIdentity(rawIdentity);
-  const migration = migrateWorkspaceGeneration(projects, identity);
-  if (!migration.migrated) validateWorkspaceObject(identity);
-  const root = privateDirectory(migration.current, projects);
-  const identityFile = privateJson(path.join(root, "workspace-identity.json"), identity);
-  validatePersistedIdentity(identityFile, identity);
-  return {
-    root,
-    identityFile,
-    state: privateDirectory(path.join(root, "state"), root),
-    artifacts: privateDirectory(path.join(root, "artifacts"), root),
-  };
+  return withInitializationLock(projects, `.initialize-${kiroPowerWorkspaceId(identity)}.lock`, () => {
+    const migration = migrateWorkspaceGeneration(projects, identity);
+    if (!migration.migrated) validateWorkspaceObject(identity);
+    const root = privateDirectory(migration.current, projects);
+    const identityFile = privateJson(path.join(root, "workspace-identity.json"), identity);
+    validatePersistedIdentity(identityFile, identity);
+    return {
+      root,
+      identityFile,
+      state: privateDirectory(path.join(root, "state"), root),
+      artifacts: privateDirectory(path.join(root, "artifacts"), root),
+    };
+  });
 };

@@ -52,7 +52,7 @@ export const createMcpSession = (context: McpSessionOptions) => {
     pluginRoot: options.runtimeRoot,
     pluginData: options.dataRoot,
     ...(kiroHome === undefined ? {} : { kiroHome }),
-    elicitor: { approveWorkspace: (canonicalPath, signal) => fabricApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...(signal ? { signal } : {}) }) },
+    elicitor: { approveWorkspace: (canonicalPath, signal) => fabricApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${JSON.stringify(canonicalPath)}`, reviewable: true, ...(signal ? { signal } : {}) }) },
   });
   const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
     supported: () => (server.getClientCapabilities() as { roots?: unknown } | undefined)?.roots !== undefined,

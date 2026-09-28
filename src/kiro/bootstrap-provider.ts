@@ -49,10 +49,46 @@ export class FabricBootstrapProvider implements FabricProvider {
     if (!context.bootstrap) throw new Error("Kiro bootstrap context is unavailable in this library execution");
     if (name === "workspace") {
       if (!Value.Check(kiroPowerWorkspaceRequestSchema, args)) throw new Error("Invalid fabric.workspace action/arguments");
-      return this.#bounded(await context.bootstrap.workspace(args, context.signal, context.chargeApproval));
+      return this.#boundedWorkspace(await context.bootstrap.workspace(args, context.signal, context.chargeApproval), args);
     }
     if (name === "info") return this.#bounded(await context.bootstrap.info());
     throw new Error(`Unknown bootstrap action: ${name}`);
+  }
+  #boundedWorkspace(value: unknown, args: Record<string, unknown>): unknown {
+    const fits = (candidate: unknown): boolean => JSON.stringify(candidate).length <= this.maxResultChars;
+    if (fits(value) && args.offset === undefined && args.limit === undefined) return value;
+    if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid workspace response");
+    const item = value as Record<string, unknown>;
+    const summary = Object.fromEntries(["status", "rootId", "source", "requiresSelection", "context", "verification", "action", "committed", "nextExecutionRequired"]
+      .filter(key => item[key] !== undefined).map(key => [key, item[key]]));
+    if (item.recovery !== undefined) summary.recovery = { instruction: "Start a new session from a project directory with the installed kiro-fabric launcher." };
+    if (args.action !== "list" || !Array.isArray(item.roots)) {
+      const response = { ...summary, truncated: true };
+      if (!fits(response)) throw new Error("Nested result budget too small for workspace status");
+      return response;
+    }
+    const roots = item.roots;
+    const offset = typeof args.offset === "number" ? args.offset : 0;
+    const high = Math.min(typeof args.limit === "number" ? args.limit : roots.length, Math.max(0, roots.length - offset));
+    const detailsTruncated = item.name !== undefined || item.recovery !== undefined;
+    const page = (entries: unknown[]) => {
+      const nextOffset = offset + entries.length;
+      const truncated = nextOffset < roots.length;
+      return { ...summary, roots: entries, totalRoots: roots.length, offset, truncated,
+        ...(detailsTruncated ? { detailsTruncated: true } : {}),
+        ...(truncated ? { nextOffset, continuation: { ref: "fabric.workspace", args: { action: "list", offset: nextOffset,
+          ...(args.limit === undefined ? {} : { limit: args.limit }) } } } : {}) };
+    };
+    const full = page(roots.slice(offset, offset + high));
+    if (fits(full)) return full;
+    const count = largestFittingInteger(0, high, size => fits(page(roots.slice(offset, offset + size))));
+    if (count > 0) return page(roots.slice(offset, offset + count));
+    const first = roots[offset] as { rootId: string; name: string } | undefined;
+    if (first) {
+      const compact = (size: number) => page([{ rootId: first.rootId, name: first.name.slice(0, size), nameTruncated: true }]);
+      if (fits(compact(0))) return compact(largestFittingInteger(0, first.name.length, size => fits(compact(size))));
+    }
+    throw new Error("Nested result budget too small for workspace list progress");
   }
   #bounded(value: unknown): unknown {
     if (JSON.stringify(value).length <= this.maxResultChars) return value;
@@ -60,7 +96,8 @@ export class FabricBootstrapProvider implements FabricProvider {
     // generic bridge truncation must never replace a documented typed result.
     if (value && typeof value === "object") {
       const item = value as Record<string, unknown>;
-      const summary = { product: item.product, executor: item.executor, workspace: item.workspace, lifecycle: item.lifecycle, runProvenance: item.runProvenance, truncated: true };
+      const summary = { ...Object.fromEntries(["product", "executor", "workspace", "lifecycle", "runProvenance"]
+        .filter(key => item[key] !== undefined).map(key => [key, item[key]])), truncated: true };
       if (JSON.stringify(summary).length <= this.maxResultChars) return summary;
     }
     return { truncated: true, message: "Bootstrap detail exceeds the configured nested-result budget; increase that budget for full health/root details" };

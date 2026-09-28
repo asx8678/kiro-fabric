@@ -15,7 +15,11 @@ import type { KiroPowerWorkspaceIdentity } from "./data-paths.js";
 /** Strict runtime validator; invalid action/argument combinations fail closed. */
 export const kiroPowerWorkspaceRequestSchema = Type.Union([
   Type.Object({ action: Type.Literal("status") }, { additionalProperties: false }),
-  Type.Object({ action: Type.Literal("list") }, { additionalProperties: false }),
+  Type.Object({
+    action: Type.Literal("list"),
+    offset: Type.Optional(Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })),
+    limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 128 })),
+  }, { additionalProperties: false }),
   Type.Object({
     action: Type.Literal("select"),
     rootId: Type.String({ minLength: 1, maxLength: 64 }),
@@ -38,10 +42,12 @@ export const kiroWorkspaceToolInputSchema = {
     action: {
       type: "string",
       enum: ["status", "list", "select", "attach", "detach"],
-      description: "status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.",
+      description: "status and detach take no other fields; list accepts offset and limit; select requires rootId from list; attach requires an absolute path.",
     },
     rootId: { type: "string", minLength: 1, maxLength: 64, description: "Required only for action select: a rootId reported by action list." },
     path: { type: "string", minLength: 1, maxLength: 4096, description: "Required only for action attach: an absolute filesystem path to bind manually." },
+    offset: { type: "integer", minimum: 0, maximum: Number.MAX_SAFE_INTEGER, description: "Only for action list: zero-based root offset from nextOffset." },
+    limit: { type: "integer", minimum: 1, maximum: 128, description: "Only for action list: maximum roots in a page." },
   },
   required: ["action"],
   additionalProperties: false,
@@ -49,7 +55,7 @@ export const kiroWorkspaceToolInputSchema = {
 
 export type KiroPowerWorkspaceRequest =
   | { action: "status" }
-  | { action: "list" }
+  | { action: "list"; offset?: number; limit?: number }
   | { action: "select"; rootId: string }
   | { action: "attach"; path: string }
   | { action: "detach" };
@@ -252,7 +258,15 @@ export class KiroPowerWorkspaceBinding {
       : { status: "unbound" as const, requiresSelection: this.#candidates.length > 1 };
   }
 
-  list() { return { ...this.status(), roots: this.#candidates.map(({ id, name }) => ({ rootId: id, name })) }; }
+  list(options: { offset?: number; limit?: number } = {}) {
+    const roots = this.#candidates.map(({ id, name }) => ({ rootId: id, name }));
+    if (options.offset === undefined && options.limit === undefined) return { ...this.status(), roots };
+    const offset = options.offset ?? 0;
+    const page = roots.slice(offset, offset + (options.limit ?? roots.length));
+    const truncated = offset + page.length < roots.length;
+    return { ...this.status(), roots: page, totalRoots: roots.length, offset, truncated,
+      ...(truncated ? { nextOffset: offset + page.length } : {}) };
+  }
 
   async prepareMutation(
     request: Extract<KiroPowerWorkspaceRequest, { action: "select" | "attach" | "detach" }>,
@@ -335,7 +349,7 @@ export class KiroPowerWorkspaceBinding {
 
   async handle(request: KiroPowerWorkspaceRequest, signal?: AbortSignal) {
     if (request.action === "status") return this.status();
-    if (request.action === "list") return this.list();
+    if (request.action === "list") return this.list(request);
     return this.commitMutation(await this.prepareMutation(request, signal));
   }
 }
