@@ -14,6 +14,17 @@ Task guidance, not permission. The user's tool and output constraints always win
 - Batch related source with `local.readMany`. Reuse returned `totalLines` instead of re-reading for line counts. Follow `remaining` and relevant `unreadTails` without rereading prefixes. The [search→read recipe](recipes.md#discover-then-read) combines located windows without a model round trip.
 - Keep known-schema transformations inside the program instead of copying raw data through the conversation. Lower per-read `maxChars` rather than losing coverage when combining results.
 
+A cause is found when you can point to the code that produces the wrong behavior and a read or run that shows it; until then it is a hypothesis. This evidence is yours to gather, so a gap in it is not a reason to stop or ask:
+
+- The full error output and every stack frame that matters, not only the last line.
+- A minimal reproduction: the smallest command, test or script that shows the failure.
+- Dependency and tool source inside the workspace (for example `node_modules`) and installed versions, instead of assumptions about their behavior.
+- The environment the code really runs in: configuration, environment variables, working directory, build output versus source, stale caches.
+- History: `git log -p` and `git blame` on the lines involved.
+- Real values from a probe script, or from temporary logging when edits are authorized. Keep scratch scripts outside the repository or delete them, and remove temporary logging before finishing.
+
+Once a cause is confirmed, search for the same pattern in sibling code; every instance the request covers is part of the fix.
+
 Match verification to the kind of change:
 
 - **Bug:** reproduce the trigger first, then confirm the fix removes it and check a credible counterexample.

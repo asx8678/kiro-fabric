@@ -82,6 +82,6 @@ Everything you return stays in the conversation and is re-sent on later turns. R
 | --- | --- |
 | `api` / `guide` | Full type declarations and contracts, MCP catalogs |
 | `recipes` | Search/read composition, edits and validators |
-| `workflow` | Verification, reporting and Git/GitHub procedures |
+| `workflow` | Investigation evidence, verification, reporting and Git/GitHub procedures |
 | `review` | Coverage tracking, finding evidence and counterexamples |
 | `overview` / `skill` | Short bootstrap or this text |
