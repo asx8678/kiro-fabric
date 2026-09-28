@@ -119,6 +119,7 @@ export const GUEST_SETUP = `
         for (const key of objectKeys(descriptors)) {
           const descriptor = descriptors[key];
           if (!objectHasOwn(descriptor, 'value')) throw new SafeTypeError('Result contains an accessor');
+          if (descriptor.value === undefined) continue;
           objectDefineProperty(copy, key, { value: visit(descriptor.value, depth + 1), enumerable: true });
         }
       }
@@ -254,7 +255,7 @@ export const GUEST_SETUP = `
     stopQueuedHostCalls(reason);
     rejectExecution(reason);
   };
-  const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), strictJsonText);
+  const run = (main) => promiseThen(promiseRace([promiseThen(promiseResolve(), main), executionGate]), (value) => strictJsonText(value === undefined ? null : value));
   globalThis.tools = objectFreeze({
     providers: () => call("fabric.providers"),
     list: () => call("fabric.list"),

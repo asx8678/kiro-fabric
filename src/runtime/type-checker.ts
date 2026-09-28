@@ -37,7 +37,7 @@ const standardLibraryPath = (fileName: string): boolean => {
 };
 
 /** Guest programs execute inside this wrapper; user code starts on wrapped line 2. */
-const GUEST_WRAPPER_PREFIX = "async function __kiroFabricMain(): Promise<JsonValue> {\n";
+const GUEST_WRAPPER_PREFIX = "async function __kiroFabricMain(): Promise<JsonValue | { [key: string]: JsonValue | undefined } | undefined | void> {\n";
 const GUEST_WRAPPER_SUFFIX = "\n}\n";
 const wrapFabricGuestCode = (code: string): string => `${GUEST_WRAPPER_PREFIX}${code}${GUEST_WRAPPER_SUFFIX}`;
 
