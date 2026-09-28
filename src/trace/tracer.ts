@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { fabricJsonText } from "../runtime/json-budget.js";
+import { fabricJsonText, jsonStringPrefix } from "../runtime/json-budget.js";
 import { createTraceWriter, type TraceWriter, type TraceWriterOptions } from "./trace-writer.js";
 
 type TraceCategory = "init" | "eval" | "bridge" | "teardown";
@@ -43,6 +43,7 @@ export interface FabricTracer {
 export const traceFailureMetadata = (errorKind: "approval_failed" | "provider_failed") => ({ errorKind });
 
 const MAX_EVENT_CHARS = 6_000;
+const MAX_ENVELOPE_FIELD_CHARS = 512;
 
 const NOOP_SPAN: TraceSpan = Object.freeze({ id: "", end: () => undefined });
 
@@ -86,10 +87,12 @@ class ActiveFabricTracer implements FabricTracer {
     } catch {
       // Event data must never break the writer. Fall back to a minimal
       // record that preserves the category/name/timing without the payload.
-      const fallback: TraceEvent = { v: 1, ts: event.ts, monoUs: event.monoUs, seq: sequenced.seq, cat: event.cat, ev: event.ev, ...(event.execId ? { execId: event.execId } : {}), ...(event.spanId ? { spanId: event.spanId } : {}), ...(event.parentId ? { parentId: event.parentId } : {}), ...(event.durUs !== undefined ? { durUs: event.durUs } : {}), data: { traceDataError: true } };
-      line = fabricJsonText(fallback, MAX_EVENT_CHARS);
+      try {
+        const fallback: TraceEvent = { v: 1, ts: event.ts, monoUs: event.monoUs, seq: sequenced.seq, cat: event.cat, ev: jsonStringPrefix(event.ev, MAX_ENVELOPE_FIELD_CHARS), ...(event.execId ? { execId: jsonStringPrefix(event.execId, MAX_ENVELOPE_FIELD_CHARS) } : {}), ...(event.spanId ? { spanId: jsonStringPrefix(event.spanId, MAX_ENVELOPE_FIELD_CHARS) } : {}), ...(event.parentId ? { parentId: jsonStringPrefix(event.parentId, MAX_ENVELOPE_FIELD_CHARS) } : {}), ...(event.durUs !== undefined ? { durUs: event.durUs } : {}), data: { traceDataError: true } };
+        line = fabricJsonText(fallback, MAX_EVENT_CHARS);
+      } catch { return; }
     }
-    this.#writer.write(line);
+    try { this.#writer.write(line); } catch { return; }
   }
 
   span(cat: TraceCategory, ev: string, execId?: string, data?: Record<string, unknown>, parentId?: string): TraceSpan {

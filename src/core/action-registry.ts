@@ -121,7 +121,7 @@ const indexedAction = (provider: FabricProvider, action: ResolvedFabricAction) =
         const tokens = Object.fromEntries(
           Object.entries(fields).map(([name, field]) => [name, new Set(normalizedTerms(field))]),
         ) as Record<keyof typeof fields, Set<string>>;
-  return { action: deepFreeze(action), fields, tokens };
+  return { action: deepFreeze(action), fields, tokens, weight: catalogWeight(action) };
 };
 type DiscoveryIndex = { entries: ReturnType<typeof indexedAction>[]; refs: Map<string, ResolvedFabricAction>; bytes: number; nodes: number };
 type Load<T> = { pending: boolean; failed: boolean; users: number; value?: T; error?: unknown; release: () => void; listeners: Set<() => void>; cancelQueued?: () => void };
@@ -280,7 +280,7 @@ export class ActionRegistry {
         try {
           const action = observed ? structuredClone(descriptor) as ResolvedFabricAction : resolved(provider, descriptor);
           if (refs.has(action.ref)) throw new Error(`Ambiguous Fabric action: ${action.ref}`);
-          const entry = indexedAction(provider, action), actionWeight = catalogWeight(action);
+          const entry = indexedAction(provider, action), actionWeight = entry.weight;
           let b = actionWeight.bytes + 4096, n = actionWeight.nodes + 32;
           for (const field of Object.values(entry.fields)) b += 128 + field.length * 4;
           for (const tokens of Object.values(entry.tokens)) { b += 256; n++; for (const token of tokens) { b += 192 + token.length * 4; n++; } }
@@ -335,7 +335,7 @@ export class ActionRegistry {
     });
     return record;
   }
-  async #withIndexes<T>(use: (indexes: DiscoveryIndex[]) => T, signal?: AbortSignal): Promise<T> {
+  async #withIndexes(use: (indexes: DiscoveryIndex[]) => ResolvedFabricAction[], signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
     if (this.#closed) throw new Error("Fabric registry is closed");
     throwIfAbortedOrExpired(signal);
     const operationRelease = this.#reserve(2048 + this.#providers.size * 256, 32 + this.#providers.size * 4);
@@ -345,13 +345,14 @@ export class ActionRegistry {
       await this.#wait(records.map(([, record]) => record), signal);
       this.#assertOpen();
       const indexes = records.map(([, record]) => record.value!);
+      const actions = use(indexes), selected = new Set(actions);
       let bytes = 1024, nodes = 16;
-      for (const index of indexes) for (const entry of index.entries) {
-        const weight = catalogWeight(entry.action);
+      for (const index of indexes) for (const { action, weight } of index.entries) {
+        if (!selected.has(action)) continue;
         bytes += weight.bytes * 4 + 512; nodes += weight.nodes * 2 + 16;
       }
       const release = this.#reserve(bytes, nodes);
-      try { return use(indexes); } finally { release(); }
+      try { return actions.map(action => structuredClone(action)); } finally { release(); }
     } finally {
       for (const [provider, record] of records) { record.users--; this.#releaseIndex(provider, record); }
       records.length = 0; operationRelease(); this.#trimDiscovery(); this.#pumpRaw();
@@ -416,7 +417,7 @@ export class ActionRegistry {
   }
 
   async list(signal?: AbortSignal): Promise<ResolvedFabricAction[]> {
-    return this.#withIndexes(indexes => indexes.flatMap(index => index.entries.map(entry => structuredClone(entry.action)))
+    return this.#withIndexes(indexes => indexes.flatMap(index => index.entries.map(entry => entry.action))
       .sort((left, right) => compareCodeUnits(left.ref, right.ref)), signal);
   }
 
@@ -466,7 +467,7 @@ export class ActionRegistry {
         }
       };
       // Score every candidate, but retain and clone only the requested top k.
-      return rankedActions(matches(), limit).map(action => structuredClone(action));
+      return rankedActions(matches(), limit);
     }, signal);
   }
 
@@ -569,10 +570,10 @@ export class ActionRegistry {
     // The frozen canonical snapshot is never normalized or mutated afterwards.
     const canonicalArgs = deepFreeze(structuredClone(prepared));
     if (provider.name !== "local" || (action.name !== "write" && action.name !== "edit")) observeFovea(context, { phase: "prepared" });
+    const writeLike = action.risk === "write" || action.effect?.kind === "write";
     const resources = Object.freeze([...(provider.effectResources?.(action.name, structuredClone(canonicalArgs), context)
       ?? action.effect?.resources
-      ?? (action.risk === "write" ? ["*"] : []))]);
-    const writeLike = action.risk === "write" || action.effect?.kind === "write";
+      ?? (writeLike ? ["*"] : []))]);
     const nestedToolCallId = `fabric_${randomUUID()}`;
     if (context.audits.length >= (context.maxAuditEntries ?? Number.POSITIVE_INFINITY)) throw new FabricRepairError("Fabric audit entry quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
     const audit: FabricCallAudit = { ref, nestedToolCallId, startedAt: Date.now() };

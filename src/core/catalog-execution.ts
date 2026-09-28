@@ -6,10 +6,11 @@ import { fabricJsonText, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js
 export const catalogUnavailable = (): FabricRepairError => new FabricRepairError("Catalog cursor unavailable; explicitly reopen discovery in an authorized runtime", {
   code: "catalog_cursor_unavailable", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none",
 });
-export const catalogMethodForBridge = (ref: string): CatalogMethod | undefined => ({
-  "fabric.listPage": "tools.listPage", "fabric.searchPage": "tools.searchPage", "fabric.describePage": "tools.describePage",
-  "mcp.$toolsPage": "mcp.toolsPage", "mcp.$describePage": "mcp.describePage",
-} as Record<string, CatalogMethod>)[ref];
+const catalogMethods = new Map<string, CatalogMethod>([
+  ["fabric.listPage", "tools.listPage"], ["fabric.searchPage", "tools.searchPage"], ["fabric.describePage", "tools.describePage"],
+  ["mcp.$toolsPage", "mcp.toolsPage"], ["mcp.$describePage", "mcp.describePage"],
+]);
+export const catalogMethodForBridge = (ref: string): CatalogMethod | undefined => catalogMethods.get(ref);
 export const validateCatalogRequest = (method: CatalogMethod, args: Record<string, unknown>): void => {
   const describe = method.endsWith("describePage");
   const selectors = Object.hasOwn(args, "cursor") ? ["cursor"]

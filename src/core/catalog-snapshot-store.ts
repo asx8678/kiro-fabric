@@ -220,7 +220,11 @@ export class CatalogSnapshotStore {
     if (descriptor < 0) unavailable();
     const budget = this.budgets(options.maxBytes, maxChars), entry = s.entries![descriptor]!;
     const page = (end: number): DescriptorJsonPage => ({ text: entry.text.slice(position, end), encoding: "json", totalChars: entry.text.length, descriptorDigest: entry.digest, complete: end === entry.text.length, ...(end < entry.text.length ? { nextCursor: this.token(s, method, descriptor, end) } : {}) });
-    let low = largestFittingInteger(position, Math.min(entry.text.length, position + Math.min(budget.bytes, budget.chars)), end => this.fits(page(end), budget));
+    if (entry.text.length - position <= Math.min(budget.bytes, budget.chars)) {
+      const complete = page(entry.text.length);
+      if (this.fits(complete, budget)) return complete;
+    }
+    let low = largestFittingInteger(position, Math.min(entry.text.length - 1, position + Math.min(budget.bytes, budget.chars)), end => this.fits(page(end), budget));
     // Do not split UTF-16 surrogate pairs across chunks.
     if (low < entry.text.length && low > position && /[\uD800-\uDBFF]/.test(entry.text[low - 1]!) && /[\uDC00-\uDFFF]/.test(entry.text[low]!)) low--;
     const result = page(low);

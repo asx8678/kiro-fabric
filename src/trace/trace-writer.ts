@@ -1,10 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { validateTraceDirectory } from "./trace-directory.js";
 
 export interface TraceWriterOptions {
   /** Absolute path for the JSONL trace file. Created private (0600); the
    * parent directory is created with 0700 and must stay under the Fabric data root. */
   file: string;
+  dataRoot?: string;
   /** Ring capacity in lines (1..1_048_576); oldest lines drop with a counter when full. */
   maxBufferLines?: number;
   /** Ring capacity in bytes (1..268_435_456); oldest lines drop with a counter when full. */
@@ -105,6 +107,7 @@ class BufferedTraceWriter implements TraceWriter {
   readonly #ring: LineRing;
   readonly #maxFileBytes: number;
   readonly #maxLineBytes: number;
+  readonly #truncationMarker: Buffer;
   readonly #timer: NodeJS.Timeout;
   readonly #onExit = (): void => {
     this.#flushSync(true);
@@ -121,17 +124,20 @@ class BufferedTraceWriter implements TraceWriter {
     const maxBufferLines = boundedOption("maxBufferLines", options.maxBufferLines, DEFAULT_MAX_BUFFER_LINES, 1, MAX_BUFFER_LINES);
     const maxBufferBytes = boundedOption("maxBufferBytes", options.maxBufferBytes, DEFAULT_MAX_BUFFER_BYTES, 1, MAX_BUFFER_BYTES);
     const maxFileBytes = boundedOption("maxFileBytes", options.maxFileBytes, DEFAULT_MAX_FILE_BYTES, 1, MAX_FILE_BYTES);
+    const truncationMarker = Buffer.from(`${JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes } })}\n`, "utf8");
+    if (maxFileBytes < truncationMarker.length) throw new Error(`trace writer maxFileBytes must be at least ${truncationMarker.length} to hold the truncation marker`);
     const maxLineBytes = boundedOption("maxLineBytes", options.maxLineBytes, DEFAULT_MAX_LINE_BYTES, MIN_MAX_LINE_BYTES, MAX_LINE_BYTES);
     const flushIntervalMs = boundedOption("flushIntervalMs", options.flushIntervalMs, DEFAULT_FLUSH_INTERVAL_MS, 1, MAX_FLUSH_INTERVAL_MS);
-    this.file = options.file;
+    this.file = path.resolve(options.file);
     // Build the ring before touching the filesystem. A capacity past the
     // engine's array bounds throws RangeError, and opening first would leak the
     // descriptor and leave an empty trace file behind on that rejection.
     const ring = new LineRing(maxBufferLines, maxBufferBytes);
     this.#maxFileBytes = maxFileBytes;
     this.#maxLineBytes = maxLineBytes;
-    fs.mkdirSync(path.dirname(options.file), { recursive: true, mode: 0o700 });
-    const descriptor = fs.openSync(options.file, "wx", 0o600);
+    this.#truncationMarker = truncationMarker;
+    validateTraceDirectory(path.dirname(this.file), options.dataRoot, true);
+    const descriptor = fs.openSync(this.file, "wx", 0o600);
     try {
       this.#fd = descriptor;
       this.#ring = ring;
@@ -144,7 +150,7 @@ class BufferedTraceWriter implements TraceWriter {
       // The exclusive create means this file is ours, so releasing both the
       // descriptor and the partial artifact cannot touch foreign data.
       try { fs.closeSync(descriptor); } catch { /* descriptor already released */ }
-      try { fs.rmSync(options.file, { force: true }); } catch { /* best effort */ }
+      try { fs.rmSync(this.file, { force: true }); } catch { /* best effort */ }
       throw error;
     }
   }
@@ -194,23 +200,31 @@ class BufferedTraceWriter implements TraceWriter {
     return null;
   }
 
+  #writeBuffer(buffer: Buffer): void {
+    let offset = 0;
+    while (offset < buffer.length) {
+      const written = fs.writeSync(this.#fd, buffer, offset, buffer.length - offset);
+      if (!Number.isSafeInteger(written) || written <= 0 || written > buffer.length - offset) throw new Error("trace write made no valid progress");
+      offset += written;
+      this.#writtenBytes += written;
+    }
+  }
+
   #flushSync(fsync: boolean): void {
     if (this.#closed || this.#ring.size === 0) return;
-    const chunk = this.#ring.drain().join("");
-    const chunkBytes = Buffer.byteLength(chunk, "utf8");
+    const lines = this.#ring.drain();
+    const chunk = Buffer.from(lines.join(""), "utf8");
     try {
-      if (this.#writtenBytes + chunkBytes > this.#maxFileBytes) {
-        const marker = JSON.stringify({ v: 1, cat: "teardown", ev: "trace.truncated", data: { maxFileBytes: this.#maxFileBytes } });
+      if (this.#writtenBytes + chunk.length + this.#truncationMarker.length > this.#maxFileBytes) {
         const room = this.#maxFileBytes - this.#writtenBytes;
-        if (room > Buffer.byteLength(marker, "utf8") + 1) fs.writeSync(this.#fd, `${marker}\n`);
+        this.#dropped += lines.length;
         this.#disabled = true;
-        return;
-      }
-      fs.writeSync(this.#fd, chunk);
-      this.#writtenBytes += chunkBytes;
+        if (room >= this.#truncationMarker.length) this.#writeBuffer(this.#truncationMarker);
+      } else this.#writeBuffer(chunk);
       if (fsync) fs.fsyncSync(this.#fd);
     } catch {
       // Tracing must never take down Fabric. Disable on any I/O failure.
+      if (!this.#disabled) this.#dropped += lines.length;
       this.#disabled = true;
     }
   }
