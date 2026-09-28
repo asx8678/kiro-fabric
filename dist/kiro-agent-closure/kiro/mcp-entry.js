@@ -86,7 +86,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
       version: AST_GREP_VERSION,
       generationRoot: path2.dirname(path2.dirname(launch.astGrep))
     } : void 0;
-    const { createKiroMcpServer } = await import("../chunks/mcp-server-DWDZBYQZ.js");
+    const { createKiroMcpServer } = await import("../chunks/mcp-server-XHULS33O.js");
     server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedParser ? { managedParser } : {}, ...launch.foveaCallContext === true && managedParser ? { foveaCallContext: true } : {} });
     return server;
   } catch (error) {
@@ -181,7 +181,7 @@ var invoked = process.argv[1] ? realpathSync(process.argv[1]) : "";
 var self = realpathSync(fileURLToPath(import.meta.url));
 if (invoked === self) {
   if (process.argv[2] === "--first-prompt-hook") {
-    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-WOQFVOC3.js");
+    const { runFirstPromptHook } = await import("../chunks/first-prompt-hook-BBY2YSRD.js");
     process.exit(await runFirstPromptHook(process.argv.length === 4 ? process.argv[3] : void 0));
   }
   process.exit(await runKiroMcpProcess());

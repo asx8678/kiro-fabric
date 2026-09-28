@@ -4,24 +4,21 @@ Navigator is the public name for Fabric's repository-navigation component, previ
 
 ## Default use in the Fabric agent
 
-Standard and review profiles instruct the agent to use Navigator first for repository
-code tasks, without a separate user request: focus known symbols/paths or sketch
-unfamiliar structure, inspect impact before edits/reviews, then read real source.
-Refresh affected focus after source changes and reuse current evidence. Report
-unavailable analysis, no-match and coverage gaps; bounded local search/read remains
-a fallback, never a way around denials or workspace boundaries. General chat and
-explicit tool restrictions take precedence. Minimal mode remains no-steering.
+Standard and review profiles use Navigator whenever the agent needs to locate or
+understand code: focus known symbols/paths, sketch unfamiliar structure, check
+impact before changing shared code, then read the real source. Refresh affected
+focus after edits and reuse current results. Report unavailable analysis, no-match
+and coverage gaps; bounded local search and reads remain the fallback, never a way
+around denials or workspace boundaries. Conversation and explicit tool restrictions
+take precedence. The minimal profile has no Navigator guidance.
 
-This is an instruction policy, not a guarantee of model compliance or a hard
-execution gate. The existing first-prompt reminder reinforces it where supported;
-the standing prompt also covers headless sessions. It does **not** activate native
-Navigator lifecycle/delivery hooks, repair native chat isolation, or make `/clear` a
-Fabric state boundary. Those contracts remain separately unqualified.
+This is guidance, not an execution gate. It does not make `/clear` a Fabric state
+boundary: a reused MCP instance keeps focus, results and settings across chats.
 
 Navigator is advisory navigation, not source evidence, a correctness check, approval,
 or proof of completeness. `repo.status()` is cheap and does not index. It reports
 analysis availability separately from unqualified native lifecycle/delivery.
-The component uses the generation's private ast-grep, never PATH/npm/downloads.
+The component uses the ast-grep binary installed with Fabric (`tools/ast-grep`), never one found on PATH.
 
 ```ts
 const map = await repo.focus({ query: "createKiroRuntime", maxTokens: 700 });
@@ -82,8 +79,8 @@ return await repo.configure({scope:"project", expectedRevision:settings.revision
 
 Use `settings.revision` for session updates and `settings.revisions.global` for
 global updates. Existing disabled preferences are preserved during installation.
-Analysis requires the generation's supported scope-safe source capture and parser;
-a downloaded parser alone is not enough. Use `repo.status` for capability diagnostics.
+Analysis requires the installed parser and, on macOS, the native source module beside
+it; a parser found elsewhere is not used. Use `repo.status` for capability diagnostics.
 
 Text-only: `return (await repo.focus({query:"symbol"})).text;`. This intentionally
 discards structured source windows; it does not acknowledge model disclosure.

@@ -1,3 +1,5 @@
-# Installation boundaries
+# Kiro Fabric environment
 
-Code, tools and resources bind to this session's generation; restart Kiro for updates, not for compaction. Installation directory: not the coding workspace. Checked TypeScript: QuickJS; approved shell retains host authority, not filesystem confinement.
+- The Fabric installation (`~/.kiro/kiro-fabric`) is not the coding workspace. Do not read or edit it to answer questions about the user's project.
+- After Fabric is updated, restart Kiro. Compaction does not need a restart.
+- `fabric_exec` code runs in an isolated QuickJS sandbox, but approved shell commands run with the user's full host permissions and are not confined to the workspace.

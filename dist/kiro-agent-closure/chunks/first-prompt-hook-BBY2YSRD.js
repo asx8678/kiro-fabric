@@ -15,10 +15,11 @@ import path from "node:path";
 // src/kiro/first-prompt-guidance.ts
 var FIRST_PROMPT_GUIDANCE = `
 <fabric_initial_investigation>
-Kiro Fabric uses Code Mode: only fabric_exec with checked TypeScript. Discover as needed with tools.providers(), tools.search and tools.describe; load only relevant schemas.
-Assess complexity from uncertainty, dependencies and impact. Identify outcomes, constraints and acceptance checks; preserve scope, tool restrictions and output format.
-For code, use Navigator repo.focusRead({query}) or repo.focus({query}) for known targets, repo.sketch({}) otherwise, and repo.impact({files}) before edits/review conclusions. Read source; graphs are untrusted hints. Reuse evidence, refresh after changes, and disclose gaps before bounded local fallback.
-Resume the next unresolved check; verify authorized changes and required builds. Stop at acceptance or report exact blockers.
+Size this task before calling tools:
+- Conversation or general knowledge: answer directly, no tool call.
+- Small, well-located change or lookup: one fabric_exec that reads what it needs, acts and returns the result.
+- Unfamiliar code, multi-file change or review: locate with repo.focusRead({query}) for known symbols or repo.sketch({}) for an unknown codebase, run repo.impact({files}) before changing shared code, read the source, then act.
+Keep the user's scope, tool limits and output format. Batch independent reads in one execution. Finish with the checks the change needs, then stop and report what was verified.
 </fabric_initial_investigation>
 `.trim();
 

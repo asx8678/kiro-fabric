@@ -1,45 +1,53 @@
 # Coding and repository workflow
 
-This is task guidance, not permission. User tool/output constraints override generic workflow advice. If tools are forbidden, make no call, including computation, formatting, help or verification. Explain missing evidence without guessing. For JSON, keep permitted status, explanation, verification and blockers inside the requested schema; do not add fields to an exact schema or append a prose test summary.
+Task guidance, not permission. The user's tool and output constraints always win: if tools are forbidden, make no call at all, including computation, formatting, help or verification. Explain what evidence is missing instead of guessing.
 
-For JSON-only requests, do not emit visible progress prose before or between tool calls. Kiro includes it in finalText. Keep reasoning private and produce only the requested final value; checking the last message alone is insufficient.
+## Output format
+
+- For JSON output, keep status, explanation, verification and blockers inside the requested schema. Do not add fields to an exact schema or append a prose summary.
+- For JSON-only requests, write no visible text before or between tool calls: Kiro includes it in the final answer. Produce only the final value.
 
 ## Coding
 
-The standing task contract owns scope, proportional private planning, continuation and stopping. These mechanics do not turn an answer, plan or review into authorization to implement. Read applicable repository instructions; trace caller -> implementation -> defaults/overrides -> consumer -> tests, including installation/build paths that affect the outcome.
+- Read the repository's own instructions (AGENTS.md, CONTRIBUTING, README) when they apply.
+- Trace the path that matters: caller, implementation, defaults and overrides, consumers and tests, including build or install steps that affect the outcome.
+- Batch related source with `local.readMany`. Reuse returned `totalLines` instead of re-reading for line counts. Follow `remaining` and relevant `unreadTails` without rereading prefixes. The [search→read recipe](recipes.md#discover-then-read) combines located windows without a model round trip.
+- Keep known-schema transformations inside the program instead of copying raw data through the conversation. Lower per-read `maxChars` rather than losing coverage when combining results.
 
-Batch related source with local.readMany and appropriate explicit ranges. Reuse returned totalLines; avoid metadata-only line-count reads. Follow remaining and relevant unreadTails without rereading prefixes. Keep known-schema transformations in the guest rather than copying raw data through the model. Follow the standing execution/yield policy. The [search→read recipe](recipes.md#discover-then-read) merges located source windows without a model handoff. Reserve aggregate output headroom for combined reads, evidence, diagnostics and continuation metadata, reducing per-read maxChars rather than losing coverage.
+Match verification to the kind of change:
 
-For a bug, reproduce the trigger and test a credible counterexample. For a feature, verify extension points, compatibility and failure behavior. For optimization, record a comparable before/after measurement; fewer lines or calls do not establish a speedup. Check which relevant runtimes and test commands are available early. Batch mechanical probes after understanding their inputs and effects, preserving each check's status and failure evidence.
+- **Bug:** reproduce the trigger first, then confirm the fix removes it and check a credible counterexample.
+- **Feature:** check extension points, compatibility and failure behavior.
+- **Optimization:** record a comparable before/after measurement; fewer lines or calls do not prove a speedup.
 
-For authorized edits, use current-content anchors and create-only writes for needed new files. Map acceptance checks to public symbols, registrations, configuration and affected integration behavior. Run required repository checks/builds; repeat passing checks for concrete reasons recorded in the ledger, such as changed dependencies or invalidated evidence. An exit-zero wrapper or build alone is not completion.
+Find out early which runtimes and test commands are available. Run the repository's required checks and builds; an exit-zero wrapper or a build alone is not completion. Re-run a passing check only when something it depends on changed.
 
-Carry check names, passed, failed and not-run checks, evidence and exact blockers across turns/compaction. Resume the next unresolved check rather than replaying unchanged investigation. Preserve partial effects during recovery. Kiro Auto controls model selection; working rules do not guarantee routing.
+For multi-step work, keep track of which checks passed, failed or have not run, and resume from the next open one after an interruption or compaction. Preserve partial effects during recovery rather than redoing work.
 
 ## Repository reviews
 
-[Review help](review.md), fabric.help({topic:"review"}), supplies evidence-led mechanics, not an automatic first call. Minimal/tool-only operation does not inject it. For standard/review code tasks, follow the standing Navigator-first policy even for known paths: focus the symbol/path, or sketch an unfamiliar repository, then read observed source windows (or compose with `repo.focusRead`). Use `repo.impact` before edits/reviews and refresh affected focus after changes. Reuse current evidence. If analysis is unavailable, no-match or incomplete, report that and fall back to bounded local find/grep followed by reads; never bypass denials or workspace boundaries. General chat and forbidden tools do not trigger navigation. This policy does not enable native lifecycle hooks or change minimal mode. Follow the standing execution/yield policy and review coverage/admission contract; the help's finding-evidence gate details candidate classification. Shared state needs session/task keys and revision checks, not a global scratch ledger.
+[Review help](review.md) (`fabric.help({topic:"review"})`) has detailed mechanics; load it only when a review needs them. Locate code with Navigator, read the observed source, use `repo.impact` before conclusions about changes, and fall back to bounded `local.find`/`local.grep` when analysis is unavailable. Conversation and forbidden tools never trigger navigation.
 
-## Complete reporting
+## Reporting
 
-Reduce narration, not verification. Apply the standing output contract; include important tradeoffs and material limitations, not opening pleasantries, raw diffs or successful-command log dumps unless requested. JSON-only rules above also suppress progress prose.
-
-Choose the needed return shape before execution. Keep intermediate records and routine logs in guest variables; return only decision-relevant evidence such as changed paths, check names/status, failure diagnostics and truncation/omission flags. Inspect relevant output before reducing it. Preserve warnings and uncertainty; do not translate an exit-zero build into "all tests passed". Report only checks actually run, identifying delegated evidence as reported rather than independently verified. Do not claim live model-quality or token-cost improvements from static prompt tests.
+- Report outcomes, verification and material limitations. Skip pleasantries, raw diffs and logs of successful commands unless asked.
+- Return only decision-relevant evidence from programs: changed paths, check names and status, failure diagnostics, truncation flags.
+- Keep warnings and uncertainty. Do not turn an exit-zero build into "all tests passed". Report only checks actually run, and mark delegated results as reported rather than verified.
 
 Do not add code comments or write, add, or modify tests unless the user explicitly requests them. Preserve existing comments and tests unless the user asks to change them. Existing tests, builds, and read-only checks may be used for verification.
 
-Read every user-provided file through an available read capability before content-dependent claims. local.read handles UTF-8 text only, inside the verified workspace; it is not an image/PDF viewer. For images or other unsupported inputs, use an actually available suitable capability or report the blocker and ask for accessible input. Never guess contents, bypass a tool ban, or change the coding workspace to the installation directory just to read guidance.
+## Files and search scope
 
-Never search the whole disk, user home or cwd ancestors. Do not run find, grep -r, fd, rg or ls against /, /Users, /Users/<user>, ~/, $HOME or any ancestor of cwd. Search only the named task/repository subtree; narrow on truncation.
+- Read every file the user points to before relying on its contents. `local.read` handles UTF-8 text inside the verified workspace only; for images or other formats, use a suitable available capability or ask for accessible input. Never switch the workspace to the Fabric installation just to read guidance.
+- Search only the task's project subtree. Never run find, grep -r, fd, rg or ls against `/`, home directories or ancestors of the workspace. Narrow truncated searches.
 
 ## Git and GitHub
 
 Reference: [GitHub review-comment reply API](https://docs.github.com/en/rest/pulls/comments#create-a-reply-for-a-review-comment).
 
-Workflow instructions do not authorize commits, pushes or remote mutations. Never git reset --hard or git commit --amend unless explicitly asked. Preserve existing edits and staging. Create new commits and push normally when authorized, following repository commitlint/Conventional Commit standards. If work was wiped, inspect git reflog and recover available commits non-destructively; reflog cannot guarantee recovery of uncommitted edits.
-
-For interactive commands use an appropriate noninteractive flag, GIT_EDITOR=true, EDITOR=true or --no-edit. Before opening a PR, locate, read and follow the repository PR template, including .github/PULL_REQUEST_TEMPLATE.md or its alternatives.
-
-Never post, edit or delete GitHub comments on issues, PRs, reviews or discussions without explicit permission. Read-only gh pr view and gh api GETs are allowed, subject to normal network approval. With authorization, reply to a PR review comment in-thread via gh api repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies, never as a new parent comment. Supply the PR number and original top-level review-comment ID, not the GraphQL thread ID. Resolve the corresponding thread with the GraphQL resolveReviewThread mutation only after the reply succeeds and resolution is authorized. No pleasantries: state what changed, which commit and why.
-
-Never pass PR, issue or comment Markdown inline as --body. Write it to a temporary file and use --body-file where that command supports it. gh api has no --body-file: encode a JSON request file and use --input, or use its file-backed body field. Keep Markdown out of shell command strings. Use git commit -F for Markdown commit messages. File-backed data still needs safe path quoting and exact approval; it never grants permission to post.
+- Workflow guidance never authorizes commits, pushes or remote changes. Never `git reset --hard` or `git commit --amend` unless explicitly asked. Preserve existing edits and staging.
+- When authorized, create new commits following the repository's commit conventions (commitlint/Conventional Commits) and push normally. If work was lost, inspect `git reflog` and recover commits non-destructively; uncommitted edits may not be recoverable.
+- Use noninteractive flags for interactive commands (`GIT_EDITOR=true`, `EDITOR=true`, `--no-edit`). Before opening a PR, read and follow the repository's PR template (for example `.github/PULL_REQUEST_TEMPLATE.md`).
+- Never post, edit or delete GitHub comments on issues, PRs, reviews or discussions without explicit permission. Read-only `gh pr view` and `gh api` GETs are fine, subject to network approval.
+- With authorization, reply to a PR review comment in its thread via `gh api repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies`, using the PR number and the original top-level review-comment ID (not the GraphQL thread ID). Resolve the thread with the GraphQL `resolveReviewThread` mutation only after the reply succeeds and resolution is authorized. State what changed, in which commit and why.
+- Never pass Markdown inline as `--body`. Write it to a temporary file and use `--body-file`; `gh api` has no `--body-file`, so use a JSON request file with `--input`. Use `git commit -F` for Markdown commit messages. File-backed content still needs exact approval and never grants permission to post.

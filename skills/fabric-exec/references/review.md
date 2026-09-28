@@ -8,7 +8,7 @@ Apply the standing review contract. For each requested core path and success/fai
 
 For real SDK/parser/runtime probes, inspect imports/effects and identify stubs: an imitation is not a real SDK execution. Missing executable, SDK/module or input is unavailable evidence, not a pass or finding. Use only available, authorized probes; network effects require explicit authorization.
 
-Keep unrequested ledgers in context. Persisted state is workspace-shared; use session/task keys and revision checks, not global scratch keys. The optional review provider owns instance/session-local ephemeral tasks; never adopt another session's state.
+Keep coverage notes in the conversation unless the user asks for them. Persisted state is workspace-shared; use task-specific keys and revision checks, never another chat's entries.
 
 The gate below operationalizes finding admission. At acceptance, report supported findings, checks run/unrun, material blockers and uninspected scope; repeat unchanged passing checks only for a concrete reason. Recipes remain optional mechanisms, not permission.
 
@@ -32,7 +32,7 @@ Assign severity only after admission. Confidence is not severity; record affecte
 
 Keep maintenance and unresolved leads outside confirmed severity rankings. Validate the proposed correction against the original trigger and preserved contracts; a fix can introduce a new bug. Never enable deletion or bypass validation merely to resolve an unknown setting.
 
-Optional [typed review/probe/readEvidence recipes](api.md#optional-typed-operations) are separate from this core help; use only available, authorized operations.
+For compact source packets use [`local.readEvidence`](api.md#explicit-evidence-api); use only available, authorized operations.
 
 ## Map once, then follow behavior
 
