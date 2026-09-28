@@ -7245,7 +7245,7 @@ var require_dist = __commonJS({
 });
 
 // src/kiro/mcp-server.ts
-import { randomBytes as randomBytes12 } from "node:crypto";
+import { randomBytes as randomBytes11 } from "node:crypto";
 import fs15, { readFileSync } from "node:fs";
 import path15 from "node:path";
 
@@ -15509,7 +15509,7 @@ var fabricExecInputSchemaJson = () => JSON.parse(JSON.stringify(fabricExecInputS
 
 // src/fovea/host.ts
 import path4 from "node:path";
-import { createHash as createHash4, randomBytes as randomBytes5 } from "node:crypto";
+import { createHash as createHash4, randomBytes as randomBytes4 } from "node:crypto";
 
 // src/fovea/git-executable.ts
 import fs2 from "node:fs";
@@ -20177,85 +20177,6 @@ var FoveaScheduler = class {
   }
 };
 
-// src/fovea/delivery.ts
-import { randomBytes as randomBytes4 } from "node:crypto";
-var FoveaOutbox = class {
-  constructor(now = Date.now) {
-    this.now = now;
-  }
-  now;
-  #notices = /* @__PURE__ */ new Map();
-  #keys = /* @__PURE__ */ new Map();
-  #claims = /* @__PURE__ */ new Map();
-  prepare(rootId, authorizationEpoch, text, origin, semanticKey) {
-    if (!text || text.length > 65536 || semanticKey !== void 0 && semanticKey.length > 256) throw new Error("Navigator notice budget exceeded");
-    for (const n of this.#notices.values()) if (n.rootId === rootId && n.authorizationEpoch === authorizationEpoch && n.text === text && (semanticKey === void 0 ? n.state === "prepared" : this.#keys.get(n.noticeId) === semanticKey)) return n.noticeId;
-    if (this.#notices.size >= 32) throw new Error("Navigator outbox full; pending context not discarded");
-    const noticeId = `notice_${randomBytes4(16).toString("hex")}`;
-    this.#notices.set(noticeId, { noticeId, rootId, authorizationEpoch, text, origin, state: "prepared", createdAt: this.now() });
-    if (semanticKey !== void 0) this.#keys.set(noticeId, semanticKey);
-    return noticeId;
-  }
-  get(rootId, authorizationEpoch, id) {
-    const n = this.#notices.get(id);
-    return n?.rootId === rootId && n.authorizationEpoch === authorizationEpoch ? { ...n } : void 0;
-  }
-  select(rootId, authorizationEpoch, budget2, nextPrompt = true) {
-    if (!Number.isSafeInteger(budget2) || budget2 < 0 || budget2 > 131072) throw new Error("Invalid Navigator delivery budget");
-    const out = [];
-    let used = 0;
-    for (const n of this.#notices.values()) if (n.rootId === rootId && n.authorizationEpoch === authorizationEpoch && n.state === "prepared" && !this.#claims.has(n.noticeId) && (nextPrompt || n.origin !== "foreign")) {
-      if (used + n.text.length + 160 > budget2) break;
-      used += n.text.length + 160;
-      out.push({ ...n });
-    }
-    return out;
-  }
-  claim(rootId, authorizationEpoch, budget2, nextPrompt = false) {
-    const notices = this.select(rootId, authorizationEpoch, budget2, nextPrompt);
-    if (!notices.length) return void 0;
-    const token = /* @__PURE__ */ Symbol("Navigator delivery claim");
-    for (const n of notices) this.#claims.set(n.noticeId, token);
-    const settle = (state) => {
-      for (const selected of notices) {
-        if (this.#claims.get(selected.noticeId) !== token) continue;
-        this.#claims.delete(selected.noticeId);
-        const n = this.#notices.get(selected.noticeId);
-        if (n && state) n.state = state;
-      }
-    };
-    return { notices: notices.map((n) => Object.freeze(n)), isCurrent: () => notices.every((n) => this.#claims.get(n.noticeId) === token), emitted: () => settle("emitted"), uncertain: () => settle("uncertain"), cancel: () => settle() };
-  }
-  emitted(ids) {
-    for (const id of ids) {
-      const n = this.#notices.get(id);
-      if (n) n.state = "emitted";
-    }
-  }
-  uncertain(ids) {
-    for (const id of ids) {
-      const n = this.#notices.get(id);
-      if (n) n.state = "uncertain";
-    }
-  }
-  replay() {
-    this.#claims.clear();
-    for (const n of this.#notices.values()) n.state = "prepared";
-  }
-  remove(id) {
-    this.#notices.delete(id);
-    this.#claims.delete(id);
-    this.#keys.delete(id);
-  }
-  revoke(rootId) {
-    for (const [id, n] of this.#notices) if (n.rootId === rootId) this.remove(id);
-  }
-  status(rootId, authorizationEpoch) {
-    const all = [...this.#notices.values()].filter((n) => rootId === void 0 || n.rootId === rootId && n.authorizationEpoch === authorizationEpoch);
-    return { pending: all.filter((n) => n.state === "prepared").length, emitted: all.filter((n) => n.state === "emitted").length, uncertain: all.filter((n) => n.state === "uncertain").length, acknowledged: 0 };
-  }
-};
-
 // src/fovea/call-context.ts
 import { createHash as createHash3 } from "node:crypto";
 var FOVEA_CALL_COLD_MS = 6e3;
@@ -20295,17 +20216,13 @@ var FoveaCallContexts = class {
     signal.throwIfAborted();
     check();
     const key = createHash3("sha256").update(JSON.stringify([rootId, epoch, semanticKey, text])).digest("hex");
-    if (this.#emitted.has(key)) return void 0;
-    const outbox = new FoveaOutbox();
-    const id = outbox.prepare(rootId, epoch, text, "own");
-    const claim = outbox.claim(rootId, epoch, maxChars);
-    if (!claim) return void 0;
+    if (this.#emitted.has(key) || !text || text.length + 160 > maxChars) return void 0;
     let active = true;
     const current = () => {
       if (!active || signal.aborted) return false;
       try {
         check();
-        return claim.isCurrent();
+        return true;
       } catch {
         return false;
       }
@@ -20319,11 +20236,10 @@ var FoveaCallContexts = class {
       }
       active = false;
       signal.removeEventListener("abort", cancel);
-      outbox.remove(id);
     };
     const cancel = () => settle(false);
     signal.addEventListener("abort", cancel, { once: true });
-    return { notices: claim.notices, isCurrent: current, emitted: () => settle(true), uncertain: cancel, cancel };
+    return { notices: [Object.freeze({ text })], isCurrent: current, emitted: () => settle(true), uncertain: cancel, cancel };
   }
   revoke(rootId) {
     this.#roots.delete(rootId);
@@ -20350,12 +20266,11 @@ var FoveaHost = class {
     if (options.parser) this.#process = new FoveaEngineProcess({ parser: options.parser, storageRoot, ...options.entrypoint ? { entrypoint: options.entrypoint } : {}, ...gitPath ? { gitPath } : {} });
   }
   options;
-  hostInstanceId = `fhost_${randomBytes5(16).toString("hex")}`;
+  hostInstanceId = `fhost_${randomBytes4(16).toString("hex")}`;
   #lifetime = new AbortController();
   #leases = new FoveaRootLeases();
   #results = new FoveaResultStore();
   #scheduler = new FoveaScheduler();
-  #outbox = new FoveaOutbox();
   #calls = new FoveaCallContexts();
   #conversations = /* @__PURE__ */ new Map();
   #retirements = /* @__PURE__ */ new Map();
@@ -20364,7 +20279,6 @@ var FoveaHost = class {
   #journal;
   #journalTail = Promise.resolve();
   #pendingTransitions = 0;
-  #preparations = /* @__PURE__ */ new Map();
   #closeTask;
   bind(authority) {
     this.#lifetime.signal.throwIfAborted();
@@ -20381,17 +20295,15 @@ var FoveaHost = class {
       state.gap = true;
       state.dirty = true;
     } };
-    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => {
+    return { rootId: lease.rootId, observer, collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => {
       this.#release(lease);
     } };
   }
   #release(lease) {
     this.#leases.revoke(lease);
     this.#results.revoke(lease.rootId, lease.authorizationEpoch);
-    this.#outbox.revoke(lease.rootId);
     this.#calls.revoke(lease.rootId);
     this.#observed.delete(lease.rootId);
-    this.#preparations.delete(lease.rootId);
     this.#conversations.get(JSON.stringify([lease.conversationId, lease.conversationEpoch]))?.leases.delete(lease);
   }
   /** Trusted lifecycle only, never repo.*. Revocation is synchronous; completion
@@ -20442,7 +20354,6 @@ var FoveaHost = class {
       this.#conversations.clear();
       this.#retirements.clear();
       this.#observed.clear();
-      this.#preparations.clear();
       if (failures.length) throw new AggregateError(failures, "Navigator host cleanup failed", { cause: failures[0] });
     });
     for (const operation of [() => this.#lifetime.abort(new Error("Navigator host shutdown")), () => this.#leases.close(), () => this.#scheduler.close(), () => this.#results.clear(), () => this.#calls.clear()]) {
@@ -20517,37 +20428,6 @@ var FoveaHost = class {
       });
     }
   }
-  async #collectContext(lease, context, maxChars, nextPrompt = false) {
-    this.#check(lease, {}, context);
-    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131072) throw new Error("Invalid Navigator delivery budget");
-    const config = this.#conversation(lease).configuration.read(lease.worktreeId).config;
-    if (config.sync.mode !== "enabled" || !this.#observed.has(lease.rootId) || maxChars < 160) return void 0;
-    await this.#invoke(lease, "sync", {}, context);
-    this.#check(lease, {}, context);
-    const claim = this.#outbox.claim(lease.rootId, lease.authorizationEpoch, maxChars, nextPrompt);
-    if (!claim) return void 0;
-    const cancel = () => claim.cancel();
-    const signal = AbortSignal.any([lease.signal, this.#lifetime.signal, ...context.signal ? [context.signal] : []]);
-    signal.throwIfAborted();
-    signal.addEventListener("abort", cancel, { once: true });
-    const settle = (kind) => {
-      signal.removeEventListener("abort", cancel);
-      try {
-        this.#check(lease, {}, context);
-        claim[kind]();
-      } catch {
-        claim.cancel();
-      }
-    };
-    return { notices: claim.notices, isCurrent: () => {
-      try {
-        this.#check(lease, {}, context);
-        return claim.isCurrent();
-      } catch {
-        return false;
-      }
-    }, emitted: () => settle("emitted"), uncertain: () => settle("uncertain"), cancel: () => settle("cancel") };
-  }
   async #collectCallContext(lease, files, context, maxChars, sampled = false) {
     this.#check(lease, {}, context);
     if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131072) throw new Error("Invalid Navigator delivery budget");
@@ -20600,21 +20480,6 @@ ${body}` : body;
   #origin(lease) {
     return createHash4("sha256").update(JSON.stringify([this.hostInstanceId, lease.conversationId, lease.conversationEpoch])).digest("hex");
   }
-  async #acknowledgeDelivery(lease, noticeId, context) {
-    this.#check(lease, {}, context);
-    const signal = AbortSignal.any([lease.signal, this.#lifetime.signal, ...context.signal ? [context.signal] : []]);
-    await this.#scheduler.run(signal, async () => {
-      this.#check(lease, {}, context);
-      const prepared = this.#preparations.get(lease.rootId);
-      if (!this.#outbox.get(lease.rootId, lease.authorizationEpoch, noticeId)) throw new Error("Unknown delivery preparation");
-      if (prepared?.noticeId === noticeId && prepared.generation === this.#process?.generation) {
-        await this.#process.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, authorizationEpoch: lease.authorizationEpoch, operation: "sync", args: { commitPreparationId: prepared.preparationId } }, signal, context.deadline?.remainingMs() ?? 12e4);
-        this.#check(lease, {}, context);
-        this.#preparations.delete(lease.rootId);
-      }
-      this.#outbox.remove(noticeId);
-    });
-  }
   #owner(lease) {
     return { conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, authorizationEpoch: lease.authorizationEpoch, engineGeneration: this.#process?.generation ?? 0 };
   }
@@ -20633,7 +20498,7 @@ ${body}` : body;
     const controls = this.#conversation(lease), configuration = controls.configuration;
     if (operation === "status") {
       const state = this.#observed.get(lease.rootId), config = configuration.read(lease.worktreeId);
-      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, cleanup: this.#process?.cleanup ?? null, retainedScratchGenerations: this.#process?.retainedScratchGenerations ?? 0, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
+      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, cleanup: this.#process?.cleanup ?? null, retainedScratchGenerations: this.#process?.retainedScratchGenerations ?? 0, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
     }
     if (operation === "adoptRules") {
       if (typeof args.expectedSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedSha256)) throw new Error("Rule adoption requires exact local.read SHA-256");
@@ -20660,7 +20525,6 @@ ${body}` : body;
         this.#check(lease, args, context);
         configuration.reload(lease.worktreeId);
         this.#results.clear();
-        this.#outbox.replay();
         this.#calls.clear();
         return { schemaVersion: 1, restarted: true, scope: "process-wide", invalidates: "all engine navigation and retained results; not a session reset", codeTransition: "same generation only; update and restart session for new code" };
       }
@@ -20695,9 +20559,7 @@ ${body}` : body;
       this.#check(lease, args, context);
       if (operation === "reset") {
         this.#results.revoke(lease.rootId, lease.authorizationEpoch);
-        this.#outbox.revoke(lease.rootId);
         this.#calls.revoke(lease.rootId);
-        this.#preparations.delete(lease.rootId);
         this.#observed.delete(lease.rootId);
       }
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation)) {
@@ -20712,17 +20574,7 @@ ${body}` : body;
       if (operation === "sync") {
         const observed = this.#observation(lease);
         if (observed.operations === observedRevision) observed.dirty = false;
-        if (value.red === true && typeof value.text === "string" && value.text) {
-          const details = record2(value.details) ? value.details : void 0;
-          const provenance = details && record2(details.provenance) ? details.provenance.kind : void 0;
-          const origin = provenance === "current-session" ? "own" : provenance === "other-session" ? "foreign" : provenance === "mixed" ? "mixed" : "unattributed";
-          const key = typeof value.sourceSnapshotId === "string" ? value.sourceSnapshotId : void 0;
-          const noticeId = this.#outbox.prepare(lease.rootId, lease.authorizationEpoch, value.text, origin, key);
-          if (typeof value.syncPreparationId === "string") this.#preparations.set(lease.rootId, { noticeId, preparationId: value.syncPreparationId, generation: this.#process.generation });
-          return { ...value, noticeId, deliveryState: "prepared", delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
-        }
-        this.#preparations.delete(lease.rootId);
-        return { ...value, deliveryState: "not-required", delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
+        return { ...value, delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
       }
       if (!record2(value)) throw new Error("Navigator returned invalid control response");
       return value;
@@ -20732,12 +20584,12 @@ ${body}` : body;
 
 // src/kiro/fovea-context.ts
 var HEADER = "\n\nNavigator advisory (untrusted hints about code affected by this change; verify before relying on them):\n";
-async function collectFoveaContext(client, original, context, maxOutputChars) {
+async function collectFoveaContext(collect, original, context, maxOutputChars) {
   const remaining = Math.min(8192, Math.max(0, maxOutputChars - original.text.length));
   if (remaining < HEADER.length + 256 || context.signal?.aborted || context.deadline?.expired || ["aborted", "timed_out"].includes(original.executionStatus)) return { projection: original };
   let delivery;
   try {
-    delivery = await client.collectContext(context, remaining - HEADER.length);
+    delivery = await collect(context, remaining - HEADER.length);
     if (!delivery) return { projection: original };
     context.signal?.throwIfAborted();
     context.deadline?.throwIfExpired();
@@ -20750,10 +20602,6 @@ async function collectFoveaContext(client, original, context, maxOutputChars) {
     return { projection: { ...original, text, visibleChars: text.length, visibleBytes: Buffer.byteLength(text, "utf8") }, delivery };
   } catch {
     delivery?.cancel();
-    try {
-      client.observer.gap();
-    } catch {
-    }
     return { projection: original };
   }
 }
@@ -20853,7 +20701,7 @@ function observeFovea(context, event) {
 }
 
 // src/core/catalog-snapshot-store.ts
-import { createHmac as createHmac2, randomBytes as randomBytes6, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { createHmac as createHmac2, randomBytes as randomBytes5, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
 import { isProxy } from "node:util/types";
 
 // src/bounded-search.ts
@@ -20908,7 +20756,7 @@ var fail = (code2, message) => {
 var unavailable = () => fail("catalog_cursor_unavailable", "Catalog cursor unavailable; explicitly reopen the catalog to continue.");
 var quota = () => fail("catalog_quota_exceeded", "Catalog snapshot quota exceeded; release reservations or reopen a smaller catalog.");
 var CatalogSnapshotStore = class {
-  key = randomBytes6(32);
+  key = randomBytes5(32);
   closed = false;
   context;
   policy;
@@ -20948,7 +20796,7 @@ var CatalogSnapshotStore = class {
       this.snapshots.delete(oldest.id);
     }
     const now = p.now();
-    const snapshot = { dependencies: new Set(dependencies), id: randomBytes6(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
+    const snapshot = { dependencies: new Set(dependencies), id: randomBytes5(12).toString("base64url"), bytes: p.reservationBytes, nodes: p.reservationNodes, created: now, touched: now, expires: now + p.softExpiryMs };
     this.snapshots.set(snapshot.id, snapshot);
     let active = true;
     return {
@@ -21127,7 +20975,7 @@ var CatalogSnapshotStore = class {
   invalidate() {
     this.closed = true;
     this.snapshots.clear();
-    this.key = randomBytes6(32);
+    this.key = randomBytes5(32);
   }
 };
 
@@ -22743,7 +22591,7 @@ ${exactReview ?? `Preview: ${summarize(args, this.cwd)}`}`,
 };
 
 // src/kiro/power/data-paths.ts
-import { createHash as createHash7, randomBytes as randomBytes7 } from "node:crypto";
+import { createHash as createHash7, randomBytes as randomBytes6 } from "node:crypto";
 import fs6 from "node:fs";
 import path6 from "node:path";
 var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -22824,7 +22672,7 @@ var writeJsonAtomic = (target, value, exclusive = false) => {
       if (errorCode(error) !== "EEXIST") throw error;
     }
   } else {
-    const temporary = `${target}.${process.pid}.${randomBytes7(8).toString("hex")}.tmp`;
+    const temporary = `${target}.${process.pid}.${randomBytes6(8).toString("hex")}.tmp`;
     try {
       const descriptor3 = fs6.openSync(temporary, "wx", 384);
       try {
@@ -22849,7 +22697,7 @@ var copyFileAtomic = (source, target) => {
   privateFile(source);
   const bytes2 = fs6.readFileSync(source);
   const sourceDigest = createHash7("sha256").update(bytes2).digest("hex");
-  const temporary = `${target}.${process.pid}.${randomBytes7(8).toString("hex")}.migration.tmp`;
+  const temporary = `${target}.${process.pid}.${randomBytes6(8).toString("hex")}.migration.tmp`;
   try {
     const descriptor3 = fs6.openSync(temporary, "wx", 384);
     try {
@@ -22993,7 +22841,7 @@ var migrateWorkspaceGeneration = (projects, identity) => {
     quarantineLegacyWorkspace(projects, legacy, identity);
     return { current, migrated: true };
   }
-  const staging = path6.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes7(8).toString("hex")}.tmp`);
+  const staging = path6.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes6(8).toString("hex")}.tmp`);
   fs6.mkdirSync(staging, { mode: 448 });
   try {
     writeJsonAtomic(path6.join(staging, "workspace-identity.json"), identity, true);
@@ -23389,7 +23237,7 @@ function buildRunProvenance(input = {}) {
 }
 
 // src/kiro/mcp-session.ts
-import { randomBytes as randomBytes11 } from "node:crypto";
+import { randomBytes as randomBytes10 } from "node:crypto";
 import { realpathSync } from "node:fs";
 import path14 from "node:path";
 import { pathToFileURL } from "node:url";
@@ -23436,7 +23284,7 @@ var fabricInfoCatalog = (actions) => {
 };
 
 // src/kiro/artifacts.ts
-import { randomBytes as randomBytes8 } from "node:crypto";
+import { randomBytes as randomBytes7 } from "node:crypto";
 import fs8 from "node:fs";
 import path8 from "node:path";
 
@@ -23568,7 +23416,7 @@ var ArtifactStore = class {
     if (this.#totalChars + content.length > this.#maxTotalChars) throw new KiroArtifactStoreError("artifact quota exceeded");
     let id;
     do
-      id = `ka_${randomBytes8(24).toString("hex")}`;
+      id = `ka_${randomBytes7(24).toString("hex")}`;
     while (this.#entries.has(id) || this.#root !== void 0 && fs8.existsSync(path8.join(this.#root, id)));
     const now = this.#now();
     const file = this.#root ? path8.join(this.#root, id) : void 0;
@@ -23805,7 +23653,7 @@ var FoveaProvider = class {
 };
 
 // src/providers/state-provider.ts
-import { randomBytes as randomBytes9 } from "node:crypto";
+import { randomBytes as randomBytes8 } from "node:crypto";
 import fs11 from "node:fs";
 import path9 from "node:path";
 
@@ -24476,7 +24324,7 @@ var StateProvider = class {
     if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
     const temporary = path9.join(
       this.#root,
-      `.state-${process.pid}-${randomBytes9(8).toString("hex")}.tmp`
+      `.state-${process.pid}-${randomBytes8(8).toString("hex")}.tmp`
     );
     const owned = { created: false };
     try {
@@ -24737,7 +24585,7 @@ var StateProvider = class {
           try {
             initializeOwnedFile(this.#lock, owned, (descriptor3) => {
               this.#assertRoot();
-              fs11.writeFileSync(descriptor3, `${JSON.stringify({ schemaVersion: 2, kind: STATE_LOCK_KIND, process: { pid: process.pid }, token: randomBytes9(16).toString("hex"), acquiredAt: Date.now() })}
+              fs11.writeFileSync(descriptor3, `${JSON.stringify({ schemaVersion: 2, kind: STATE_LOCK_KIND, process: { pid: process.pid }, token: randomBytes8(16).toString("hex"), acquiredAt: Date.now() })}
 `);
               fs11.fsyncSync(descriptor3);
             });
@@ -25872,7 +25720,7 @@ var FabricBootstrapProvider = class {
 };
 
 // src/kiro/mcp-provider.ts
-import { createHash as createHash10, randomBytes as randomBytes10 } from "node:crypto";
+import { createHash as createHash10, randomBytes as randomBytes9 } from "node:crypto";
 import fs14 from "node:fs";
 import path12 from "node:path";
 var descriptors3 = [
@@ -26043,7 +25891,7 @@ var stageExplicitMcpConfiguration = (configPath, explicit) => {
   }
   const stagedPath = path12.join(
     directory,
-    `.kiro-fabric-mcp-snapshot-${process.pid}-${randomBytes10(16).toString("hex")}.json`
+    `.kiro-fabric-mcp-snapshot-${process.pid}-${randomBytes9(16).toString("hex")}.json`
   );
   let descriptor3;
   let createdStats;
@@ -27459,14 +27307,8 @@ var FoveaCallObservation = class {
 };
 async function collectFoveaCallContext(client, observations, original, context, maxOutputChars) {
   const files = observations.files();
-  if (!files.length || original.isError || original.executionStatus !== "succeeded" || !client.collectCallContext) return { projection: original };
-  return collectFoveaContext({
-    ...client,
-    observer: { observe() {
-    }, gap() {
-    } },
-    collectContext: (ctx, max) => client.collectCallContext(files, ctx, max, observations.sampled())
-  }, original, context, maxOutputChars);
+  if (!files.length || original.isError || original.executionStatus !== "succeeded") return { projection: original };
+  return collectFoveaContext((ctx, max) => client.collectCallContext(files, ctx, max, observations.sampled()), original, context, maxOutputChars);
 }
 
 // src/kiro/mcp-response.ts
@@ -28064,7 +27906,7 @@ var createMcpSession = (context) => {
     serverClosing,
     identity
   } = context;
-  const foveaConversation = `host_${randomBytes11(24).toString("hex")}`;
+  const foveaConversation = `host_${randomBytes10(24).toString("hex")}`;
   const binding = new KiroPowerWorkspaceBinding({
     pluginRoot: options.runtimeRoot,
     pluginData: options.dataRoot,
@@ -28077,7 +27919,7 @@ var createMcpSession = (context) => {
   });
   let workspaceSnapshot;
   let clientRootsObserved = false;
-  const catalogClientSession = randomBytes11(24).toString("hex");
+  const catalogClientSession = randomBytes10(24).toString("hex");
   let runtime = options.runtime;
   let runtimeIdentity = runtime ? "<injected>" : "";
   let runtimeGeneration = runtime ? 1 : 0;
@@ -28363,7 +28205,7 @@ var createMcpSession = (context) => {
 
 // src/kiro/mcp-server.ts
 var EXEC_DESCRIPTION = "Kiro Fabric Code Mode: checked TypeScript; await, then return only what you need (strings print as text). Navigator: repo.focus/sketch/impact; repo.focusRead({query}) adds source reads. local.read({path,offset?,limit?})->{text:string,totalLines,truncated,nextOffset?}. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}; complete=windows only. local.grep({pattern,path?,glob?,literal?,hidden?,limit?}); local.find({pattern,path?,hidden?,limit?}). local.edit({path,expectedSha256,oldText,newText,all?}); local.write overwrite needs expectedSha256 from read. local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}; scripts: {script,interpreter:'bash',args?}. Availability/APIs: tools.providers(), tools.search, tools.describe. Help: fabric.help. No native fallback.";
-var MCP_INSTANCE_ID = `fmcp_${randomBytes12(16).toString("hex")}`;
+var MCP_INSTANCE_ID = `fmcp_${randomBytes11(16).toString("hex")}`;
 var MCP_STARTED_AT = (/* @__PURE__ */ new Date()).toISOString();
 var MCP_PARENT_PID = process.ppid;
 var installedKiroHomeFor = (runtimeRoot, dataRoot) => {
@@ -28457,7 +28299,7 @@ var createKiroMcpServer = async (options) => {
   const fabricApprover = new KiroPowerApprover({
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
     request: async ({ title: _title, message, signal, timeoutMs }) => {
-      const elicitationId = `form_${randomBytes12(8).toString("hex")}`;
+      const elicitationId = `form_${randomBytes11(8).toString("hex")}`;
       if (tracer.enabled) {
         tracer.event("eval", "approval.form.request", void 0, { elicitationId });
         tracer.flush();

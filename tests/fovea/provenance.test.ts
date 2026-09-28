@@ -124,12 +124,12 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform))('native workspa
     const journal = new FoveaProvenanceJournal(path.join(f.base, 'fovea'), nativePlatform); expect((await journal.read(f.worktree)).records).toEqual([]);
     committed(a, sha('b'), sha('c')); await b.invoke('status', {}, f.context); expect((await journal.read(f.worktree)).sequence).toBe(0);
     for (const key of ['commitPreparationId', 'nativeProvenance', 'trustedRulesSha256']) await expect(b.invoke('sync', { [key]: 'forged' }, f.context)).rejects.toThrow('Private');
-    await expect(a.acknowledgeDelivery('notice', f.context)).rejects.toThrow('revoked');
+    await expect(a.invoke('status', {}, f.context)).rejects.toThrow('revoked');
   });
 });
 
 describe.skipIf(!['linux', 'darwin'].includes(process.platform) || !fs.existsSync(parser.path))('source host/engine provenance integration', () => {
-  it('two hosts share matching own/foreign transitions, not navigation, and only trusted delivery commits baseline', async () => {
+  it('two hosts share matching own/foreign transitions, not navigation, and sync never commits its baseline', async () => {
     const transport = sourceTransport(), f = fixture(), a = f.make(), b = f.make(); fs.writeFileSync(path.join(f.root, 'math.ts'), text);
     const focused = await a.invoke('focus', { query: 'calculateTotal' }, f.context);
     await expect(b.invoke('dwell', { focusId: focused.focusId }, f.context)).rejects.toThrow(/expired|Unknown/);
@@ -142,31 +142,6 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform) || !fs.existsSyn
     expect(foreign).toMatchObject({ red: true, delivery: 'next-prompt', details: { provenance: { kind: 'other-session' } } });
     expect(transport.mock.calls.some(([r]) => 'commitPreparationId' in r.args)).toBe(false);
     const replay = await a.invoke('sync', syncArgs, f.context); expect(replay.red).toBe(true);
-    // Reconciliation is computation, not delivery: same immutable snapshot/notice.
-    expect(replay.noticeId).toBe(own.noticeId);
-    await a.acknowledgeDelivery(replay.noticeId as string, f.context);
-    expect(transport.mock.calls.at(-1)![0].args).toEqual({ commitPreparationId: replay.syncPreparationId });
-    expect(await a.invoke('sync', syncArgs, f.context)).toMatchObject({ red: false });
-    await expect(b.acknowledgeDelivery(replay.noticeId as string, f.context)).rejects.toThrow(/Unknown/);
-  }, 30000);
-  it('retains a pending notice across clean reverts and collector emission never charges baseline', async () => {
-    const transport = sourceTransport(), f = fixture(), a = f.make();
-    expect(await a.collectContext(f.context, 4000)).toBeUndefined(); expect(transport).not.toHaveBeenCalled();
-    fs.writeFileSync(path.join(f.root, 'math.ts'), text);
-    a.observer.observe({ sequence: 1, operationId: 'read', ref: 'local.read', phase: 'access', paths: ['math.ts'] });
-    expect(await a.collectContext(f.context, 4000)).toBeUndefined();
-    fs.unlinkSync(path.join(f.root, 'math.ts'));
-    const red = await a.invoke('sync', {}, f.context);
-    expect(red.red).toBe(true);
-    fs.writeFileSync(path.join(f.root, 'math.ts'), text);
-    const clean = await a.invoke('sync', {}, f.context); expect(clean.red).toBe(false);
-    const claim = await a.collectContext(f.context, 4000);
-    expect(claim?.notices[0]?.noticeId).toBe(red.noticeId);
-    claim!.emitted();
-    expect(await a.invoke('status', {}, f.context)).toMatchObject({ notices: { emitted: 1, acknowledged: 0 } });
-    expect(transport.mock.calls.some(([r]) => 'commitPreparationId' in r.args)).toBe(false);
-    await a.acknowledgeDelivery(red.noticeId as string, f.context);
-    // Old acknowledgment retires the old notice, never rewinds the clean baseline.
     expect(transport.mock.calls.some(([r]) => 'commitPreparationId' in r.args)).toBe(false);
   }, 30000);
   it.each(['disabled', 'hidden'] as const)('never scans automatically or misrepresents presentation with sync mode %s', async mode => {
@@ -176,7 +151,7 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform) || !fs.existsSyn
     config.sync.mode = mode;
     await a.invoke('configure', { scope: 'session', expectedRevision: settings.revision, config }, f.context);
     a.observer.observe({ sequence: 1, operationId: 'read', ref: 'local.read', phase: 'access', paths: ['math.ts'] });
-    expect(await a.collectContext(f.context, 4000)).toBeUndefined(); expect(transport).not.toHaveBeenCalled();
+    expect(await a.collectCallContext(['math.ts'], f.context, 4000)).toBeUndefined(); expect(transport).not.toHaveBeenCalled();
   });
   it('classifies interleaved exact SHA256 chains as mixed and uninstrumented external edits as unattributed', async () => {
     sourceTransport(); const f = fixture(), a = f.make(), b = f.make(); fs.writeFileSync(path.join(f.root, 'math.ts'), text);
@@ -184,10 +159,11 @@ describe.skipIf(!['linux', 'darwin'].includes(process.platform) || !fs.existsSyn
     const middle = text.replace('1', '2'); fs.writeFileSync(path.join(f.root, 'math.ts'), middle); committed(a, sha(text), sha(middle));
     await a.invoke('status', {}, f.context); fs.unlinkSync(path.join(f.root, 'math.ts')); committed(b, sha(middle), null); await b.invoke('status', {}, f.context);
     const mixed = await a.invoke('sync', syncArgs, f.context); expect(mixed).toMatchObject({ red: true, details: { provenance: { kind: 'mixed' } } });
-    await a.acknowledgeDelivery(mixed.noticeId as string, f.context);
-    fs.writeFileSync(path.join(f.root, 'math.ts'), text); await a.invoke('sync', syncArgs, f.context);
-    fs.unlinkSync(path.join(f.root, 'math.ts'));
-    expect(await a.invoke('sync', syncArgs, f.context)).toMatchObject({ red: true, details: { provenance: { kind: 'unattributed' } } });
+    const g = fixture(), c = g.make(); fs.writeFileSync(path.join(g.root, 'math.ts'), text);
+    c.observer.observe({ sequence: 1, operationId: 'read', ref: 'local.read', phase: 'access', paths: ['math.ts'] });
+    await c.invoke('sync', syncArgs, g.context);
+    fs.unlinkSync(path.join(g.root, 'math.ts'));
+    expect(await c.invoke('sync', syncArgs, g.context)).toMatchObject({ red: true, details: { provenance: { kind: 'unattributed' } } });
   }, 30000);
   it('overflow and malformed journals report gaps and never claim foreign-only ownership', async () => {
     sourceTransport(); const f = fixture(), a = f.make(); fs.writeFileSync(path.join(f.root, 'math.ts'), text);

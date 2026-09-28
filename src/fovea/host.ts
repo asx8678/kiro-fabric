@@ -12,8 +12,7 @@ import { FoveaEngineProcess } from "./engine-process.js";
 import { FoveaRootLeases, type FoveaBindingAuthority, type FoveaLease } from "./root-leases.js";
 import { FoveaResultStore, type ResultOwner } from "./result-store.js";
 import { FoveaScheduler } from "./scheduler.js";
-import { FoveaOutbox, type FoveaDeliveryClaim } from "./delivery.js";
-import { FoveaCallContexts } from "./call-context.js";
+import { FoveaCallContexts, type FoveaDeliveryClaim } from "./call-context.js";
 import { record, type FoveaParserDescriptor } from "./protocol.js";
 import type { FoveaObservation, FoveaObserver } from "./observations.js";
 import { loadManagedSourcePlatform } from './native-source-loader.js';
@@ -24,12 +23,8 @@ export interface FoveaBoundClient {
   readonly rootId: string;
   invoke(operation: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>>;
   observer: FoveaObserver;
-  /** Host-owned, after source effects settle. Caller must qualify the delivery surface. */
-  collectContext(context: FabricInvocationContext, maxChars: number, nextPrompt?: boolean): Promise<FoveaDeliveryClaim | undefined>;
   /** Same-call visible context from this invocation's observed files. Transient; does not persist conversation focus. */
-  collectCallContext?(files: string[], context: FabricInvocationContext, maxChars: number, sampled?: boolean): Promise<FoveaDeliveryClaim | undefined>;
-  /** Trusted delivery adapter only; never exposed through invoke/guest args. */
-  acknowledgeDelivery(noticeId: string, context: FabricInvocationContext): Promise<void>;
+  collectCallContext(files: string[], context: FabricInvocationContext, maxChars: number, sampled?: boolean): Promise<FoveaDeliveryClaim | undefined>;
   close(): Promise<void>;
 }
 /** Persistent MCP-host owner. Providers borrow a revocable binding; neither
@@ -41,7 +36,6 @@ export class FoveaHost {
   readonly #leases = new FoveaRootLeases();
   readonly #results = new FoveaResultStore();
   readonly #scheduler = new FoveaScheduler();
-  readonly #outbox = new FoveaOutbox();
   readonly #calls = new FoveaCallContexts();
   readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string>; leases: Set<FoveaLease> }>();
   readonly #retirements = new Map<string, Promise<void>>();
@@ -50,7 +44,6 @@ export class FoveaHost {
   readonly #journal: Promise<FoveaProvenanceJournal | undefined>;
   #journalTail: Promise<void> = Promise.resolve();
   #pendingTransitions = 0;
-  readonly #preparations = new Map<string, { noticeId: string; preparationId: string; generation: number }>();
   #closeTask: Promise<void> | undefined;
   constructor(readonly options: FoveaHostOptions) {
     const root = createFoveaDirectory(options.dataRoot, "fovea"), instances = createFoveaDirectory(root, "instances");
@@ -72,13 +65,13 @@ export class FoveaHost {
     try { this.#conversation(lease).leases.add(lease); }
     catch (error) { this.#leases.revoke(lease); throw error; }
     const observer: FoveaObserver = { observe: event => this.#observe(lease, event), gap: () => { if (lease.signal.aborted || this.#lifetime.signal.aborted) return; const state = this.#observation(lease); state.gap = true; state.dirty = true; } };
-    return { rootId: lease.rootId, observer, collectContext: (context, maxChars, nextPrompt) => this.#collectContext(lease, context, maxChars, nextPrompt), collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), acknowledgeDelivery: (id, context) => this.#acknowledgeDelivery(lease, id, context), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#release(lease); } };
+    return { rootId: lease.rootId, observer, collectCallContext: (files, context, maxChars, sampled) => this.#collectCallContext(lease, files, context, maxChars, sampled === true), invoke: (operation, args, context) => this.#invoke(lease, operation, args, context), close: async () => { this.#release(lease); } };
   }
   #release(lease: FoveaLease): void {
     this.#leases.revoke(lease);
     this.#results.revoke(lease.rootId, lease.authorizationEpoch);
-    this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId);
-    this.#observed.delete(lease.rootId); this.#preparations.delete(lease.rootId);
+    this.#calls.revoke(lease.rootId);
+    this.#observed.delete(lease.rootId);
     this.#conversations.get(JSON.stringify([lease.conversationId, lease.conversationEpoch]))?.leases.delete(lease);
   }
   /** Trusted lifecycle only, never repo.*. Revocation is synchronous; completion
@@ -126,7 +119,7 @@ export class FoveaHost {
         try { await operation(); } catch (error) { failures.push(error); }
       }
       this.#conversations.clear(); this.#retirements.clear();
-      this.#observed.clear(); this.#preparations.clear();
+      this.#observed.clear();
       if (failures.length) throw new AggregateError(failures, 'Navigator host cleanup failed', { cause: failures[0] });
     });
     // Install shared ownership before abort listeners can reenter close.
@@ -177,26 +170,6 @@ export class FoveaHost {
       });
     }
   }
-  async #collectContext(lease: FoveaLease, context: FabricInvocationContext, maxChars: number, nextPrompt = false): Promise<FoveaDeliveryClaim | undefined> {
-    this.#check(lease, {}, context);
-    if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Navigator delivery budget");
-    // A host capability is required at the call site. Visible-only here: an
-    // unqualified hidden mode must not silently become visible output.
-    const config = this.#conversation(lease).configuration.read(lease.worktreeId).config;
-    if (config.sync.mode !== "enabled" || !this.#observed.has(lease.rootId) || maxChars < 160) return undefined;
-    await this.#invoke(lease, "sync", {}, context);
-    this.#check(lease, {}, context);
-    const claim = this.#outbox.claim(lease.rootId, lease.authorizationEpoch, maxChars, nextPrompt);
-    if (!claim) return undefined;
-    const cancel = (): void => claim.cancel();
-    const signal = AbortSignal.any([lease.signal, this.#lifetime.signal, ...(context.signal ? [context.signal] : [])]);
-    signal.throwIfAborted(); signal.addEventListener("abort", cancel, { once: true });
-    const settle = (kind: "emitted" | "uncertain" | "cancel"): void => {
-      signal.removeEventListener("abort", cancel);
-      try { this.#check(lease, {}, context); claim[kind](); } catch { claim.cancel(); }
-    };
-    return { notices: claim.notices, isCurrent: () => { try { this.#check(lease, {}, context); return claim.isCurrent(); } catch { return false; } }, emitted: () => settle("emitted"), uncertain: () => settle("uncertain"), cancel: () => settle("cancel") };
-  }
   async #collectCallContext(lease: FoveaLease, files: string[], context: FabricInvocationContext, maxChars: number, sampled = false): Promise<FoveaDeliveryClaim | undefined> {
     this.#check(lease, {}, context);
     if (!Number.isSafeInteger(maxChars) || maxChars < 0 || maxChars > 131_072) throw new Error("Invalid Navigator delivery budget");
@@ -241,23 +214,6 @@ export class FoveaHost {
     return this.#calls.claim(lease.rootId, lease.authorizationEpoch, key, text, maxChars, claimSignal, () => this.#check(lease, {}, context));
   }
   #origin(lease: FoveaLease): string { return createHash('sha256').update(JSON.stringify([this.hostInstanceId, lease.conversationId, lease.conversationEpoch])).digest('hex'); }
-  async #acknowledgeDelivery(lease: FoveaLease, noticeId: string, context: FabricInvocationContext): Promise<void> {
-    this.#check(lease, {}, context);
-    const signal = AbortSignal.any([lease.signal, this.#lifetime.signal, ...(context.signal ? [context.signal] : [])]);
-    await this.#scheduler.run(signal, async () => {
-      this.#check(lease, {}, context);
-      const prepared = this.#preparations.get(lease.rootId);
-      if (!this.#outbox.get(lease.rootId, lease.authorizationEpoch, noticeId)) throw new Error('Unknown delivery preparation');
-      // A retained older notice may still be delivered after a clean/newer
-      // reconciliation. It must never rewind the newer semantic baseline.
-      if (prepared?.noticeId === noticeId && prepared.generation === this.#process?.generation) {
-        await this.#process!.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, authorizationEpoch: lease.authorizationEpoch, operation: 'sync', args: { commitPreparationId: prepared.preparationId } }, signal, context.deadline?.remainingMs() ?? 120_000);
-        this.#check(lease, {}, context);
-        this.#preparations.delete(lease.rootId);
-      }
-      this.#outbox.remove(noticeId);
-    });
-  }
   #owner(lease: FoveaLease): ResultOwner { return { conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, authorizationEpoch: lease.authorizationEpoch, engineGeneration: this.#process?.generation ?? 0 }; }
   #check(lease: FoveaLease, args: Record<string, unknown>, context: FabricInvocationContext): void { this.#lifetime.signal.throwIfAborted(); context.signal?.throwIfAborted(); context.deadline?.throwIfExpired(); this.#leases.check(lease, args.rootId); }
   async #invoke(lease: FoveaLease, operation: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
@@ -269,7 +225,7 @@ export class FoveaHost {
     const controls = this.#conversation(lease), configuration = controls.configuration;
     if (operation === "status") {
       const state = this.#observed.get(lease.rootId), config = configuration.read(lease.worktreeId);
-      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, cleanup: this.#process?.cleanup ?? null, retainedScratchGenerations: this.#process?.retainedScratchGenerations ?? 0, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, notices: this.#outbox.status(lease.rootId, lease.authorizationEpoch), capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
+      return { schemaVersion: 1, advisory: true, hostInstanceId: this.hostInstanceId, engineGeneration: this.#process?.generation ?? 0, engineStarts: this.#process?.starts ?? 0, engineActive: this.#process?.active ?? false, cleanup: this.#process?.cleanup ?? null, retainedScratchGenerations: this.#process?.retainedScratchGenerations ?? 0, available: !!this.#process && !this.#process.unavailable, reason: this.#process?.unavailable ?? (this.#process ? null : "No admitted generation-matched parser; repository analysis unavailable"), rootId: lease.rootId, worktreeId: lease.worktreeId, authorizationEpoch: lease.authorizationEpoch, conversationEpoch: lease.conversationEpoch, conversationAssociation: "host-supplied conversation/epoch; native session lifecycle unqualified", scope: "whole verified root subject to analysis exclusions; focus filters are not access boundaries", coverage: "not checked by status", freshness: state?.dirty || state?.gap ? "reconciliation-required" : "unknown", observations: { operations: state?.operations ?? 0, attentionPaths: state?.paths.size ?? 0, gap: state?.gap ?? false }, capabilities: { explicit: !!this.#process, automatic: false, nativeSessionRouting: false, hiddenDelivery: false, continuation: false, reason: "Native Kiro lifecycle/queue/delivery gates remain unqualified; no invented RPC or idle restart" }, requested: config.config, settingSupport: config.settingSupport };
     }
     if (operation === "adoptRules") {
       if (typeof args.expectedSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(args.expectedSha256)) throw new Error("Rule adoption requires exact local.read SHA-256");
@@ -296,7 +252,7 @@ export class FoveaHost {
       if (operation === "reload") {
         await this.#process!.restart();
         this.#check(lease, args, context); // Close/retirement may have revoked publication during restart.
-        configuration.reload(lease.worktreeId); this.#results.clear(); this.#outbox.replay(); this.#calls.clear();
+        configuration.reload(lease.worktreeId); this.#results.clear(); this.#calls.clear();
         return { schemaVersion: 1, restarted: true, scope: "process-wide", invalidates: "all engine navigation and retained results; not a session reset", codeTransition: "same generation only; update and restart session for new code" };
       }
       const { rootId: _rootId, ...parameters } = args;
@@ -324,7 +280,7 @@ export class FoveaHost {
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation) && parameters.maxTokens === undefined) parameters.maxTokens = config.tools.defaultBudget;
       const value = await this.#process!.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, authorizationEpoch: lease.authorizationEpoch, operation: operation === "augment" ? "focus" : operation, args: operation === "augment" ? { ...parameters, transient: true } : parameters }, signal, context.deadline?.remainingMs() ?? 120_000);
       this.#check(lease, args, context);
-      if (operation === "reset") { this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#outbox.revoke(lease.rootId); this.#calls.revoke(lease.rootId); this.#preparations.delete(lease.rootId); this.#observed.delete(lease.rootId); }
+      if (operation === "reset") { this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#calls.revoke(lease.rootId); this.#observed.delete(lease.rootId); }
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation)) {
         this.#observation(lease); // Explicit graph work authorizes attention, not delivery.
         const resultId = this.#results.put(this.#owner(lease), value);
@@ -338,19 +294,7 @@ export class FoveaHost {
         const observed = this.#observation(lease);
         // A host reconciliation consumes observation hints, not proof of delivery.
         if (observed.operations === observedRevision) observed.dirty = false;
-        if (value.red === true && typeof value.text === "string" && value.text) {
-          const details = record(value.details) ? value.details : undefined;
-          const provenance = details && record(details.provenance) ? details.provenance.kind : undefined;
-          const origin = provenance === "current-session" ? "own" : provenance === "other-session" ? "foreign" : provenance === "mixed" ? "mixed" : "unattributed";
-          // Replay the same immutable notice for the same semantic snapshot,
-          // including after emission. Never discard pending context on refresh.
-          const key = typeof value.sourceSnapshotId === "string" ? value.sourceSnapshotId : undefined;
-          const noticeId = this.#outbox.prepare(lease.rootId, lease.authorizationEpoch, value.text, origin, key);
-          if (typeof value.syncPreparationId === "string") this.#preparations.set(lease.rootId, { noticeId, preparationId: value.syncPreparationId, generation: this.#process!.generation });
-          return { ...value, noticeId, deliveryState: "prepared", delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
-        }
-        this.#preparations.delete(lease.rootId); // Clean baseline is independent of older, still-pending notices.
-        return { ...value, deliveryState: "not-required", delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
+        return { ...value, delivered: false, automaticContinuation: false, observationGap: observed.gap || value.observationGap === true };
       }
       if (!record(value)) throw new Error("Navigator returned invalid control response");
       return value;

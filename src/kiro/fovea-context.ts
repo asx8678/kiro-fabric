@@ -1,5 +1,4 @@
-import type { FoveaBoundClient } from "../fovea/host.js";
-import type { FoveaDeliveryClaim } from "../fovea/delivery.js";
+import type { FoveaDeliveryClaim } from "../fovea/call-context.js";
 import type { FabricInvocationContext } from "../protocol.js";
 import type { KiroProjectionResult } from "./projection.js";
 
@@ -8,12 +7,12 @@ export interface FoveaContextProjection { projection: KiroProjectionResult; deli
 
 /** Called after execution settlement, outside source-effect/approval reservations.
  * Uses only remaining outer budget: mandatory output/recovery always wins. */
-export async function collectFoveaContext(client: FoveaBoundClient, original: KiroProjectionResult, context: FabricInvocationContext, maxOutputChars: number): Promise<FoveaContextProjection> {
+export async function collectFoveaContext(collect: (context: FabricInvocationContext, maxChars: number) => Promise<FoveaDeliveryClaim | undefined>, original: KiroProjectionResult, context: FabricInvocationContext, maxOutputChars: number): Promise<FoveaContextProjection> {
   const remaining = Math.min(8192, Math.max(0, maxOutputChars - original.text.length));
   if (remaining < HEADER.length + 256 || context.signal?.aborted || context.deadline?.expired || ["aborted", "timed_out"].includes(original.executionStatus)) return { projection: original };
   let delivery: FoveaDeliveryClaim | undefined;
   try {
-    delivery = await client.collectContext(context, remaining - HEADER.length);
+    delivery = await collect(context, remaining - HEADER.length);
     if (!delivery) return { projection: original };
     context.signal?.throwIfAborted(); context.deadline?.throwIfExpired();
     const suffix = HEADER + delivery.notices.map(n => n.text).join("\n");
@@ -24,13 +23,11 @@ export async function collectFoveaContext(client: FoveaBoundClient, original: Ki
   } catch {
     delivery?.cancel();
     // Analysis never changes a committed mutation/error into a failed tool.
-    try { client.observer.gap(); } catch { /* diagnostics cannot alter outcomes */ }
     return { projection: original };
   }
 }
 
-/** Bounded request-to-transport ledger; a handler return is NOT emission.
- * A future hook channel must claim from the same host outbox. */
+/** Bounded request-to-transport ledger; a handler return is NOT emission. */
 export class FoveaResponseDelivery {
   readonly #pending = new Map<string | number, { claim: FoveaDeliveryClaim; originalText: string; dispose(): void }>();
   track(id: string | number, claim: FoveaDeliveryClaim, signal: AbortSignal, originalText: string): boolean {

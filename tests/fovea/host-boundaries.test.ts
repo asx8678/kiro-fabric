@@ -8,7 +8,6 @@ import { FoveaProvider } from '../../src/providers/repo-provider.js';
 import { FoveaRootLeases } from '../../src/fovea/root-leases.js';
 import { FoveaResultStore, type ResultOwner } from '../../src/fovea/result-store.js';
 import { FoveaScheduler } from '../../src/fovea/scheduler.js';
-import { FoveaOutbox } from '../../src/fovea/delivery.js';
 import { DEFAULT_FOVEA_CONFIG, FoveaConfiguration, validateFoveaConfig } from '../../src/fovea/config.js';
 import { decodeRequest, decodeResponse, projectEngineJson } from '../../src/fovea/protocol.js';
 
@@ -195,20 +194,6 @@ it('cancels queued admission immediately, bounds backlog and closes without disp
   scheduler.close(); expect((await Promise.all(queued)).every(e => e instanceof Error && /closed/.test(e.message))).toBe(true);
   release(); await active; expect(ran).toBe(0);
   await expect(scheduler.run(new AbortController().signal, async () => {})).rejects.toThrow(/unavailable/);
-});
-
-it('keeps delivery selection distinct from emission, uncertainty and acknowledgement', () => {
-  const outbox = new FoveaOutbox(() => 1); const id = outbox.prepare('root', 1, 'notice', 'own');
-  expect(outbox.prepare('root', 1, 'notice', 'own')).toBe(id);
-  expect(outbox.select('foreign', 1, 1000)).toEqual([]); expect(outbox.select('root', 2, 1000)).toEqual([]);
-  expect(outbox.select('root', 1, 165)).toEqual([]);
-  const selected = outbox.select('root', 1, 166); selected[0]!.text = 'mutated';
-  expect(outbox.select('root', 1, 166)[0]!.text).toBe('notice');
-  expect(outbox.status()).toEqual({ pending: 1, emitted: 0, uncertain: 0, acknowledged: 0 });
-  outbox.emitted([id]); outbox.uncertain([id]); expect(outbox.select('root', 1, 1000)).toEqual([]);
-  expect(outbox.status()).toMatchObject({ uncertain: 1, acknowledged: 0 });
-  outbox.replay(); expect(outbox.select('root', 1, 1000)).toHaveLength(1);
-  outbox.revoke('root'); expect(outbox.status()).toEqual({ pending: 0, emitted: 0, uncertain: 0, acknowledged: 0 });
 });
 
 it.each([false, true])('status/settings stay lazy; borrowed provider close never owns host shutdown (parser=%s)', async hasParser => {

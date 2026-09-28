@@ -81,7 +81,7 @@
       },
       {
         "path": "skills/fabric-exec/references/fovea.md",
-        "sha256": "c87b5506183fc3c423f437726fb7d3d35eac8d24ea75789df8ced64b0af3a849"
+        "sha256": "1a04e69990ed105941e2f248b945c77b974616a63fde956bb7f315f028e06e9a"
       },
       {
         "path": "skills/fabric-exec/references/recipes.md",
@@ -157,7 +157,7 @@
       },
       {
         "path": "src/fovea/call-context.ts",
-        "sha256": "f5ad690b6c4f2fb25791e5337898cdc01d9f43f109e8753edd294606ba63d23a"
+        "sha256": "122a3326ffd8d6547d7fb58f21aae874d512605fb6da35afe9003e1712d3523d"
       },
       {
         "path": "src/fovea/component.json",
@@ -276,10 +276,6 @@
         "sha256": "a0e16b945ea6002648d2bfa55d8fa9cca0e1acfdd03563b716a7f27689e860bd"
       },
       {
-        "path": "src/fovea/delivery.ts",
-        "sha256": "3198eb94c7e1511150846dbc114b702588602785071048edfbfbda5ae26e1701"
-      },
-      {
         "path": "src/fovea/engine-entry.ts",
         "sha256": "43bdc0f51f1edf4866df262da611f28e92961030c4d6e0a2dedee7b474e0b000"
       },
@@ -297,7 +293,7 @@
       },
       {
         "path": "src/fovea/host.ts",
-        "sha256": "31b89de8d9100a9246932e940f598afec0f77b3a3451992fa0cab45fca053f02"
+        "sha256": "2e5acdad0f5c93790bdf63561d47df1cbb71b578ca5325ba0d759720f9e8d905"
       },
       {
         "path": "src/fovea/native-source-loader.ts",
@@ -409,11 +405,11 @@
       },
       {
         "path": "src/kiro/fovea-call-context.ts",
-        "sha256": "db9f855b12192e53d81412ac0e27f78983ab15620943e3ecb8aeed8ae2c37050"
+        "sha256": "890eb135f952f31bd09510cfb1b08f0726c99b9a32b67cfd0a9906b0908e9416"
       },
       {
         "path": "src/kiro/fovea-context.ts",
-        "sha256": "cc98d1aaa02a56dad722ab5774d1bd704f7aa23422194ea1285a068ac31deda2"
+        "sha256": "79128d37ace120116b299a5b23f8299ae8eb1f6b2396386e5e8f155f7a5770e4"
       },
       {
         "path": "src/kiro/generated-guidance.ts",
@@ -624,7 +620,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "834dd856fed3a113dad3998466a05d8c0a0ad71b48b2a2e7301f0afa07bcca79"
+    "digest": "256725444e62930740e01f50246db5886b5c7431a47660eb640e677ed2f8c88f"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -672,7 +668,6 @@
     "src/fovea/core/state.ts",
     "src/fovea/core/sync.ts",
     "src/fovea/core/temp-storage.ts",
-    "src/fovea/delivery.ts",
     "src/fovea/engine-entry.ts",
     "src/fovea/engine-process.ts",
     "src/fovea/engine.ts",
@@ -1299,9 +1294,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-RKFDJL5L.js",
-      "bytes": 1374779,
-      "sha256": "54ad825143411f0f9b3c97cd577b07c79bdc9d8c838df1d6a9843fb091a04cc9"
+      "path": "chunks/mcp-server-B3RVMEDV.js",
+      "bytes": 1366443,
+      "sha256": "3d38f8da60958a71f03df4cb037fd310cb0aa28725eb8f967308483bb6b2d8f3"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1361,7 +1356,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 8206,
-      "sha256": "c3b5f078854fa9fd8479b06105def14d957861ef40cf742d6bb3118730f61ea6"
+      "sha256": "f0cc13060bb043259816805c7a7f0f3657a009395dc7896b3ccf988951bb8dc0"
     },
     {
       "path": "package.json",
@@ -1379,5 +1374,5 @@
       "sha256": "9171baea57ac2570d34a4083cd8a1d439e93b53c03527c374d0645be2be9ad1e"
     }
   ],
-  "contentDigest": "edd0317f9f6e8b17bbb0a3f7303e221f10087583c76d827bde5f75667e2c7482"
+  "contentDigest": "93da7e41a5b1db07b918498f17ddff817a54d459125334899e64e3f561a0f8d8"
 }

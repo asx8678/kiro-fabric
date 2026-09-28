@@ -110,19 +110,16 @@ hash chain. Missing journals/events remain gaps, never fabricated authorship.
 Root metadata is a 32-entry LRU with two hot graphs; eviction expires focus and
 re-entry establishes a new observation baseline.
 
-The engine preserves the reference synchronization algorithm. Important sync
-preparations do not charge notification memory as delivered. A host-private
-preparation token can commit that memory only after real delivery evidence.
-The outbox distinguishes preparation, emission and uncertainty; nested success
-is never acknowledgment. Explicit `repo.sync` currently prepares notices only.
+The engine preserves the reference synchronization algorithm. Explicit
+`repo.sync` returns its reconciliation to the guest and never commits the sync
+baseline, so a later call still reports changes since the baseline.
 
 `src/kiro/fovea-context.ts` implements an execution-owned post-settlement
 collector and bounded transport ledger. It never parses guest code, holds source
 locks, replaces return/error/recovery data, or labels a handler return as delivery.
-The shared outbox serializes channel claims, retains notices across clean
-reconciliation, and suppresses late advisories on cancellation/revocation.
-Transport write completion means emitted, not acknowledged. Foreign-only notices
-wait for a prompt; hidden/disabled configuration never becomes visible output.
+Each same-call claim belongs to one invocation; cancellation or revocation before
+transport removes only the advisory. Transport write completion means emitted,
+not acknowledged. Hidden/disabled configuration never becomes visible output.
 
 Only the same-call context (`KIRO_FABRIC_FOVEA_CALL_CONTEXT=1`) is wired to
 visible output; there is no post-tool collector or native hook. Authenticated

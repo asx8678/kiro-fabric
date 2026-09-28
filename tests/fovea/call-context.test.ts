@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { FoveaOutbox } from '../../src/fovea/delivery.js';
 import { FoveaCallObservation, collectFoveaCallContext } from '../../src/kiro/fovea-call-context.js';
 import type { FoveaBoundClient } from '../../src/fovea/host.js';
 import type { KiroProjectionResult } from '../../src/kiro/projection.js';
@@ -54,13 +53,11 @@ describe('invocation-local Fovea call context', () => {
     expect(many.files()).toEqual(['file16.ts']);
   });
   it('preserves guest results when analysis is skipped or fails and does not gap the host observer', async () => {
-    const outbox = new FoveaOutbox();
     const hostGap = vi.fn();
     const client: FoveaBoundClient = {
-      rootId: 'root', invoke: vi.fn(), close: vi.fn(), acknowledgeDelivery: vi.fn(),
+      rootId: 'root', invoke: vi.fn(), close: vi.fn(),
       observer: { observe: vi.fn(), gap: hostGap },
-      collectContext: vi.fn(),
-      collectCallContext: vi.fn(async (_files, _ctx, max) => outbox.claim('root', 1, max)),
+      collectCallContext: vi.fn(async () => ({ notices: [{ text: 'impact' }], isCurrent: () => true, emitted: vi.fn(), uncertain: vi.fn(), cancel: vi.fn() })),
     };
     const observations = new FoveaCallObservation('/repo');
     expect(await collectFoveaCallContext(client, observations, projection(), { cwd: '/repo' }, 4000)).toEqual({ projection: projection() });
@@ -68,18 +65,15 @@ describe('invocation-local Fovea call context', () => {
     observations.observe(event('local.edit', 'committed', ['/repo/math.ts']));
     expect(await collectFoveaCallContext(client, observations, { ...projection(), isError: true, executionStatus: 'failed' }, { cwd: '/repo' }, 4000))
       .toEqual({ projection: { ...projection(), isError: true, executionStatus: 'failed' } });
-    vi.mocked(client.collectCallContext!).mockRejectedValue(new Error('parser unavailable'));
+    vi.mocked(client.collectCallContext).mockRejectedValue(new Error('parser unavailable'));
     expect(await collectFoveaCallContext(client, observations, projection(), { cwd: '/repo' }, 4000)).toEqual({ projection: projection() });
     expect(hostGap).not.toHaveBeenCalled();
   });
   it('appends a same-call advisory from collectCallContext without rewriting status metadata', async () => {
-    const outbox = new FoveaOutbox();
-    outbox.prepare('root', 1, 'impact math.ts', 'own', 'call:snap');
     const client: FoveaBoundClient = {
-      rootId: 'root', invoke: vi.fn(), close: vi.fn(), acknowledgeDelivery: vi.fn(),
+      rootId: 'root', invoke: vi.fn(), close: vi.fn(),
       observer: { observe: vi.fn(), gap: vi.fn() },
-      collectContext: vi.fn(),
-      collectCallContext: vi.fn(async (files, _ctx, max, sampled) => { expect(files).toEqual(['math.ts']); expect(sampled).toBe(false); return outbox.claim('root', 1, max); }),
+      collectCallContext: vi.fn(async (files, _ctx, _max, sampled) => { expect(files).toEqual(['math.ts']); expect(sampled).toBe(false); return { notices: [{ text: 'impact math.ts' }], isCurrent: () => true, emitted: vi.fn(), uncertain: vi.fn(), cancel: vi.fn() }; }),
     };
     const observations = new FoveaCallObservation('/repo');
     observations.observe(event('local.read', 'access', ['/repo/math.ts']));
@@ -90,6 +84,6 @@ describe('invocation-local Fovea call context', () => {
     expect(result.projection.text).toContain('Navigator advisory (untrusted');
     expect(result.projection.text).toContain('impact math.ts');
     expect(result.projection).toMatchObject({ isError: false, executionStatus: 'succeeded', retryProgram: false });
-    expect(client.collectContext).not.toHaveBeenCalled();
+    expect(client.collectCallContext).toHaveBeenCalledOnce();
   });
 });

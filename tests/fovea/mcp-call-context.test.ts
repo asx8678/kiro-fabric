@@ -94,7 +94,6 @@ describe.skipIf(!portable)("built MCP same-call Fovea context", () => {
       } else expect(first).toBe('{"taskValue":"unchanged"}');
       const status = JSON.parse(await call("return await repo.status();"));
       expect(status.engineStarts).toBe(enabled ? 1 : 0);
-      expect(status.notices).toMatchObject({ pending: 0, emitted: 0, acknowledged: 0 });
       expect(await call('return "next";')).toBe("next");
       expect(await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};')).toBe('{"taskValue":"unchanged"}');
       const refreshed = await call('const f = await local.read({path:"math.ts",limit:1}); await local.edit({path:"math.ts",expectedSha256:f.sha256,edits:[{oldText:"return 2",newText:"return 3"}]}); return {taskValue:"unchanged"};');

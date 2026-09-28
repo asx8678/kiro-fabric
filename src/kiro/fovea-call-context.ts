@@ -65,10 +65,6 @@ export class FoveaCallObservation implements FoveaObserver {
 export async function collectFoveaCallContext(client: FoveaBoundClient, observations: FoveaCallObservation,
   original: KiroProjectionResult, context: FabricInvocationContext, maxOutputChars: number): Promise<FoveaContextProjection> {
   const files = observations.files();
-  if (!files.length || original.isError || original.executionStatus !== "succeeded" || !client.collectCallContext) return { projection: original };
-  return collectFoveaContext({
-    ...client,
-    observer: { observe() {}, gap() {} },
-    collectContext: (ctx, max) => client.collectCallContext!(files, ctx, max, observations.sampled()),
-  }, original, context, maxOutputChars);
+  if (!files.length || original.isError || original.executionStatus !== "succeeded") return { projection: original };
+  return collectFoveaContext((ctx, max) => client.collectCallContext(files, ctx, max, observations.sampled()), original, context, maxOutputChars);
 }

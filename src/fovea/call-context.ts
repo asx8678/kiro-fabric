@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { FoveaOutbox, type FoveaDeliveryClaim } from "./delivery.js";
 
 const FOVEA_CALL_COLD_MS = 6_000;
 export const FOVEA_CALL_WARM_MS = 750;
@@ -11,6 +10,15 @@ export const FOVEA_CALL_COLLECTION_MS = FOVEA_CALL_COLD_MS + FOVEA_CALL_RESERVE_
 const RETRY_MS = 60_000;
 const MAX_ROOTS = 128;
 const MAX_EMITTED_KEYS = 128;
+
+export interface FoveaDeliveryClaim {
+  readonly notices: readonly { readonly text: string }[];
+  /** A successful transport write proves emission only, never model processing. */
+  isCurrent(): boolean;
+  emitted(): void;
+  uncertain(): void;
+  cancel(): void;
+}
 
 /** Optional same-call context has no native-sync baseline or replay queue.
  * Retain only bounded deduplication hashes, never notices from earlier calls.
@@ -37,17 +45,11 @@ export class FoveaCallContexts {
     signal: AbortSignal, check: () => void): FoveaDeliveryClaim | undefined {
     signal.throwIfAborted(); check();
     const key = createHash("sha256").update(JSON.stringify([rootId, epoch, semanticKey, text])).digest("hex");
-    if (this.#emitted.has(key)) return undefined;
-    // An invocation owns this entire outbox. Neither cancel nor uncertain
-    // transport can make its contents eligible for a later invocation.
-    const outbox = new FoveaOutbox();
-    const id = outbox.prepare(rootId, epoch, text, "own");
-    const claim = outbox.claim(rootId, epoch, maxChars);
-    if (!claim) return undefined;
+    if (this.#emitted.has(key) || !text || text.length + 160 > maxChars) return undefined;
     let active = true;
     const current = (): boolean => {
       if (!active || signal.aborted) return false;
-      try { check(); return claim.isCurrent(); } catch { return false; }
+      try { check(); return true; } catch { return false; }
     };
     const settle = (emitted: boolean): void => {
       if (!active) return;
@@ -56,11 +58,10 @@ export class FoveaCallContexts {
         while (this.#emitted.size > MAX_EMITTED_KEYS) this.#emitted.delete(this.#emitted.keys().next().value!);
       }
       active = false; signal.removeEventListener("abort", cancel);
-      outbox.remove(id);
     };
     const cancel = (): void => settle(false);
     signal.addEventListener("abort", cancel, { once: true });
-    return { notices: claim.notices, isCurrent: current, emitted: () => settle(true), uncertain: cancel, cancel };
+    return { notices: [Object.freeze({ text })], isCurrent: current, emitted: () => settle(true), uncertain: cancel, cancel };
   }
   revoke(rootId: string): void {
     this.#roots.delete(rootId);
