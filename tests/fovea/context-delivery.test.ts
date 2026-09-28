@@ -17,7 +17,8 @@ describe('execution-owned Fovea projection and transport', () => {
     const f = fixture(), original = { ...projection('null\nRecovery receipt receipt_1; retryProgram: false.'), executionStatus: 'failed' as const, isError: true, receiptId: 'receipt_1' };
     const result = await collectFoveaContext(f.client, original, { cwd: '/root' }, 4000);
     expect(result.projection.text.startsWith(original.text)).toBe(true);
-    expect(result.projection.text).toContain('untrusted repository-derived data');
+    expect(result.projection.text).toContain('Navigator advisory (untrusted hints');
+    expect(result.projection.text.endsWith('\nNavigation only; inspect sources')).toBe(true);
     expect(result.projection).toMatchObject({ isError: true, executionStatus: 'failed', retryProgram: false, receiptId: 'receipt_1' });
     expect(original.text).not.toContain('Fovea');
     expect(f.outbox.status()).toMatchObject({ pending: 1, emitted: 0, acknowledged: 0 });
@@ -35,8 +36,8 @@ describe('execution-owned Fovea projection and transport', () => {
     expect(await collectFoveaContext(f.client, original, { cwd: '/root', signal: AbortSignal.abort() }, 4000)).toEqual({ projection: original });
     expect(f.client.collectContext).not.toHaveBeenCalled();
   });
-  it('budgets full serialization including escaping and retains oversized notices', async () => {
-    const f = fixture('"\\'.repeat(400)), original = projection();
+  it('budgets the full suffix and retains oversized notices', async () => {
+    const f = fixture('x'.repeat(1150)), original = projection();
     expect(await collectFoveaContext(f.client, original, { cwd: '/root' }, 1200)).toEqual({ projection: original });
     expect(f.outbox.claim('root', 1, 4000)).toBeDefined();
   });

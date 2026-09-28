@@ -57,7 +57,7 @@ export class FoveaCallObservation implements FoveaObserver {
     this.downstream?.observe(event);
   }
   gap(): void { this.#suppressed = true; this.downstream?.gap(); }
-  files(): string[] { return this.#suppressed ? [] : [...this.#paths.keys()]; }
+  files(): string[] { return this.#suppressed ? [] : [...this.#paths].filter(([, changed]) => changed).map(([name]) => name); }
   sampled(): boolean { return this.#sampled; }
 }
 

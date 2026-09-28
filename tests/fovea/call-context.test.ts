@@ -8,22 +8,25 @@ const projection = (text = '{"ok":true}'): KiroProjectionResult => ({ text, isEr
 const event = (ref: string, phase: 'prepared' | 'access' | 'committed' | 'failed' | 'settled', paths?: string[], operationId = 'op') => ({ sequence: 1, operationId, ref, phase, ...(paths ? { paths } : {}) });
 
 describe('invocation-local Fovea call context', () => {
-  it('enrolls successful local source paths and keeps diagnostics from suppressing them', () => {
+  it('advises only on changed files and keeps diagnostics from suppressing them', () => {
     const host = { observe: vi.fn(), gap: vi.fn() };
     const observed = new FoveaCallObservation('/repo', host);
     observed.observe(event('repo.status', 'settled'));
     observed.observe(event('local.read', 'access', ['/repo/src/a.ts']));
     observed.observe(event('local.grep', 'access', ['/repo/src/b.ts']));
+    expect(observed.files()).toEqual([]);
+    observed.observe(event('local.edit', 'committed', ['/repo/src/a.ts']));
     expect(observed.files()).toEqual(['src/a.ts']);
-    expect(host.observe).toHaveBeenCalledTimes(3);
+    expect(host.observe).toHaveBeenCalledTimes(4);
     const failed = new FoveaCallObservation('/repo');
     failed.observe(event('local.read', 'failed', ['/repo/src/a.ts']));
+    failed.observe(event('local.edit', 'committed', ['/repo/src/a.ts']));
     expect(failed.files()).toEqual([]);
     const escape = new FoveaCallObservation('/repo');
-    escape.observe(event('local.read', 'access', ['/repo/../secret.ts']));
+    escape.observe(event('local.edit', 'committed', ['/repo/../secret.ts']));
     expect(escape.files()).toEqual([]);
     const gapped = new FoveaCallObservation('/repo', host);
-    gapped.observe(event('local.read', 'access', ['/repo/src/a.ts']));
+    gapped.observe(event('local.edit', 'committed', ['/repo/src/a.ts']));
     gapped.gap();
     expect(gapped.files()).toEqual([]);
     expect(host.gap).toHaveBeenCalledOnce();
@@ -46,11 +49,9 @@ describe('invocation-local Fovea call context', () => {
     const many = new FoveaCallObservation('/repo');
     many.observe(event('local.readMany', 'access', Array.from({ length: 17 }, (_, i) => `/repo/file${i}.ts`)));
     expect(many.sampled()).toBe(true);
-    expect(many.files()).toHaveLength(16);
-    expect(many.files()).not.toContain('file16.ts');
+    expect(many.files()).toEqual([]);
     many.observe(event('local.edit', 'committed', ['/repo/file16.ts']));
-    expect(many.files()).toContain('file16.ts');
-    expect(many.files()).toHaveLength(16);
+    expect(many.files()).toEqual(['file16.ts']);
   });
   it('preserves guest results when analysis is skipped or fails and does not gap the host observer', async () => {
     const outbox = new FoveaOutbox();
@@ -64,7 +65,7 @@ describe('invocation-local Fovea call context', () => {
     const observations = new FoveaCallObservation('/repo');
     expect(await collectFoveaCallContext(client, observations, projection(), { cwd: '/repo' }, 4000)).toEqual({ projection: projection() });
     expect(client.collectCallContext).not.toHaveBeenCalled();
-    observations.observe(event('local.read', 'access', ['/repo/math.ts']));
+    observations.observe(event('local.edit', 'committed', ['/repo/math.ts']));
     expect(await collectFoveaCallContext(client, observations, { ...projection(), isError: true, executionStatus: 'failed' }, { cwd: '/repo' }, 4000))
       .toEqual({ projection: { ...projection(), isError: true, executionStatus: 'failed' } });
     vi.mocked(client.collectCallContext!).mockRejectedValue(new Error('parser unavailable'));
@@ -82,6 +83,7 @@ describe('invocation-local Fovea call context', () => {
     };
     const observations = new FoveaCallObservation('/repo');
     observations.observe(event('local.read', 'access', ['/repo/math.ts']));
+    observations.observe(event('local.edit', 'committed', ['/repo/math.ts']));
     const original = projection('{"taskValue":"unchanged"}');
     const result = await collectFoveaCallContext(client, observations, original, { cwd: '/repo' }, 4000);
     expect(result.projection.text.startsWith(original.text)).toBe(true);

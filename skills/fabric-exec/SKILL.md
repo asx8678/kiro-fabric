@@ -18,13 +18,13 @@ Namespaces: `repo` (Navigator), `local` (files, search, shell), `state` (durable
 Navigator maps symbols and their relationships. Use it to find and understand code you have not read yet. `repo.focusRead` combines focus with hash-bound source reads; pass an in-workspace symbol or path as the string payload `query`:
 
 ```ts
-const result = await repo.focusRead({query:payloads.query,maxTokens:700,maxWindows:4,maxChars:12000,partial:true});
-return result;
+const {navigation, sources, deferredReads} = await repo.focusRead({query:payloads.query,maxTokens:700,maxWindows:4,maxChars:12000,partial:true});
+return {map:navigation.text, truncated:navigation.truncated, files:(sources?.files ?? []).map(file => ({path:file.path, sha256:file.sha256, source:file.source})), remaining:sources?.remaining ?? [], deferred:deferredReads};
 ```
 
 - `repo.focus({query})`: known symbol or path. `repo.sketch({})`: unfamiliar repository. `repo.impact({files})`: likely affected code before a change. Add `fresh:true` after edits.
 - Pass `repo.focus(...).reads` to `local.readMany` when you want to choose windows yourself.
-- Results are leads, not proof. Check `coverage`, deferred reads and unread tails before concluding. On unavailable/no-match results, say so and fall back to `local.find`/`local.grep` plus reads.
+- Results are leads, not proof. Check `coverage`, deferred reads and unread tails before concluding. Coverage detail lists are summarized as counts; `repo.result({resultId})` replays the full packet when you need them. On unavailable/no-match results, say so and fall back to `local.find`/`local.grep` plus reads.
 - A stale hash means the file changed: refresh and reread; never drop the hash. See [Navigator reference](references/fovea.md) for retained results and settings.
 
 ## One program, many steps
@@ -66,7 +66,7 @@ return await local.edit({path:payloads.path, expectedSha256:file.sha256,
 
 ## Results and output size
 
-Nested results are bounded. Return decisions, evidence, failures and truncation/continuation flags, not whole files or command logs. `readMany` defaults to 32000 JSON characters (max 40000); lower `maxChars` when you return several results. Oversized output can spill into an artifact; page it with `artifacts.read({id,offset})` rather than rerunning effects.
+Everything you return stays in the conversation and is re-sent on later turns. Return decisions, evidence, failures and truncation/continuation flags, not whole files, packets or command logs. A returned string is shown as plain text; other values are shown as JSON. `readMany` defaults to 32000 JSON characters (max 40000); lower `maxChars` when you return several results. Oversized output can spill into an artifact; page it with `artifacts.read({id,offset})` rather than rerunning effects.
 
 ## Workspace, state and external tools
 

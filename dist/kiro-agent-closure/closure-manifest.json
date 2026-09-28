@@ -21,7 +21,7 @@
       },
       {
         "path": "scripts/agent-profile.mjs",
-        "sha256": "e84c2a4aceef73c007b0c46dc76e3a9de4d56416d1ceb3ac4a6abc705aa8447f"
+        "sha256": "cc1afa93e29e6ff045969ce26791b86adac3c4fa07a788023c49043c4d447ca0"
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
@@ -73,7 +73,7 @@
       },
       {
         "path": "skills/fabric-exec/SKILL.md",
-        "sha256": "d7d9fabc15b25568127c603e69c2da8c9ea61382d07b3f3dee1548094aeaf3d6"
+        "sha256": "02441931de60f2948e9344723437ed52af2b44f5bd1066cf41471a484899fc73"
       },
       {
         "path": "skills/fabric-exec/references/api.md",
@@ -81,7 +81,7 @@
       },
       {
         "path": "skills/fabric-exec/references/fovea.md",
-        "sha256": "001cf1d5ca487c28ac9ff6dfefe476fd5f568a3c68594df7eb5d65b86ab630a7"
+        "sha256": "c87b5506183fc3c423f437726fb7d3d35eac8d24ea75789df8ced64b0af3a849"
       },
       {
         "path": "skills/fabric-exec/references/recipes.md",
@@ -297,7 +297,7 @@
       },
       {
         "path": "src/fovea/host.ts",
-        "sha256": "1d17af0e373726866e5998dc455c086e9e5855da7005992bc6c99597a3f966e6"
+        "sha256": "31b89de8d9100a9246932e940f598afec0f77b3a3451992fa0cab45fca053f02"
       },
       {
         "path": "src/fovea/native-source-loader.ts",
@@ -401,7 +401,7 @@
       },
       {
         "path": "src/kiro/first-prompt-guidance.ts",
-        "sha256": "f54fd4aac14477a5efb02b843e093c66461ce72a296fc540c22d247d451c7e40"
+        "sha256": "a9bd28888ad680028861f819c2874d94edfa2ce388b8a6e10d646465b9a1a979"
       },
       {
         "path": "src/kiro/first-prompt-hook.ts",
@@ -409,15 +409,15 @@
       },
       {
         "path": "src/kiro/fovea-call-context.ts",
-        "sha256": "f770a9a81b1d7bc9302da504ba0781f8799a078232ff2a3b2099a69ea5713405"
+        "sha256": "db9f855b12192e53d81412ac0e27f78983ab15620943e3ecb8aeed8ae2c37050"
       },
       {
         "path": "src/kiro/fovea-context.ts",
-        "sha256": "7c87cb2e295584085458f051494305eecf508665f01c4894f8ed60964c1f7b51"
+        "sha256": "cc98d1aaa02a56dad722ab5774d1bd704f7aa23422194ea1285a068ac31deda2"
       },
       {
         "path": "src/kiro/generated-guidance.ts",
-        "sha256": "a4767ad421a5a27e3ba9525ce88df5117eaa456dca36ae89e485273f80ad9f78"
+        "sha256": "d685c0e2a3c99354e6d7ff4b5d32ed2868b11fec2ad3e2630d3fe3295a235d22"
       },
       {
         "path": "src/kiro/info-catalog.ts",
@@ -441,7 +441,7 @@
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "ad7f2405dec25d5ecaceba5782547e5d632638b8a968b242a9d9520438209ba1"
+        "sha256": "7838bf577718dc6499c06cd5c648c2233b35e6dc12f2a53e8922d97ecea50ab0"
       },
       {
         "path": "src/kiro/mcp-session-lifecycle.ts",
@@ -481,7 +481,7 @@
       },
       {
         "path": "src/kiro/projection.ts",
-        "sha256": "9ba5c306e40bd2d6d348c1e4f52b71bc648abe59e653df292abf176f012cb63c"
+        "sha256": "1100a717cd50b38af5fd8b9ff0d826b688b5ebd01d6ee5c5c2f1933d71de93f1"
       },
       {
         "path": "src/kiro/provider-inventory.ts",
@@ -549,7 +549,7 @@
       },
       {
         "path": "src/providers/repo-contract.ts",
-        "sha256": "ee7139ad110b5659f682bf2efe442be1bb83664608411e479fe251370a4fca0a"
+        "sha256": "6fc1d28f6bab635738fb1b0e7b290e5c818659d9e2f13c1ae62901492e871384"
       },
       {
         "path": "src/providers/repo-provider.ts",
@@ -589,7 +589,7 @@
       },
       {
         "path": "src/runtime/quickjs-runtime.ts",
-        "sha256": "38f7c31ff45047554017a28ff32212da5c0b8ba81ceb9c0fc2fb7044ae197601"
+        "sha256": "afac7989add5f7699931e3eaec5883e9052fdfc8feb0a541b3562449d1f93ec2"
       },
       {
         "path": "src/runtime/sandbox-worker-entry.ts",
@@ -624,7 +624,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "84ab9b52c82e3385890843d500b7fbca5f641e6b4329d1b3991b8e932e7a2d4e"
+    "digest": "8952c25d84041159070e5972b4bfbda90ef2445edbec031c3ac88ef3d8e0f37c"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -969,14 +969,14 @@
       "sha256": "25134e77f51d3540dea670fa09a5d889140d83f20122d51edd84a7f16265eb63"
     },
     {
-      "path": "chunks/chunk-TV4LKLCM.js",
-      "bytes": 87598,
-      "sha256": "685bd900d4c895a1231cdf9e055ab50b5f5fe8dd001269e7dcfd3089a4bc334d"
-    },
-    {
       "path": "chunks/chunk-TVIJCO2F.js",
       "bytes": 9987148,
       "sha256": "991803871f247b6275d97a199e949da5616635db02108840c08385b3dec5690f"
+    },
+    {
+      "path": "chunks/chunk-VGODAUSH.js",
+      "bytes": 88035,
+      "sha256": "74426563a180aa3fc776e040a746c90c758c429a63c006072e386c77f197d386"
     },
     {
       "path": "chunks/chunk-WZ4PGM3F.js",
@@ -1004,9 +1004,9 @@
       "sha256": "3fc1eab2740db3b7ce5d26cd25b473f3aa2e4cfb53ad6b60f66ad286d6251844"
     },
     {
-      "path": "chunks/first-prompt-hook-BBY2YSRD.js",
-      "bytes": 4454,
-      "sha256": "567a62aa22a99c70713dd24088933188264fb0168a504ffd7065f1fb2a1f03b0"
+      "path": "chunks/first-prompt-hook-LPQTQVSC.js",
+      "bytes": 4736,
+      "sha256": "4df511989fa527fdf815a47454aa0bb5c28d69faef3ba708b521d66b98e2c035"
     },
     {
       "path": "chunks/launch-2BNCRUIP.js",
@@ -1299,9 +1299,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-XHULS33O.js",
-      "bytes": 1372443,
-      "sha256": "7ab8b618964a36908400d7041567e360c62f7c9225abf8d3c535a252a69bbbe9"
+      "path": "chunks/mcp-server-VJTS5I5T.js",
+      "bytes": 1375016,
+      "sha256": "f8998e713edb2b51e0dc7a6262819e932559383c27aa6d2320dcd38b44895260"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1361,7 +1361,7 @@
     {
       "path": "kiro/mcp-entry.js",
       "bytes": 8206,
-      "sha256": "8fed9c2fb65ccfcb200d7c0968ec956ed7898d2968fdd7ef942fd1817a7b6161"
+      "sha256": "d5861ea13c187e2f7c6155d5d76042b9e43d62c160581b5b23cdbc7aefc9ddb7"
     },
     {
       "path": "package.json",
@@ -1376,8 +1376,8 @@
     {
       "path": "runtime/sandbox-worker-entry.js",
       "bytes": 4895,
-      "sha256": "86b2a491f160b99740797cb518d0922f61670fbfbc780b7a67f936eb80cc863d"
+      "sha256": "9171baea57ac2570d34a4083cd8a1d439e93b53c03527c374d0645be2be9ad1e"
     }
   ],
-  "contentDigest": "3c1a2ec5bb130fd93db5a017e25a2a2fd015087a5c0824c36dd40fe7dce29981"
+  "contentDigest": "e18448fd1590c4c058fd22778cf7407e6b7b4fca0456fce8eedcc4da512651ef"
 }

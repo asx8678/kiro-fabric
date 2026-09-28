@@ -87,7 +87,7 @@ Source: [request contract](../src/kernel/fabric-exec-contract.ts), [execution se
 
 If analysis is unavailable or incomplete, disclose that and use permitted bounded local search/read. `repo.status` diagnoses availability without starting indexing. Never treat a navigation score, graph version, or returned packet as proof of complete inspection.
 
-Managed standard/review profiles may append invocation-local advisory suffixes after qualifying successful source operations. Native prompt/stop delivery, restoration, chat isolation and automatic continuations remain separate qualification concerns. Emission is not model acknowledgment.
+Managed standard/review profiles may append invocation-local advisory suffixes after committed source edits. Native prompt/stop delivery, restoration, chat isolation and automatic continuations remain separate qualification concerns. Emission is not model acknowledgment.
 
 Source: [focus/read composition](../src/runtime/guest-bootstrap.ts), [runtime relationships](../src/kiro/runtime.ts), [source capture](../src/fovea/source-access.ts), [fact extraction](../src/fovea/core/build.ts), [graph construction](../src/fovea/core/graph.ts), [bounded source reads](../src/providers/local-read-many.ts), and [Navigator capabilities](../skills/fabric-exec/references/fovea.md).
 

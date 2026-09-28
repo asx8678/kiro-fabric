@@ -39,7 +39,7 @@ const safeSuffix = (value: string, maximum: number): string => {
 };
 
 const stringify = (value: unknown, format: FabricExecResultFormat): string => {
-  if (format === "text" && typeof value === "string") return value;
+  if (format !== "json" && typeof value === "string") return value;
   return JSON.stringify(value, null, format === "json" ? 2 : undefined) ?? "null";
 };
 
@@ -56,8 +56,12 @@ const compactTypeErrors = (errors: NonNullable<FabricExecutionResult["typeErrors
   });
 };
 
+const READ_ONLY_REF = /^(?:local\.(?:read|readMany|readEvidence|grep|find|list)|repo\.(?:status|sketch|focus|augment|grep|dwell|impact|result|searchResult|anchors|rules|settings)|state\.(?:get|list|search)|fabric\.(?:info|help)|tools\.[A-Za-z]+|artifacts\.read|mcp\.\$(?:servers|tools|describe))$/u;
+const mayHaveEffects = (result: FabricExecutionResult): boolean => result.audits.some((audit) =>
+  !READ_ONLY_REF.test(audit.ref) || audit.effectOutcome !== undefined || audit.commitAcknowledgement !== undefined);
+
 const failureProgress = (result: FabricExecutionResult): string => {
-  if (result.success) return "";
+  if (result.success || !mayHaveEffects(result)) return "";
   const completed = result.audits.filter(
     (audit) => audit.endedAt !== undefined && typeof audit.success === "boolean",
   );
@@ -98,7 +102,7 @@ const MAX_RECEIPT_ENTRIES = 64;
  * Arguments, source, result contents and operation error text are never recorded,
  * so an echoed value cannot leak through recovery metadata. */
 const recoveryReceipt = (result: FabricExecutionResult) => {
-  if (result.success || result.audits.length === 0) return undefined;
+  if (result.success || result.audits.length === 0 || !mayHaveEffects(result)) return undefined;
   const outcome = (audit: FabricAudit) => audit.commitAcknowledgement ? "committed"
     : audit.effectOutcome === "uncertain" ? "uncertain"
       : audit.endedAt === undefined ? "issued"

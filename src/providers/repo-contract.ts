@@ -94,6 +94,34 @@ export const REPO_NAVIGATION_SCHEMA = object({
   schemaVersion: { type: "integer", const: 1 }, status: choices(["ok", "no-match"]), advisory: { type: "boolean", const: true }, resultId: string(100), rootId: string(100), sourceSnapshotId: string(200), graphGeneration: string(200), text: { type: "string", maxLength: 100_000 }, estimatedTokens: integer(0, 50_000), coverage: structuredClone(REPO_COVERAGE_SCHEMA), reads: array(readWindow(), 1024), truncated: boolean(), focusId: string(100), focusRevision: integer(0, Number.MAX_SAFE_INTEGER),
 }, ["schemaVersion", "status", "advisory", "resultId", "rootId", "sourceSnapshotId", "graphGeneration", "text", "estimatedTokens", "coverage", "reads", "truncated"]);
 const descriptor = (name: string, description: string, inputSchema: Record<string, unknown>, mutation = false, navigation = false): FabricActionDescriptor => ({ name, description, inputSchema, ...(navigation ? { outputSchema: structuredClone(REPO_NAVIGATION_SCHEMA) } : {}), risk: mutation ? "write" : "read", effect: { kind: mutation ? "write" : "read" }, annotations: { readOnlyHint: !mutation, idempotentHint: !["focus", "dwell", "reset", "configure", "reload"].includes(name), openWorldHint: false } });
+const COVERAGE_DETAIL_LISTS = new Set(["unsupportedExamples", "excludedExamples", "closedBoundaries", "unreadableDirectories", "unavailableFiles", "excludedPolicies", "partialFiles", "unreadableFiles", "oversizedFiles", "generatedFiles"]);
+const isPlainRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+export const compactRepoCoverage = (coverage: Record<string, unknown>): Record<string, unknown> => {
+  let omitted = 0;
+  const compact: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(coverage)) {
+    if (COVERAGE_DETAIL_LISTS.has(key) && Array.isArray(value)) { omitted += value.length; continue; }
+    if (key === "source" && isPlainRecord(value)) {
+      const { examples, ...rest } = value;
+      if (isPlainRecord(examples)) for (const list of Object.values(examples)) if (Array.isArray(list)) omitted += list.length;
+      compact.source = rest;
+      continue;
+    }
+    if (key === "imports" && isPlainRecord(value)) {
+      const { examples, ...rest } = value;
+      const count = Array.isArray(examples) ? examples.length : 0;
+      compact.imports = count ? { ...rest, examplesOmitted: (typeof rest.examplesOmitted === "number" ? rest.examplesOmitted : 0) + count } : rest;
+      continue;
+    }
+    compact[key] = value;
+  }
+  if (omitted > 0) {
+    compact.detailsTruncated = true;
+    compact.detailsOmitted = (typeof coverage.detailsOmitted === "number" ? coverage.detailsOmitted : 0) + omitted;
+  }
+  return compact;
+};
+
 export const REPO_ACTION_DESCRIPTORS: FabricActionDescriptor[] = [
   descriptor("status", "Cheap Navigator health/identity/capability status. Does not index. Graph evidence is advisory, never a source receipt or correctness verdict.", object(base())),
   descriptor("sketch", "Production-first architecture silhouette with extraction coverage. Whole authorized root analysis; filters never grant extra roots.", object({ ...base(), maxTokens: budget() }), false, true),

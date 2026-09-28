@@ -113,8 +113,15 @@ const formatValue = (value: unknown, maxChars = 100_000): string => {
 
 const formatGuestFailure = (value: unknown): string => {
   if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-    const { result: _diagnostic, ...message } = value as Record<string, unknown>;
-    return formatValue(message);
+    const { result: _diagnostic, failure: _failure, ...error } = value as Record<string, unknown>;
+    if (typeof error.message === "string") {
+      const name = typeof error.name === "string" && error.name ? error.name : "Error";
+      const frames = typeof error.stack === "string"
+        ? error.stack.split("\n").map((line) => line.trim()).filter((line) => line.includes("kiro-fabric-guest.js:")).slice(0, 5)
+        : [];
+      return formatValue(`${name}: ${error.message}${frames.length ? `\n${frames.join("\n")}` : ""}`);
+    }
+    return formatValue(error);
   }
   return formatValue(value);
 };

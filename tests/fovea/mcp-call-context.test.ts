@@ -81,12 +81,12 @@ process.stdin.once("end", () => { void server.close().then(() => process.exit(0)
 
 // Built stdio MCP same-call suffix. Not native Kiro lifecycle qualification.
 describe.skipIf(!portable)("built MCP same-call Fovea context", () => {
-  it.each([false, true])("appends a disposable suffix after discarded local.read only when enabled=%s", async enabled => {
+  it.each([false, true])("appends a disposable suffix after a committed local.edit only when enabled=%s", async enabled => {
     expect(ready(), "Build dist and install the pinned ast-grep platform package before built tests").toBe(true);
-    await withServer({ enabled }, async (call, { root }) => {
+    await withServer({ enabled, approvals: { read: "allow", write: "allow" } }, async (call, { root }) => {
       const source = path.join(root, "math.ts");
       fs.writeFileSync(source, "export function calculateTotal() { return 1; }\n");
-      const first = await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};');
+      const first = await call('const f = await local.read({path:"math.ts",limit:1}); await local.edit({path:"math.ts",expectedSha256:f.sha256,edits:[{oldText:"return 1",newText:"return 2"}]}); return {taskValue:"unchanged"};');
       expect(first.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       if (enabled) {
         expect(first).toContain("Navigator advisory (untrusted");
@@ -95,10 +95,9 @@ describe.skipIf(!portable)("built MCP same-call Fovea context", () => {
       const status = JSON.parse(await call("return await repo.status();"));
       expect(status.engineStarts).toBe(enabled ? 1 : 0);
       expect(status.notices).toMatchObject({ pending: 0, emitted: 0, acknowledged: 0 });
-      expect(await call('return "next";')).toBe('"next"');
+      expect(await call('return "next";')).toBe("next");
       expect(await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};')).toBe('{"taskValue":"unchanged"}');
-      fs.writeFileSync(source, "export function calculateTotal() { return 2; }\n");
-      const refreshed = await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};');
+      const refreshed = await call('const f = await local.read({path:"math.ts",limit:1}); await local.edit({path:"math.ts",expectedSha256:f.sha256,edits:[{oldText:"return 2",newText:"return 3"}]}); return {taskValue:"unchanged"};');
       expect(refreshed.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       if (enabled) {
         expect(refreshed).toContain("Navigator advisory (untrusted");

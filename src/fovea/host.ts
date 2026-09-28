@@ -6,7 +6,7 @@ import type { FabricInvocationContext } from "../protocol.js";
 import { FabricRepairError } from "../core/repair-error.js";
 import { fabricJsonText } from "../runtime/json-budget.js";
 import { schemaValidationMessage } from "../schema-validation.js";
-import { REPO_NAVIGATION_SCHEMA } from "../providers/repo-contract.js";
+import { REPO_NAVIGATION_SCHEMA, compactRepoCoverage } from "../providers/repo-contract.js";
 import { FoveaConfiguration, createFoveaDirectory, privateFoveaDirectory } from "./config.js";
 import { FoveaEngineProcess } from "./engine-process.js";
 import { FoveaRootLeases, type FoveaBindingAuthority, type FoveaLease } from "./root-leases.js";
@@ -328,7 +328,7 @@ export class FoveaHost {
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation)) {
         this.#observation(lease); // Explicit graph work authorizes attention, not delivery.
         const resultId = this.#results.put(this.#owner(lease), value);
-        const packet: Record<string, unknown> = { schemaVersion: 1, advisory: true, resultId, rootId: lease.rootId, status: value.status, sourceSnapshotId: value.sourceSnapshotId, graphGeneration: value.graphGeneration, text: value.text, estimatedTokens: value.estimatedTokens, coverage: value.coverage, reads: value.reads, truncated: value.truncated, ...(typeof value.focusId === "string" ? { focusId: value.focusId } : {}), ...(typeof value.focusRevision === "number" ? { focusRevision: value.focusRevision } : {}) };
+        const packet: Record<string, unknown> = { schemaVersion: 1, advisory: true, resultId, rootId: lease.rootId, status: value.status, sourceSnapshotId: value.sourceSnapshotId, graphGeneration: value.graphGeneration, text: value.text, estimatedTokens: value.estimatedTokens, coverage: record(value.coverage) ? compactRepoCoverage(value.coverage) : value.coverage, reads: value.reads, truncated: value.truncated, ...(typeof value.focusId === "string" ? { focusId: value.focusId } : {}), ...(typeof value.focusRevision === "number" ? { focusRevision: value.focusRevision } : {}) };
         const error = schemaValidationMessage(REPO_NAVIGATION_SCHEMA, packet);
         if (error) throw new Error(`Navigator navigation contract: ${error}`);
         fabricJsonText(packet, Math.min(context.maxResultChars ?? 128_000, 128_000));
