@@ -68,8 +68,7 @@ report deferred tails. Raw cached facts are never an authorization source.
 ## Historical acceptance evidence (2026-09-20)
 
 These are the original port checkpoint results, not current full-product or
-native-client qualification. See `docs/fovea/completion-ledger.md` for subsequent
-verification and `docs/fovea/control-lifecycle-plan.md` for the scoped follow-up.
+native-client qualification.
 
 - `pnpm exec tsc --noEmit`: passed.
 - Targeted seven-file run: **36 passed**, no skips (private parser 0.45.3).
@@ -92,7 +91,7 @@ verification and `docs/fovea/control-lifecycle-plan.md` for the scoped follow-up
 - Descriptor-relative source access supports Linux and managed Darwin. The
   unbound `sourcePlatform()` factory is Linux-only; the engine admits Darwin
   through `native-source-loader.ts` with a generation-verified ABI-1 binding.
-  Missing or mismatched bindings fail closed. See `docs/fovea/platform-source.md`.
+  Missing or mismatched bindings fail closed.
 - Shallow history whose metadata is outside the authorized root (e.g. some
   linked-worktree/subroot layouts) degrades explicitly with Git coverage; it is
   not treated as complete history. In-scope shallow ledgers use bounded no-follow

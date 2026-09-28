@@ -23,10 +23,10 @@ describe("Agent-only configuration", () => {
     expect(normalizeFabricConfig({}).approvals).toEqual(expected);
     expect(normalizeFabricConfig({ approvals: { write: "deny" } }).approvals).toEqual({ ...expected, write: "deny" });
   });
-  it("documents the actual missing-policy defaults in STATUS", () => {
+  it("documents the actual missing-policy defaults in the configuration guide", () => {
     expect(DEFAULT_FABRIC_CONFIG.approvals).toEqual({ read: "allow", write: "ask", execute: "allow", network: "ask" });
-    const status = fs.readFileSync(new URL("../STATUS.md", import.meta.url), "utf8");
-    expect(status).toContain("Missing approval settings allow reads and execution but ask before write and network effects.");
+    const guide = fs.readFileSync(new URL("../docs/configuration.md", import.meta.url), "utf8");
+    expect(guide).toContain('defaults are `read: "allow"`, `write: "ask"`, `execute: "allow"`, `network: "ask"`');
   });
   it.each(["allow", "ask", "deny"] as const)("preserves explicit execute=%s policy", (execute) => {
     expect(normalizeFabricConfig({ schemaVersion: 1, approvals: { execute } }).approvals.execute).toBe(execute);

@@ -26,8 +26,7 @@
     "coreCacheHeader": 17,
     "sourcePublication": "bounded parallel read windows, input-order commit",
     "parserPublication": "declared rule/source/start order, outer before inner, capture tie-break; preserve every match",
-    "divergence": "Stabilizes uncontrolled upstream parser/read scheduling. Older core caches are invalidated; no automatic migration.",
-    "evidence": "docs/fovea/production-cold.md"
+    "divergence": "Stabilizes uncontrolled upstream parser/read scheduling. Older core caches are invalidated; no automatic migration."
   },
   "parser": {
     "name": "ast-grep",

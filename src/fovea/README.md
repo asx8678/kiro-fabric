@@ -6,7 +6,7 @@ This directory is the behavior-preserving TypeScript port of `pi-fovea`
 (`b594483868d27b7eb37a9b185c59ce812f8a9c01`) with the hosting/state/scheduling/
 delivery architecture rewritten for Fabric. See `docs/fovea/architecture.md`.
 
-Implemented responsibilities (qualification and remaining gaps: `docs/fovea/implementation-status.md`):
+Implemented responsibilities:
 
 - `core/`            faithful upstream-derived analysis modules (extraction, graph, heat, ranking, impact, sync, protocols)
 - `upstream.json`    pinned upstream identity and port metadata

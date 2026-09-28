@@ -100,7 +100,7 @@ The launcher binds the workspace and selected Kiro home. Restart existing sessio
 
 ## Current limitations
 
-The recorded **2026-09-25 Kiro CLI 2.24.0** retest passed reads but blocked approval-dependent edits because the client could not complete form approvals. Complete model-visible tool filtering remains unqualified. See the [client report](docs/upstream-client-issues.md#2026-09-25-cli-2240-retest).
+As of Kiro CLI 2.24.0 (2026-09-25), reads work but approval-dependent edits fail: the client reports `No handler registered for method: _kiro/mcp/elicitation`, so `ask` policies cannot be approved and fail closed. Complete model-visible tool filtering is also unverified.
 
 Explicit Navigator analysis is implemented; automatic native prompt/turn delivery, session isolation and restoration remain unqualified. Same-call hints do not establish those guarantees. Public release qualification is also incomplete.
 
@@ -112,6 +112,6 @@ Explicit Navigator analysis is implemented; automatic native prompt/turn deliver
 | `pnpm run verify:references` | Read-only project-reference audit. |
 | `pnpm run build` | Fresh runtime output; Kiro loads `dist/`, so finish changes with this. |
 
-The full behavioral suites are currently unavailable. `pnpm test` and the release gate in `pnpm run check` deliberately fail; a build or local check does not certify release readiness. See [verification scope](docs/browser-removal.md#verification-scope-and-known-gaps).
+The full behavioral suites are currently unavailable. `pnpm test` and the release gate in `pnpm run check` deliberately fail; a build or local check does not certify release readiness.
 
 [Detailed architecture](docs/architecture.md) | [Runtime diagrams](docs/diagram-descriptions.md) | [Configuration](docs/configuration.md)
