@@ -8,10 +8,6 @@ import { normalizeFabricConfig } from "../src/config.js";
 import { ActionRegistry } from "../src/core/action-registry.js";
 import { FabricExecutionService } from "../src/execution-service.js";
 import { LocalCodingProvider } from "../src/providers/local-provider.js";
-import { REVIEW_GUEST_DECLARATIONS } from "../src/providers/review-contract.js";
-import { PROBE_GUEST_DECLARATIONS } from "../src/providers/probe-contract.js";
-import { ReviewProvider } from "../src/providers/review-provider.js";
-import { ProbeProvider } from "../src/providers/probe-provider.js";
 import type { LocalEvidenceMetadata } from "../src/providers/local-contract.js";
 import { fabricGuestDeclarations } from "../src/runtime/guest-types.js";
 import { typeCheckFabricCode } from "../src/runtime/type-checker.js";
@@ -124,64 +120,13 @@ describe("explicit profile guidance modes", () => {
     expect(review.length).toBeLessThanOrEqual(16000); // Default help page, not semantic coverage.
   });
 
-  it("type-checks optional recipes against actual provider declarations", () => {
-    // Main owns mounting these declarations; standalone contracts let this worker
-    // check exact shapes before the serialized runtime integration/build.
-    const declarations = fabricGuestDeclarations
-      + (fabricGuestDeclarations.includes("declare const review:") ? "" : REVIEW_GUEST_DECLARATIONS)
-      + (fabricGuestDeclarations.includes("declare const probe:") ? "" : PROBE_GUEST_DECLARATIONS);
+  it("type-checks review and API recipes against actual provider declarations", () => {
     const text = ["review", "api"].map(name => fs.readFileSync(new URL(`../skills/fabric-exec/references/${name}.md`, import.meta.url), "utf8")).join("\n");
     const recipes = [...text.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    for (const name of ["explicit review ledger", "explicit review update", "compact review evidence", "explicit SDK availability",
-      "explicit illustrative probe project", "explicit retained probe run"]) expect(recipes.some(code => code.includes("// Recipe: " + name))).toBe(true);
-    for (const code of recipes) expect(typeCheckFabricCode(code, declarations).errors, code.split("\n")[0]).toEqual([]);
+    expect(recipes.some(code => code.includes("// Recipe: compact review evidence"))).toBe(true);
+    for (const code of recipes) expect(typeCheckFabricCode(code, fabricGuestDeclarations).errors, code.split("\n")[0]).toEqual([]);
   });
 
-  it("executes opt-in ledger and retained probe recipes without pretending they prove semantics", async () => {
-    const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-typed-recipes-")));
-    const workspace = path.join(root, "workspace"); fs.mkdirSync(workspace);
-    fs.writeFileSync(path.join(workspace, "input.txt"), "source evidence\n");
-    const registry = new ActionRegistry();
-    registry.register(new ReviewProvider({ root: workspace }));
-    registry.register(new ProbeProvider({ root: workspace, probesRoot: path.join(root, "probes"),
-      discoveryEnvironment: { PATH: path.dirname(process.execPath) }, sdkDirectories: [] }));
-    const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 10000 } }), workspace);
-    fixtures.push({ root, service });
-    const text = fs.readFileSync(new URL("../skills/fabric-exec/references/api.md", import.meta.url), "utf8");
-    const programs = [...text.matchAll(/```ts\n(\/\/ Recipe:[\s\S]*?)\n```/g)].map(match => match[1]!);
-    const recipe = (name: string) => programs.find(code => code.startsWith(`// Recipe: ${name}\n`))!;
-    // Explicit fixture approval is not evidence of a human client approval UI.
-    const approver = { prepareApproval: () => ({ decision: "allow" as const }), async approve() {} };
-    const begun = await service.execute({ code: recipe("explicit review ledger"), approver,
-      payloads: { objective: "Trace input read", paths: '["read-input"]', scenarios: '["normal"]' } });
-    expect(begun.success, begun.error).toBe(true);
-    expect(begun.value).toMatchObject({ ready: false, semanticValidation: false });
-    const task = begun.value as { taskId: string; entries: { id: string; status: string }[] };
-    expect(task.entries.length).toBeGreaterThan(0);
-    expect(task.entries.every(entry => entry.status === "unknown")).toBe(true);
-    const updated = await service.execute({ code: recipe("explicit review update"), approver, payloads: { update: JSON.stringify({
-      taskId: task.taskId, obligationId: task.entries[0]!.id, status: "retrieved",
-      evidence: [{ path: "input.txt", startLine: 1, endLine: 1, kind: "source", rationale: "Fetched, not traced" }],
-    }) } });
-    expect(updated.success, updated.error).toBe(true);
-    expect(updated.value).toMatchObject({ taskId: task.taskId, status: "retrieved" });
-    const discovery = await service.execute({ code: recipe("explicit SDK availability"), approver,
-      payloads: { executables: JSON.stringify([path.basename(process.execPath)]) } });
-    expect(discovery.success, discovery.error).toBe(true);
-    expect(discovery.value).toMatchObject({ executed: false, versionsObserved: false, credentialsAssumed: false });
-    const created = await service.execute({ code: recipe("explicit illustrative probe project"), approver,
-      payloads: { path: "note.txt", content: "illustration only\n" } });
-    expect(created.success, created.error).toBe(true);
-    expect(created.value).toMatchObject({ kind: "illustrative", productionProof: false, retained: true });
-    const handle = created.value as { id: string; cwd: string; manifestPath: string };
-    expect(fs.readFileSync(path.join(handle.cwd, "note.txt"), "utf8")).toBe("illustration only\n");
-    const run = await service.execute({ code: recipe("explicit retained probe run"), approver,
-      payloads: { id: handle.id, executable: process.execPath, args: JSON.stringify(["-e", "process.stdout.write(process.versions.node)"]) } });
-    expect(run.success, run.error).toBe(true);
-    expect(run.value).toMatchObject({ ok: true, exitCode: 0, stdout: process.versions.node, productionProof: false });
-    expect(fs.existsSync(handle.manifestPath)).toBe(true);
-    expect(fs.existsSync((run.value as { recordPath: string }).recordPath)).toBe(true);
-  });
 
   it("executes tool-only reads with no guidance provider and still rejects invalid TypeScript and unauthorized effects", async () => {
     const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "fabric-profile-probe-")));

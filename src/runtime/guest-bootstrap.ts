@@ -367,25 +367,11 @@ export const GUEST_SETUP = `
     reset: (args = {}) => call('repo.reset', args), reload: (args = {}) => call('repo.reload', args),
     sync: (args = {}) => call('repo.sync', args), focusRead,
   });
-  globalThis.review = objectFreeze({
-    begin: (args) => call("review.begin", args), update: (args) => call("review.update", args),
-    finding: (args) => call("review.finding", args), status: (args) => call("review.status", args),
-    reconcile: (args) => call("review.reconcile", args), end: (args) => call("review.end", args),
-  });
-  globalThis.probe = objectFreeze({
-    discover: (args) => call("probe.discover", args), create: (args) => call("probe.create", args),
-    write: (args) => call("probe.write", args), run: (args) => call("probe.run", args),
-  });
   globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args), checkpoint: (args) => call("artifacts.checkpoint", args) });
   globalThis.memory = objectFreeze({
     get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
     delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
     index: (args = {}) => call("memory.index", args),
-  });
-  globalThis.continuity = objectFreeze({
-    create: (args) => call("continuity.create", args), checkpoint: (args) => call("continuity.checkpoint", args),
-    read: (args) => call("continuity.read", args), recall: (args) => call("continuity.recall", args), list: (args = {}) => call("continuity.list", args),
-    expand: (args) => call("continuity.expand", args), handoff: (args) => call("continuity.handoff", args), delete: (args) => call("continuity.delete", args),
   });
   globalThis.state = objectFreeze({
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),

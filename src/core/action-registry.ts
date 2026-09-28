@@ -17,7 +17,6 @@ import { fabricCommitAcknowledgement, type FabricCommitAcknowledgement } from ".
 import { schemaValidationMessage } from "../schema-validation.js";
 import { fabricJsonText, jsonStringPrefix, MAX_FABRIC_JSON_CHARS } from "../runtime/json-budget.js";
 import { semanticDigest } from "./semantic-digest.js";
-import { observeContinuity, type ContinuityOperationObserver } from "../continuity/execution.js";
 import { rankedActions } from "./ranked-actions.js";
 
 export interface FabricCallAudit {
@@ -36,8 +35,6 @@ export interface FabricCallAudit {
 }
 
 export interface FabricRegistryInvocationContext extends FabricInvocationContext {
-  /** Execution-owned observer; observation must never change provider outcomes. */
-  operationObserver?: ContinuityOperationObserver;
   formatCatalogResult?(value: unknown, method: CatalogMethod): unknown;
   audits: FabricCallAudit[];
   maxResultChars: number;
@@ -399,12 +396,12 @@ export class ActionRegistry {
   requirements(ref: string): Readonly<FabricProviderRequirements> {
     const name = parseRemoteRef(ref) ? "mcp" : ref.slice(0, ref.indexOf("."));
     const provider = this.#providers.get(name);
-    if (!provider && !["local", "memory", "state", "review", "probe", "continuity", "mcp"].includes(name)) return {};
+    if (!provider && !["local", "memory", "state", "mcp"].includes(name)) return {};
     // Preserve policy even when an unbound workspace has not mounted the provider.
     // Preserve established built-in policy for providers predating explicit requirements.
     return {
-      verifiedWorkspace: ["local", "memory", "state", "review", "probe", "continuity"].includes(name) || provider?.requirements?.verifiedWorkspace === true,
-      settlement: ["local", "mcp", "probe", "review"].includes(name) || provider?.requirements?.settlement === true,
+      verifiedWorkspace: ["local", "memory", "state"].includes(name) || provider?.requirements?.verifiedWorkspace === true,
+      settlement: ["local", "mcp"].includes(name) || provider?.requirements?.settlement === true,
     };
   }
 
@@ -553,7 +550,6 @@ export class ActionRegistry {
     // with an explicit, attributable error instead of an undefined dereference.
     const provider = this.#providers.get(action.provider);
     if (!provider) throw new Error("Fabric registry is closed");
-    observeContinuity(context.operationObserver, observer => observer.resolve(action.ref, action.risk));
     let prepared: Record<string, unknown>;
     try {
       prepared = provider.prepareArguments
@@ -572,7 +568,6 @@ export class ActionRegistry {
     // Preparation, schema validation, and resource calculation all precede approval.
     // The frozen canonical snapshot is never normalized or mutated afterwards.
     const canonicalArgs = deepFreeze(structuredClone(prepared));
-    observeContinuity(context.operationObserver, observer => observer.prepare(canonicalArgs));
     if (provider.name !== "local" || (action.name !== "write" && action.name !== "edit")) observeFovea(context, { phase: "prepared" });
     const resources = Object.freeze([...(provider.effectResources?.(action.name, structuredClone(canonicalArgs), context)
       ?? action.effect?.resources
@@ -616,9 +611,7 @@ export class ActionRegistry {
       // MCP, which closes its contacted server) finishes cleanup before the
       // registry reports cancellation to the guest.
       invocationStarted = true;
-      observeContinuity(context.operationObserver, observer => observer.dispatch());
       const value = await provider.invoke(action.name, invocationArgs, context);
-      observeContinuity(context.operationObserver, observer => observer.result(value));
       if (provider.name === "local" && (action.name === "write" || action.name === "edit") && isRecord(value) && value.changed === true) {
         published = { version: 1, operation: action.name };
       }
@@ -642,7 +635,6 @@ export class ActionRegistry {
       audit.success = false;
       audit.error = error instanceof Error ? error.message.slice(0, 1_000) : String(error).slice(0, 1_000);
       const acknowledgement = fabricCommitAcknowledgement(error) ?? published;
-      observeContinuity(context.operationObserver, observer => observer.acknowledge(error));
       if (invocationStarted && provider.name === "local" && action.name === "shell") audit.effectOutcome = "uncertain";
       if (acknowledgement) {
         audit.commitAcknowledgement = acknowledgement;

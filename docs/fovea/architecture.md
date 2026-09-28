@@ -105,7 +105,7 @@ alone never trusts project content or grants executable/extra-root authority.
 ## Observation and delivery
 
 `src/fovea/observations.ts` captures bounded ordered trusted host events,
-independent of continuity and tracing. Actual successful reads/searches establish
+independent of tracing. Actual successful reads/searches establish
 attention; local publication supplies exact before/after mutation identities.
 An observer exception marks a gap without changing an already committed effect.
 `src/fovea/provenance-journal.ts` shares only bounded validated transitions and

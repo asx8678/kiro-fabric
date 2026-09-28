@@ -1,15 +1,9 @@
 import { REPO_GUEST_DECLARATIONS } from "../providers/repo-contract.js";
 import { LOCAL_GUEST_DECLARATIONS } from "../providers/local-contract.js";
-import { REVIEW_GUEST_DECLARATIONS } from "../providers/review-contract.js";
-import { PROBE_GUEST_DECLARATIONS } from "../providers/probe-contract.js";
-import { CONTINUITY_GUEST_DECLARATIONS } from "../providers/continuity-contract.js";
 
 export const fabricGuestDeclarations = `
 ${LOCAL_GUEST_DECLARATIONS}
 ${REPO_GUEST_DECLARATIONS}
-${REVIEW_GUEST_DECLARATIONS}
-${PROBE_GUEST_DECLARATIONS}
-${CONTINUITY_GUEST_DECLARATIONS}
 type JsonPrimitive = null | boolean | number | string;
 type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 type JsonObject = { [key: string]: JsonValue };

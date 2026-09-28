@@ -10,7 +10,6 @@
     "outputBundle",
     "runtimeAssets",
     "tools",
-    "mountedProviders",
     "bundledAgentResources",
     "allowedPackageDependencies",
     "forbiddenRuntimeModules"
@@ -60,17 +59,6 @@
         "fabric_info",
         "fabric_workspace",
         "fabric_exec"
-      ]
-    },
-    "mountedProviders": {
-      "const": [
-        "artifacts",
-        "memory",
-        "state",
-        "mcp",
-        "local",
-        "repo",
-        "fabric"
       ]
     },
     "bundledAgentResources": {

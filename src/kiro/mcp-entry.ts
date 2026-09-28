@@ -23,8 +23,6 @@ export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
     const launch = resolveKiroAgentLaunchContext();
     let server: { close(): Promise<void> } | undefined;
     try {
-      // The parser identity is pinned at startup; the Navigator engine re-verifies
-      // these exact bytes and its version before executing them.
       const managedParser = launch.astGrep ? {
         path: launch.astGrep,
         sha256: createHash("sha256").update(readFileSync(launch.astGrep)).digest("hex"),

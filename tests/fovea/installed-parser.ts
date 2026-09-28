@@ -17,7 +17,6 @@ const pinnedBinary = (): string | undefined => {
   catch { return undefined; }
 };
 
-/** Lay out `app/` from the built closure and `tools/ast-grep` exactly as the installer does. */
 const populate = (root: string, binary: string): InstalledParser => {
   fs.cpSync(closure(), path.join(root, "app"), { recursive: true });
   fs.mkdirSync(path.join(root, "tools"), { mode: 0o700 });
@@ -27,8 +26,6 @@ const populate = (root: string, binary: string): InstalledParser => {
   return { path: parserPath, sha256: hash(parserPath), version: VERSION, generationRoot: root };
 };
 
-/** A private installer-shaped root for one test file. Undefined when the build
- * output or the pinned npm platform parser is unavailable. */
 export function createInstalledParser(): { parser: InstalledParser; dispose(): void } | undefined {
   const binary = pinnedBinary();
   if (!binary || !fs.existsSync(path.join(closure(), "closure-manifest.json"))) return undefined;
@@ -37,8 +34,6 @@ export function createInstalledParser(): { parser: InstalledParser; dispose(): v
   return { parser: populate(root, binary), dispose: () => removeFixtureSync(root, { recursive: true, force: true }) };
 }
 
-/** One reusable installer-shaped root per build under the ignored `.tmp/`,
- * replaced when the build output changes. */
 const cachedInstalledParser = (binary: string): InstalledParser | undefined => {
   const manifest = path.join(closure(), "closure-manifest.json");
   if (!fs.existsSync(manifest)) return undefined;
@@ -56,10 +51,6 @@ const cachedInstalledParser = (binary: string): InstalledParser | undefined => {
   return { path: fs.realpathSync(parserPath), sha256: hash(parserPath), version: VERSION, generationRoot: fs.realpathSync(root) };
 };
 
-/** The pinned npm platform parser. Darwin source access needs the native
- * binding beside an installed app, so there it comes from the cached
- * installer-shaped root. `path` does not exist when the platform package or
- * build output is unavailable, so existence checks still skip cleanly. */
 export function pinnedParser(): { path: string; sha256: string; version: string; generationRoot?: string } {
   const missing = { path: path.resolve(".tmp/missing-ast-grep"), sha256: "0".repeat(64), version: VERSION };
   const binary = pinnedBinary();

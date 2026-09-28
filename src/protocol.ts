@@ -74,8 +74,6 @@ export interface FabricInvocationContext {
   checkpoints?: { reserve(): (handle: FabricCheckpointHandle) => void };
   /** Non-serializable owner capability supplied only by the trusted execution host. */
   artifactAccess?: FabricArtifactAccess;
-  /** Host-only closed admission prefix for this call; never supplied by guest arguments. */
-  continuityCapture?: () => import("./continuity/execution.js").ContinuityCapture;
   signal?: AbortSignal;
   /** Host-only absolute monotonic deadline. Providers must check it at commit boundaries. */
   deadline?: FabricDeadline;

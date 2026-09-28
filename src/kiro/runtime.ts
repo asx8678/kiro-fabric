@@ -1,8 +1,5 @@
-import path from "node:path";
 import { FoveaProvider } from "../providers/repo-provider.js";
 import type { FoveaBoundClient } from "../fovea/host.js";
-import { ReviewProvider } from "../providers/review-provider.js";
-import { ProbeProvider } from "../providers/probe-provider.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
   DEFAULT_FABRIC_CONFIG,
@@ -13,7 +10,6 @@ import {
 import { FabricExecutionService } from "../execution-service.js";
 import type { FabricProviderStatus } from "../protocol.js";
 import { StateProvider } from "../providers/state-provider.js";
-import { ContinuityProvider } from "../providers/continuity-provider.js";
 import { LocalCodingProvider } from "../providers/local-provider.js";
 import { FabricBootstrapProvider } from "./bootstrap-provider.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
@@ -30,15 +26,11 @@ export interface KiroRuntimeOptions {
   /** Only the binding authority may supply a verified root; cwd alone grants nothing. */
   workspaceRoot?: string;
   localLockRoot?: string;
-  /** Explicit retained probe storage outside source; defaults beside local locks. */
-  probesRoot?: string;
   /** Borrowed host-owned analysis lease; provider disposal never closes its engine. */
   foveaClient?: FoveaBoundClient;
   memoryRoot?: string;
   memoryNamespace?: string;
   stateRoot?: string;
-  /** Private verified-project storage; never inferred from cwd. Only used when enabled. */
-  continuityRoot?: string;
   config?: FabricConfig;
   /** Host-issued client/workspace authorization; never accepted from guest arguments. */
   catalogBinding?: Omit<import("../core/catalog-contract.js").CatalogBinding, "runtimeNonce">;
@@ -70,11 +62,7 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       // Composing several results or logs can still overflow; the projection retains that evidence.
       maxReadManyChars: Math.floor(config.executor.maxOutputChars * 0.8),
     }));
-    registry.register(new ReviewProvider({ root: options.workspaceRoot, maxResultChars: config.executor.maxNestedResultChars }));
-    registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path.join(path.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));
-  } else {
-    for (const name of ["local", "review", "probe"]) registry.markUnavailable(name, "verified workspace binding is required");
-  }
+  } else registry.markUnavailable("local", "verified workspace binding is required");
   if (options.workspaceRoot && options.foveaClient) registry.register(new FoveaProvider(options.foveaClient));
   else registry.markUnavailable("repo", "verified workspace and persistent host binding are required");
   registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
@@ -92,12 +80,6 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   else registry.markUnavailable("memory", config.memory.enabled ? "workspace binding is required" : "disabled by configuration");
   if (options.stateRoot && config.state.enabled) registry.register(new StateProvider(options.stateRoot, config.state));
   else registry.markUnavailable("state", config.state.enabled ? "workspace binding is required" : "disabled by configuration");
-  if (options.workspaceRoot && options.continuityRoot && config.continuity.enabled) {
-    registry.register(new ContinuityProvider(options.continuityRoot, {
-      ...config.continuity, workspaceRoot: options.workspaceRoot,
-      maxResultBytes: Math.floor(Math.min(config.executor.maxNestedResultChars, config.executor.maxOutputChars) * 0.8),
-    }));
-  } else registry.markUnavailable("continuity", config.continuity.enabled ? "verified workspace binding is required" : "disabled by configuration");
   // Fail closed if the documented current inventory and the mounted registry
   // ever diverge. This is an internal consistency guard; it does not change
   // which providers mount, their order, or their requirements policy.

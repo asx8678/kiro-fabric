@@ -15,15 +15,6 @@
     "fabric_workspace",
     "fabric_exec"
   ],
-  "mountedProviders": [
-    "artifacts",
-    "memory",
-    "state",
-    "mcp",
-    "local",
-    "repo",
-    "fabric"
-  ],
   "bundledAgentResources": [
     "skills/fabric-exec/SKILL.md",
     "skills/fabric-exec/references/api.md",

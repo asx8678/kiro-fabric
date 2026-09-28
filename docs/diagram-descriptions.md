@@ -24,11 +24,8 @@ The full provider inventory includes supporting namespaces omitted from the sche
 | `fabric` | Bootstrap, help and workspace selection |
 | `local` | Workspace file operations and host shell execution |
 | `repo` | Advisory repository navigation through Navigator |
-| `review` | Structural review-evidence accounting |
-| `probe` | Explicit retained probes with declared provenance |
 | `memory` | Intentional durable workspace facts |
 | `state` | Revisioned durable workspace progress |
-| `continuity` | Opt-in durable task recovery |
 | `artifacts` | Temporary retained output and checkpoint access |
 | `mcp` | Explicitly configured external MCP capabilities |
 

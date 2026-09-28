@@ -39,7 +39,6 @@ beforeEach(() => {
 afterAll(() => { if (nativeBuild) removeFixtureSync(nativeBuild, { recursive: true, force: true }); });
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-provenance-'))); fs.chmodSync(base, 0o700);
-  // Engines and hosts write scratch under base: remove it after every other cleanup.
   cleanup.unshift(() => removeFixtureSync(base, { recursive: true, force: true }));
   const root = path.join(base, 'root'); fs.mkdirSync(root, { mode: 0o700 });
   const stat = fs.statSync(root, { bigint: true });

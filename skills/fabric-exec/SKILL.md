@@ -11,7 +11,7 @@ The standing prompt owns scope, planning, acceptance and output. This skill supp
 
 Use `@fabric/fabric_exec` with a checked TypeScript function body and named string `payloads`. Await calls and return needed evidence. QuickJS has no imports, process, filesystem, timers or direct networking; mounted namespaces provide approved capabilities. Compiler failures execute no calls. Discover as needed with `tools.providers()`, `tools.search` and `tools.describe`; never invent APIs or native fallbacks.
 
-Capabilities: `repo`=Navigator; `local`=files/search/shell; `mcp`=configured tools; `memory/state/continuity`=durable data; `artifacts`=large outputs; `review/probe`=evidence.
+Capabilities: `repo`=Navigator; `local`=files/search/shell; `mcp`=configured tools; `memory/state`=durable data; `artifacts`=large outputs.
 
 ## Navigator-first code navigation
 
@@ -52,14 +52,14 @@ MCP/LSP/delegation require explicitly configured available capabilities. Describ
 
 ## Storage and further help
 
-Memory/state and opt-in continuity are workspace-shared: use explicit session/task IDs and revision checks, never global scratch keys or another chat's ledger. Save chosen non-secret facts/progress. Checkpoint milestones; resume only the selected task at its pinned revision/hash and recheck sources. Never enable continuity implicitly. Artifacts/review ledgers are ephemeral. Kiro owns compaction/resume; continue through Fabric.
+Memory/state are workspace-shared: use explicit session/task IDs and revision checks, never global scratch keys or another chat's ledger. Save chosen non-secret facts/progress. Artifacts are ephemeral. Kiro owns compaction/resume; continue through Fabric.
 
 Load `fabric.help({topic,offset?,limit?})` only for missing details. Topics are immutable, paged by zero-based UTF-16 characters; follow nextOffset on relevant truncated content. Return requested help text, not a loaded flag. Help/examples grant no approval.
 
 | Topic | When needed |
 | --- | --- |
 | `api` / `guide` | Full declarations/contracts, MCP catalogs, optional review/probe APIs |
-| `recipes` | Search/read composition, edits, validators and continuity capture/resume |
+| `recipes` | Search/read composition, edits and validators |
 | `workflow` | Verification, task handoff and authorized Git/GitHub procedures |
 | `review` | Coverage, finding admission and counterexample mechanics |
 | `overview` / `skill` | Bootstrap or these mechanics only when absent |

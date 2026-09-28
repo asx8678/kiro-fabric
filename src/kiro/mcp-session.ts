@@ -138,7 +138,7 @@ export const createMcpSession = (context: McpSessionOptions, owner?: KiroHostSes
         mcpConfigPath: data.mcpConfig,
         artifactsRoot: project?.artifacts ?? data.artifacts,
         ...(client ? { foveaClient: client } : {}),
-        ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, continuityRoot: project.continuity, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
+        ...(project && workspace ? { memoryRoot: project.memory, memoryNamespace: project.memoryNamespace, stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path.join(path.dirname(project.state), "local-locks") } : {}),
       });
       // A rejected borrowed runtime belongs to another session, not this
       // factory. Dispose only our binding in that case.
@@ -243,7 +243,7 @@ export const createMcpSession = (context: McpSessionOptions, owner?: KiroHostSes
       : { actual: realpathSync(process.execPath), expected: expectedNode, matches: realpathSync(process.execPath) === expectedNode };
     const providers = current ? current.providers().map((provider) => workspaceBlocked && provider.name !== "fabric"
       ? { ...provider, available: false, reason: "workspace identity is temporarily unverifiable" } : provider)
-      : ["fabric", "local", "review", "probe", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
+      : ["fabric", "local", "repo", "artifacts", "memory", "state", "mcp"].map((name) => ({ name, description: "Provider awaits runtime", available: false, reason: "runtime unavailable" }));
     const actionCatalog = fabricInfoCatalog(current && !workspaceBlocked ? await current.registry.list() : []);
     if (tracer.enabled) { tracer.event("eval", "tool.fabric_info", undefined, lifecycleInfo); tracer.flush(); }
     return {

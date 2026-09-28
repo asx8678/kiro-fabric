@@ -102,7 +102,6 @@ const removeOwnedTree = (target) => {
 };
 
 const launcherScript = (kiroHome) => `#!/bin/sh
-# Start Kiro with the Fabric agent, bound to the current directory.
 set -eu
 if [ "\${1:-}" = start ]; then shift; fi
 KIRO_HOME='${kiroHome.replaceAll("'", "'\\''")}'

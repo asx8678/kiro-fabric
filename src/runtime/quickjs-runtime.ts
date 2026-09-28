@@ -7,7 +7,6 @@ import releaseSyncVariant from "@jitl/quickjs-singlefile-mjs-release-sync";
 import { newQuickJSWASMModuleFromVariant, newVariant } from "quickjs-emscripten-core";
 import { runAbortable, settleWithin } from "../async-settlement.js";
 import { LocalShellExitError } from "../providers/local-shell.js";
-import { ProbeRunExitError } from "../providers/probe-provider.js";
 import { createGuestStackMap, remapGuestErrorText } from "./guest-stack-map.js";
 import {
   assertFabricJsonBudget,
@@ -291,7 +290,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
           try {
             // Explicit trusted shell diagnostics only; never serialize arbitrary
             // error properties, approval data, causes, or cancellation reasons.
-            if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
+            if (error instanceof LocalShellExitError) {
               const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
               try { context.setProp(handle, "result", diagnostic); } finally { diagnostic.dispose(); }
             }
@@ -558,7 +557,7 @@ export type SandboxWorkerRequest = { executionId: string } & (
       value?: unknown;
       error?: string;
       failure?: FabricFailureMetadata;
-      shellKind?: "shell" | "probe";
+      shellKind?: "shell";
       shellResult?: unknown;
       /** Post-commit acknowledgement. It is a symbol-keyed marker on the host
        * error, so it cannot survive structured cloning and must be carried
@@ -607,7 +606,7 @@ interface SandboxWorkerSlot {
  * shape is rebuilt in the worker instead of being stringified away. */
 const transferredHostFailure = (error: unknown): Pick<Extract<SandboxWorkerRequest, { type: "hostResult" }>, "error" | "failure" | "shellKind" | "shellResult"> => {
   const failure = fabricFailureMetadata(error);
-  const shellKind = error instanceof LocalShellExitError ? "shell" as const : error instanceof ProbeRunExitError ? "probe" as const : undefined;
+  const shellKind = error instanceof LocalShellExitError ? "shell" as const : undefined;
   const acknowledgement = (error as { [FABRIC_COMMIT_ACKNOWLEDGEMENT]?: unknown } | null | undefined)?.[FABRIC_COMMIT_ACKNOWLEDGEMENT];
   const committed = acknowledgement && typeof acknowledgement === "object" &&
     (acknowledgement as { version?: unknown }).version === 1 && typeof (acknowledgement as { operation?: unknown }).operation === "string"
@@ -617,7 +616,7 @@ const transferredHostFailure = (error: unknown): Pick<Extract<SandboxWorkerReque
     error: (error instanceof Error ? error.message : String(error)).slice(0, 4_096),
     ...(failure ? { failure } : {}),
     ...(shellKind ? { shellKind } : {}),
-    ...(shellKind ? { shellResult: (error as LocalShellExitError | ProbeRunExitError).result } : {}),
+    ...(shellKind ? { shellResult: (error as LocalShellExitError).result } : {}),
     ...(committed ? { committed } : {}),
   };
 };

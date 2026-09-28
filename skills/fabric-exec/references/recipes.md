@@ -74,55 +74,6 @@ if (r.truncated) throw new Error("Final read incomplete; inspect remaining lines
 return {path,verified:true,verifiedSha256:r.sha256};
 ```
 
-## Deterministic continuity capture (opt-in)
-
-Requires `continuity.enabled: true`, verified workspace binding, and normal write/execute approval. The path must be an authorized new file; the command must be an inspected, authorized local check. This is recovery, not `/compact`. Await earlier calls before capture. Do not persist secrets in declarations.
-
-```ts
-// Recipe: explicit checkpoint of declared facts plus the current settled host prefix
-const task = await continuity.create({
-  objective: payloads.objective,
-  ...(payloads.constraint ? {constraints:[payloads.constraint]} : {}),
-});
-await local.write({path:payloads.path,content:payloads.content});
-const command = await local.shell({command:payloads.command,timeoutMs:20000,settle:true});
-const checkpoint = await continuity.checkpoint({
-  taskId: task.taskId,
-  expectedRevision: task.revision,
-  requestId: payloads.requestId,
-  facts: [{kind:"next-step",text:payloads.nextStep}],
-  captureCurrentExecution: true,
-});
-const read = await continuity.read({taskId:checkpoint.taskId,expectedRevision:checkpoint.revision});
-return {taskId:checkpoint.taskId,revision:checkpoint.revision,hash:checkpoint.hash,capture:checkpoint.capture ?? null,
-  operations:read.coverage.operations,commandOk:command.ok,exitCode:command.exitCode};
-```
-
-Save the returned task selector, revision/hash, and capture metadata. Hard failures may leave effects without a checkpoint; a nonzero settled command is captured, not declared a successful check. After a lost acknowledgement, inspect `list`/`read` and explicitly identify the task (never pick newest automatically). Retry **only** the checkpoint with the original task ID, request ID, expected revision, facts and capture flag: a committed retry returns the saved prefix, not a new capture. Do not rerun this entire recipe—creation is not idempotent and repeating local work can duplicate effects.
-
-Later, after an MCP restart, `read`/`expand` the explicitly selected task with its saved revision/hash; follow expansion's `nextSequence` until null. Never treat stored receipts as conversation history or as proof that later work did not happen.
-
-## Deterministic continuity resume (opt-in)
-
-Requires enabled continuity, the same verified workspace and normal read approval. Supply the exact `{taskId,revision,hash}` returned by the selected task's checkpoint; no list lookup is needed for a known selector. This recipe is read-only and rechecks linked-file freshness, not semantic correctness or the whole repository. Never assume the newest task belongs to the current conversation.
-
-```ts
-// Recipe: resume the explicitly selected durable task after restart or compaction
-const saved = JSON.parse(payloads.savedSelector) as {taskId?:unknown;revision?:unknown;hash?:unknown} | null;
-if (!saved || typeof saved.taskId !== "string" || !/^ct_[a-f0-9]{32}$/.test(saved.taskId) ||
-    typeof saved.revision !== "number" || !Number.isSafeInteger(saved.revision) || saved.revision < 1 ||
-    typeof saved.hash !== "string" || !/^[a-f0-9]{64}$/.test(saved.hash)) {
-  throw new Error("Invalid saved continuity selector; supply taskId, revision and hash");
-}
-const task = await continuity.read({taskId:saved.taskId,expectedRevision:saved.revision,view:"task"});
-if (task.hash !== saved.hash) throw new Error("Continuity source hash mismatch; inspect before resuming");
-return {...task, ...(task.omittedRanges.length ? {expand:{ref:"continuity.expand",args:{
-  taskId:task.taskId,expectedRevision:task.revision,hash:task.hash,fromSequence:task.omittedRanges[0]!.fromSequence,
-}}} : {})};
-```
-
-Missing tasks and revision/hash conflicts stop recovery: inspect the explicitly selected task before accepting any newer selector, never silently drop these guards. If the selector was lost, page `continuity.list` with `nextOffset` and `expectedIndexRevision` and obtain explicit selection; absence from one page proves nothing. Inspect `checks` for stale/unavailable inputs. Expand omitted records before relying on them, following `nextSequence` within ordinary output/call budgets and across executions when needed. Summaries and receipts never authorize replay of commands or edits.
-
 ## Expected nonzero commands
 
 ```ts
@@ -205,7 +156,7 @@ return {path:payloads.outputPath, groups:totals.size, verified:true};
 
 ## Evidence counterexamples
 
-The [review finding-evidence gate](review.md#finding-evidence-gate) owns admission/severity; the [optional typed operations](api.md#optional-typed-operations) cover review ledgers, compact readEvidence and retained probes. None is a required bootstrap or permission to execute. Apply these counterexample checks before reporting:
+The [review finding-evidence gate](review.md#finding-evidence-gate) owns admission/severity; the [explicit evidence API](api.md#explicit-evidence-api) covers compact readEvidence. Neither is a required bootstrap or permission to execute. Apply these counterexample checks before reporting:
 - Shared change flag: distinguish unnecessary saves after the first removal from lost removals. If removal sets the flag before the save, that path does not establish missed saves.
 - Collection mutation: inspect actual runtime enumeration/snapshot semantics; removal during iteration alone does not prove skipped nodes.
 - Empty collection: trace whether division is reachable when the loop has no iterations.

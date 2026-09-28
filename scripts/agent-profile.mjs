@@ -21,7 +21,7 @@ const STANDARD_AGENT_PROMPT = `${CODE_MODE_RULES} General explanations need no w
 
 ${EDITING_PREFERENCES}
 
-Discover available repo/Navigator, local, mcp, memory/state, continuity, artifacts and review/probe via tools.providers(); use tools.search/tools.describe for needed APIs.
+Discover available repo/Navigator, local, mcp, memory/state and artifacts via tools.providers(); use tools.search/tools.describe for needed APIs.
 
 Task contract: answer explains; plan proposes work; review investigates and reports; implement makes authorized changes and verifies them. Answer, plan and review do not authorize implementation. Follow the user's latest scope: necessary dependencies and checks are in scope, optional cleanup is not. Do not invent a broad audit for a focused task.
 
@@ -76,8 +76,8 @@ const createAgentPrompt = (guidanceMode = "standard") => {
  * @property {string} dataRoot
  * @property {string} skillPath
  * @property {string} [steeringPath]
- * @property {string} [astGrepPath] Navigator parser at `<install root>/tools/ast-grep`.
- * @property {string} [searchPath] PATH for the MCP process, limited to absolute directories.
+ * @property {string} [astGrepPath]
+ * @property {string} [searchPath]
  * @property {'standard' | 'review' | 'minimal'} [guidanceMode] Explicit opt-in; standard preserves installer behavior.
  */
 
@@ -132,7 +132,6 @@ export const generateAgentProfile = ({ nodePath, runtimeRoot, dataRoot, skillPat
       KIRO_FABRIC_RUNTIME_ROOT: runtimeRoot,
       KIRO_FABRIC_DATA_ROOT: dataRoot,
       ...(astGrepPath ? { KIRO_FABRIC_AST_GREP: astGrepPath } : {}),
-      // Kiro filters inherited env; the installer selects the rg/git directories.
       ...(searchPath ? { PATH: searchPath } : {}),
     }, waitForReady: true, requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS } },
     tools: AGENT_TOOLS,

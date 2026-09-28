@@ -6,9 +6,6 @@ import path from "node:path";
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { createHash } from "node:crypto";
-import type { ContinuityRecord } from "../src/continuity/records.js";
-import type { ContinuityReadResult } from "../src/continuity/render.js";
 
 const children = new Set<ChildProcess>();
 const temporaryRoots: string[] = [];
@@ -576,121 +573,6 @@ describe("Agent MCP process lifecycle", () => {
       { code: 0, signal: null },
       { code: 0, signal: null },
     ]);
-  }, 30_000);
-
-  it("restores deterministic continuity records in a new MCP PID without native compaction", async () => {
-    if (process.platform === "win32") return;
-    const root = temporary(), data = path.join(root, "data"), workspace = path.join(root, "workspace");
-    fs.mkdirSync(data, { mode: 0o700 }); fs.mkdirSync(workspace, { mode: 0o700 });
-    const config = path.join(data, "fabric", "config"); fs.mkdirSync(config, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(path.join(config, "config.json"), JSON.stringify({
-      approvals: { read: "allow", write: "allow", execute: "deny", network: "deny" },
-      mcp: { enabled: false }, continuity: { enabled: true },
-    }), { mode: 0o600 });
-    const first = launch({ root, dataRoot: data });
-    if (!first.stdin || !first.stdout) throw new Error("first MCP transport unavailable");
-    const client = await connectTransport(first.stdin, first.stdout, workspace);
-    const seeded = toolJson<{ taskId: string; revision: number; hash: string; summary: string }>(await client.request("tools/call", {
-      name: "fabric_exec", arguments: { resultFormat: "json", code: `
-        const task = await continuity.create({objective:"Original recovery goal",constraints:["Keep exact declared constraints"]});
-        const checkpoint = await continuity.checkpoint({taskId:task.taskId,expectedRevision:task.revision,requestId:"restart-checkpoint",facts:[{kind:"next-step",text:"Verify after restart"}]});
-        const read = await continuity.read({taskId:task.taskId,expectedRevision:checkpoint.revision});
-        return {taskId:read.taskId,revision:read.revision,hash:read.hash,summary:read.summary};
-      ` },
-    }));
-    expect(first.kill("SIGKILL")).toBe(true);
-    await expect(exitOf(first)).resolves.toEqual({ code: null, signal: "SIGKILL" });
-    const restarted = launch({ root, dataRoot: data });
-    if (!restarted.stdin || !restarted.stdout) throw new Error("restarted MCP transport unavailable");
-    expect(restarted.pid).not.toBe(first.pid);
-    const next = await connectTransport(restarted.stdin, restarted.stdout, workspace);
-    const restored = toolJson<{ summary: string; texts: string[]; operations: string }>(await next.request("tools/call", {
-      name: "fabric_exec", arguments: { resultFormat: "json", payloads: { taskId: seeded.taskId, hash: seeded.hash, revision: String(seeded.revision) }, code: `
-        const read = await continuity.read({taskId:payloads.taskId,expectedRevision:Number(payloads.revision)});
-        const expanded = await continuity.expand({taskId:payloads.taskId,expectedRevision:Number(payloads.revision),hash:payloads.hash});
-        return {summary:read.summary,texts:expanded.records.filter(record=>record.provenance==="declared").map(record=>record.text),operations:read.coverage.operations};
-      ` },
-    }));
-    expect(restored.summary).toBe(seeded.summary);
-    expect(restored.texts).toEqual(["Original recovery goal", "Keep exact declared constraints", "Verify after restart"]);
-    expect(restored.operations).toBe("not-captured");
-    const deleted = toolJson<{ deleted: boolean }>(await next.request("tools/call", {
-      name: "fabric_exec", arguments: { resultFormat: "json", code: `return await continuity.delete({taskId:${JSON.stringify(seeded.taskId)},expectedRevision:${seeded.revision}});` },
-    }));
-    expect(deleted.deleted).toBe(true);
-    restarted.stdin.end(); await expect(exitOf(restarted)).resolves.toEqual({ code: 0, signal: null });
-  }, 30_000);
-
-  it("restores captured host operations in a new MCP PID without native compaction or conversation facts", async () => {
-    if (process.platform === "win32") return;
-    const root = temporary(), data = path.join(root, "data"), workspace = path.join(root, "workspace");
-    fs.mkdirSync(data, { mode: 0o700 }); fs.mkdirSync(workspace, { mode: 0o700 });
-    const config = path.join(data, "fabric", "config"); fs.mkdirSync(config, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(path.join(config, "config.json"), JSON.stringify({
-      approvals: { read: "allow", write: "allow", execute: "deny", network: "deny" },
-      mcp: { enabled: false }, continuity: { enabled: true },
-    }), { mode: 0o600 });
-    type Recovery = { read: ContinuityReadResult; records: ContinuityRecord[]; nextSequence: number | null };
-    const first = launch({ root, dataRoot: data });
-    if (!first.stdin || !first.stdout) throw new Error("first MCP transport unavailable");
-    const client = await connectTransport(first.stdin, first.stdout, workspace);
-    const seeded = toolJson<Recovery>(await client.request("tools/call", {
-      name: "fabric_exec", arguments: { resultFormat: "json", code: `
-        const task = await continuity.create({objective:"Recover captured host prefix"});
-        await local.write({path:"captured.txt",content:"PRIVATE_RESTART_BODY_4419"});
-        const checkpoint = await continuity.checkpoint({taskId:task.taskId,expectedRevision:task.revision,requestId:"restart-capture",captureCurrentExecution:true});
-        const read = await continuity.read({taskId:task.taskId,expectedRevision:checkpoint.revision});
-        const expanded = await continuity.expand({taskId:task.taskId,expectedRevision:checkpoint.revision,hash:checkpoint.hash,limit:64});
-        return {read,records:expanded.records,nextSequence:expanded.nextSequence};
-      ` },
-    }));
-    expect(seeded.nextSequence).toBeNull();
-    expect(seeded.read.coverage).toMatchObject({ conversation: "not-captured", operations: "selected-prefixes", observedOperations: 1,
-      latestCapture: { throughOperation: 2, capturedOperations: 1, excludedOperations: 1, unsupportedOperations: 0 } });
-    expect(seeded.records.filter(record => record.provenance === "declared").map(record => record.text)).toEqual(["Recover captured host prefix"]);
-    expect(seeded.records.filter(record => record.kind === "operation")).toEqual([expect.objectContaining({
-      provenance: "host-observed", ref: "local.write", operationSequence: 2, executionId: seeded.read.coverage.latestCapture!.executionId,
-      outcome: "succeeded", dispatchState: "dispatched", effectOutcome: "committed", path: "captured.txt",
-      sha256: createHash("sha256").update("PRIVATE_RESTART_BODY_4419").digest("hex"),
-    })]);
-    const stored = fs.readdirSync(path.join(data, "fabric", "projects"), { withFileTypes: true })
-      .filter(entry => entry.isDirectory() && !entry.name.startsWith("."))
-      .map(entry => path.join(data, "fabric", "projects", entry.name, "continuity", "state.json"));
-    expect(stored).toHaveLength(1);
-    const before = fs.readFileSync(stored[0]!, "utf8");
-    expect(before).not.toContain("PRIVATE_RESTART_BODY_4419");
-    expect(first.kill("SIGKILL")).toBe(true);
-    await expect(exitOf(first)).resolves.toEqual({ code: null, signal: "SIGKILL" });
-    const restarted = launch({ root, dataRoot: data });
-    if (!restarted.stdin || !restarted.stdout) throw new Error("restarted MCP transport unavailable");
-    expect(restarted.pid).not.toBe(first.pid);
-    const next = await connectTransport(restarted.stdin, restarted.stdout, workspace);
-    const payloads = { taskId: seeded.read.taskId, hash: seeded.read.hash, revision: String(seeded.read.revision) };
-    const recovery = {
-      resultFormat: "json", payloads, code: `
-        const read = await continuity.read({taskId:payloads.taskId,expectedRevision:Number(payloads.revision)});
-        const expanded = await continuity.expand({taskId:payloads.taskId,expectedRevision:Number(payloads.revision),hash:payloads.hash,limit:64});
-        return {read,records:expanded.records,nextSequence:expanded.nextSequence};
-      `,
-    };
-    const restored = toolJson<Recovery>(await next.request("tools/call", { name: "fabric_exec", arguments: recovery }));
-    // Exact equality covers receipt IDs, source hashes, provenance, declarations,
-    // capture boundaries and deterministic summary bytes, not just ref names.
-    expect(restored).toEqual(seeded);
-    expect(fs.readFileSync(path.join(workspace, "captured.txt"), "utf8")).toBe("PRIVATE_RESTART_BODY_4419");
-    const changedHash = (payloads.hash[0] === "0" ? "1" : "0") + payloads.hash.slice(1);
-    const stale = toolResponse(await next.request("tools/call", { name: "fabric_exec", arguments: { ...recovery, payloads: { ...payloads, hash: changedHash } } }));
-    expect(stale.isError).toBe(true); expect(JSON.stringify(stale)).toContain("source hash mismatch");
-    restarted.stdin.end(); await expect(exitOf(restarted)).resolves.toEqual({ code: 0, signal: null });
-
-    const otherWorkspace = path.join(root, "other-workspace"); fs.mkdirSync(otherWorkspace, { mode: 0o700 });
-    const other = launch({ root, dataRoot: data });
-    if (!other.stdin || !other.stdout) throw new Error("other MCP transport unavailable");
-    const foreign = await connectTransport(other.stdin, other.stdout, otherWorkspace);
-    const wrongWorkspace = toolResponse(await foreign.request("tools/call", { name: "fabric_exec", arguments: recovery }));
-    expect(wrongWorkspace.isError).toBe(true); expect(JSON.stringify(wrongWorkspace)).toContain("task not found in this workspace");
-    expect(fs.readFileSync(stored[0]!, "utf8")).toBe(before);
-    other.stdin.end(); await expect(exitOf(other)).resolves.toEqual({ code: 0, signal: null });
   }, 30_000);
 
   it("restores exact durable workspace data in a new MCP process after abrupt MCP death", async () => {

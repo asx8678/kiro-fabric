@@ -8,9 +8,7 @@ import {
 } from "./quickjs-runtime.js";
 import { FabricRepairError } from "../core/repair-error.js";
 import { LocalShellExitError } from "../providers/local-shell.js";
-import { ProbeRunExitError } from "../providers/probe-provider.js";
 import type { LocalShellResult } from "../providers/local-contract.js";
-import type { ProbeRunResult } from "../providers/probe-contract.js";
 import { FabricDeadline } from "./deadline.js";
 import type { FabricTracer } from "../trace/tracer.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT, type FabricFailureMetadata } from "../protocol.js";
@@ -40,17 +38,15 @@ if (port) {
 
   /** Class identity cannot cross the thread boundary, so a host failure is
    * rebuilt from its transferred shape. The guest therefore sees exactly the
-   * diagnostics it would see in-process: shell/probe results, `failure`
+   * diagnostics it would see in-process: shell results, `failure`
    * metadata, or a plain message. */
   const rebuildHostError = (message: Extract<SandboxWorkerRequest, { type: "hostResult" }>): Error => {
     const text = message.error ?? "Provider failed";
     const error = message.shellKind === "shell"
       ? new LocalShellExitError(message.shellResult as LocalShellResult)
-      : message.shellKind === "probe"
-        ? new ProbeRunExitError(message.shellResult as ProbeRunResult)
-        : message.failure
-          ? new FabricRepairError(text, message.failure as FabricFailureMetadata)
-          : new Error(text);
+      : message.failure
+        ? new FabricRepairError(text, message.failure as FabricFailureMetadata)
+        : new Error(text);
     // Restore the post-commit marker so the guest and the service still see a
     // committed mutation rather than an ordinary failure.
     if (message.committed) {

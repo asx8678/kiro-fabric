@@ -5,7 +5,6 @@ import { canonicalPathContains, inspectCanonicalPath } from "../canonical-path.j
 export interface KiroAgentLaunchContext {
   runtimeRoot: string;
   dataRoot: string;
-  /** Installer-placed Navigator parser at `<install root>/tools/ast-grep`. */
   astGrep?: string;
   launchWorkspaceRoot?: string;
   /** Profile-declared same-call Fovea suffix. Not native session routing or hook registration. */

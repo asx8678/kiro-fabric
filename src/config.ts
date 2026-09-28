@@ -55,15 +55,6 @@ export interface FabricStateConfig {
   maxTotalChars: number;
 }
 
-export interface FabricContinuityConfig {
-  enabled: boolean;
-  captureFailureOutput: boolean;
-  maxTasks: number;
-  maxTaskBytes: number;
-  maxTotalBytes: number;
-  maxSummaryBytes: number;
-}
-
 export interface FabricArtifactsConfig {
   maxArtifacts: number;
   maxArtifactChars: number;
@@ -87,7 +78,6 @@ export interface FabricConfig {
   mcp: FabricMcpConfig;
   memory: FabricMemoryConfig;
   state: FabricStateConfig;
-  continuity: FabricContinuityConfig;
   artifacts: FabricArtifactsConfig;
   tracing: FabricTracingConfig;
   privacy: FabricPrivacyConfig;
@@ -133,7 +123,6 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     maxValueChars: 100_000,
     maxTotalChars: 8_000_000,
   },
-  continuity: { enabled: false, captureFailureOutput: false, maxTasks: 32, maxTaskBytes: 131_072, maxTotalBytes: 4_194_304, maxSummaryBytes: 8_192 },
   artifacts: {
     maxArtifacts: 32,
     maxArtifactChars: 2_000_000,
@@ -174,7 +163,6 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
   memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
-  continuity: ["enabled", "captureFailureOutput", "maxTasks", "maxTaskBytes", "maxTotalBytes", "maxSummaryBytes"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"],
   privacy: ["mode"],
@@ -187,10 +175,12 @@ const assertNoRemovedProviders = (root: Record<string, unknown>): void => {
   }
 };
 
+const RETIRED_CONFIG_SECTIONS = new Set(["continuity"]);
+
 const assertFileConfigSections = (root: Record<string, unknown>): void => {
   assertNoRemovedProviders(root);
   for (const [section, raw] of Object.entries(root)) {
-    if (section === "schemaVersion") continue;
+    if (section === "schemaVersion" || RETIRED_CONFIG_SECTIONS.has(section)) continue;
     const allowed = FILE_CONFIG_KEYS[section];
     if (!allowed) throw new Error(`unknown configuration section: ${section}`);
     const fields = record(raw);
@@ -204,7 +194,7 @@ const assertFileConfigSections = (root: Record<string, unknown>): void => {
 const assertFileConfigValues = (root: Record<string, unknown>, defaults: FabricConfig): void => {
   const normalized = normalizeFabricConfig(root, defaults) as unknown as Record<string, Record<string, unknown>>;
   for (const [section, raw] of Object.entries(root)) {
-    if (section === "schemaVersion") continue;
+    if (section === "schemaVersion" || RETIRED_CONFIG_SECTIONS.has(section)) continue;
     const fields = raw as Record<string, unknown>;
     for (const [field, value] of Object.entries(fields)) {
       if (!Object.is(normalized[section]?.[field], value)) {
@@ -259,8 +249,6 @@ export const normalizeFabricConfig = (
   const mcp = record(root.mcp) ?? {};
   const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
-  const continuity = record(root.continuity) ?? {};
-  const continuityDefaults = defaults.continuity ?? DEFAULT_FABRIC_CONFIG.continuity;
   const artifacts = record(root.artifacts) ?? {};
   const tracing = record(root.tracing) ?? {};
   const privacy = record(root.privacy) ?? {};
@@ -312,14 +300,6 @@ export const normalizeFabricConfig = (
       maxEntries: integer(state.maxEntries, defaults.state.maxEntries, 1, 10_000),
       maxValueChars: integer(state.maxValueChars, defaults.state.maxValueChars, 1_000, 2_000_000),
       maxTotalChars: integer(state.maxTotalChars, defaults.state.maxTotalChars, 4_096, 32_000_000),
-    },
-    continuity: {
-      enabled: bool(continuity.enabled, continuityDefaults.enabled),
-      captureFailureOutput: bool(continuity.captureFailureOutput, continuityDefaults.captureFailureOutput ?? false),
-      maxTasks: integer(continuity.maxTasks, continuityDefaults.maxTasks, 1, 32),
-      maxTaskBytes: integer(continuity.maxTaskBytes, continuityDefaults.maxTaskBytes, 4_096, 131_072),
-      maxTotalBytes: integer(continuity.maxTotalBytes, continuityDefaults.maxTotalBytes, 4_096, 4_194_304),
-      maxSummaryBytes: integer(continuity.maxSummaryBytes, continuityDefaults.maxSummaryBytes, 1_024, 16_384),
     },
     artifacts: {
       maxArtifacts: integer(artifacts.maxArtifacts, defaults.artifacts.maxArtifacts, 1, 128),

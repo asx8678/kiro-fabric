@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { FoveaObservationExecution, type FoveaObserver } from "./fovea/observations.js";
-import { ContinuityExecution, observeContinuity } from "./continuity/execution.js";
 import { CatalogSnapshotStore } from "./core/catalog-snapshot-store.js";
 import type { CatalogBinding, CatalogReservation } from "./core/catalog-contract.js";
 import { catalogMethodForBridge, catalogUnavailable, continueCatalog, publishCatalog, validateCatalogRequest } from "./core/catalog-execution.js";
@@ -10,7 +9,6 @@ import type { FabricFailureMetadata, FabricCheckpointHandle } from "./protocol.j
 import type { FabricConfig } from "./config.js";
 import { throwIfAbortedOrExpired } from "./async-settlement.js";
 import { LocalShellExitError, type LocalShellResult } from "./providers/local-shell.js";
-import { ProbeRunExitError } from "./providers/probe-provider.js";
 import { ActionRegistry, type FabricCallAudit } from "./core/action-registry.js";
 import type { FabricInvocationContext, ResolvedFabricAction } from "./protocol.js";
 import { fabricGuestDeclarations } from "./runtime/guest-types.js";
@@ -49,7 +47,7 @@ export interface FabricExecutionApprover {
 }
 
 export interface FabricExecutionOptions {
-  /** Independent trusted host observer; no continuity or tracing dependency. */
+  /** Independent trusted host observer; no tracing dependency. */
   operationObserver?: FoveaObserver;
   code: string;
   payloads?: Record<string, string>;
@@ -307,13 +305,6 @@ export class FabricExecutionService {
       return { status: "failed", success: false, logs: [], audits: [], elapsedMs: performance.now() - started, error: "TypeScript validation failed", typeErrors: checked.errors, effectiveTimeoutMs };
     }
 
-    const captureEnabled = this.config.continuity.enabled && options.workspaceBound !== false && options.workspaceUnavailable !== true &&
-      this.registry.providers().some(provider => provider.name === "continuity" && provider.available);
-    let continuity: ContinuityExecution | undefined;
-    let captureFailed = false;
-    if (captureEnabled) {
-      try { continuity = new ContinuityExecution(undefined, undefined, this.config.continuity.captureFailureOutput); } catch { captureFailed = true; }
-    }
     const observations = options.operationObserver ? new FoveaObservationExecution(options.operationObserver) : undefined;
     const checkpoints = createCheckpointJournal();
     let interruptedFailure: FabricFailureMetadata | undefined;
@@ -349,15 +340,8 @@ export class FabricExecutionService {
         activeProviderCalls -= 1;
         throw new FabricRepairError("Fabric concurrent provider call quota exceeded", { code: "quota_exceeded", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none" });
       }
-      // Admission order precedes asynchronous descriptor resolution, approvals and local FIFO waits.
-      let operation: ReturnType<ContinuityExecution["admit"]> | undefined;
-      if (continuity) {
-        try { operation = continuity.admit(ref === "fabric.call" ? args.ref : ref); }
-        catch { captureFailed = true; }
-      }
       const observation = observations?.operation(typeof (ref === "fabric.call" ? args.ref : ref) === "string" ? (ref === "fabric.call" ? args.ref : ref) as string : "fabric.call");
       let operationFailed = false;
-      let operationError: unknown;
       // One span per host-bridge call, parented to the execute span. Byte
       // sizes attribute cost to payload volume, not just provider latency.
       const bridgeSpan = tracer.enabled ? tracer.span("bridge", ref, execId, { argsChars: traceJsonChars(args) }, executeSpanId) : undefined;
@@ -370,15 +354,12 @@ export class FabricExecutionService {
         // host/network authority. Deny before preparation, catalog continuation or
         // approval, including tools.call aliases and canonical remote references.
         if (this.config.privacy.mode === "restricted-web" && typeof dispatchRef === "string" &&
-          (dispatchRef === "local.shell" || dispatchRef === "probe.run" || dispatchRef.startsWith("mcp."))) {
+          (dispatchRef === "local.shell" || dispatchRef.startsWith("mcp."))) {
           throw new FabricRepairError(`${dispatchRef} is unavailable in restricted-web privacy mode`, {
             code: "approval_denied", phase: "dispatch", dispatchState: "not_dispatched", effectOutcome: "none", ref: dispatchRef,
           });
         }
-        const context = { ...providerContext(signal, deadline), ...(observation ? { foveaObservation: observation } : {}), ...(captureEnabled ? { continuityCapture: () => {
-          if (captureFailed || !operation) throw new Error("continuity capture is incomplete: recorder failed; prior checkpoint retained");
-          return operation.capture();
-        } } : {}) };
+        const context = { ...providerContext(signal, deadline), ...(observation ? { foveaObservation: observation } : {}) };
         if (ref === "fabric.providers") { const value = this.registry.providers(); if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value) }; return value; }
         const pageMethod = catalogMethodForBridge(ref);
         if (pageMethod) {
@@ -426,7 +407,6 @@ export class FabricExecutionService {
         }
         const invoke = () => this.registry.invoke(actionRef, actionArgs as Record<string, unknown>, {
           ...context,
-          ...(operation ? { operationObserver: operation.observer } : {}),
           audits,
           auditBudget,
           maxAuditEntries: this.config.executor.maxAuditEntries,
@@ -446,7 +426,7 @@ export class FabricExecutionService {
           ...(args.expectedDescriptorDigest !== undefined ? { expectedDescriptorDigest: args.expectedDescriptorDigest as string } : {}),
           ...(args.projection !== undefined ? { projection: args.projection as "full" | "text" | "structured" } : {}),
         } : undefined);
-        const localEffect = ["local.shell", "local.write", "local.edit", "probe.create", "probe.write", "probe.run", "review.begin", "review.update", "review.finding", "review.reconcile", "review.end"].includes(actionRef);
+        const localEffect = ["local.shell", "local.write", "local.edit"].includes(actionRef);
         const invocation = localEffect
           ? localEffectTail.then(invoke, () => { throw new Error("Local effect queue stopped after a failed predecessor; inspect state before a new execution"); })
           : invoke();
@@ -460,17 +440,14 @@ export class FabricExecutionService {
         let value: unknown;
         try { value = await invocation; }
         catch (error) {
-          if ((actionRef === "local.shell" || actionRef === "probe.run") && (error instanceof LocalShellExitError || error instanceof ProbeRunExitError)) lastShellFailure = error.result;
+          if (actionRef === "local.shell" && error instanceof LocalShellExitError) lastShellFailure = error.result;
           throw error;
         }
         finally { localSettlements.delete(invocation); }
         if (bridgeSpan) bridgeEnd = { ok: true, resultChars: traceJsonChars(value), ...(actionRef !== ref ? { actionRef } : {}) };
         return value;
       } catch (error) {
-        operationFailed = true; operationError = error;
-        if (error instanceof LocalShellExitError || error instanceof ProbeRunExitError) {
-          observeContinuity(operation?.observer, observer => observer.result(error.result));
-        }
+        operationFailed = true;
         if (bridgeSpan) bridgeEnd = { ok: false, ...traceFailureMetadata("provider_failed") };
         const failure = fabricFailureMetadata(error);
         if (failure) {
@@ -487,7 +464,6 @@ export class FabricExecutionService {
         // Registry invocation and reservation cleanup have both settled here.
         if (operationFailed) observation?.observe({ phase: "failed" });
         observation?.observe({ phase: "settled" });
-        observeContinuity(operation?.observer, observer => observer.settle(!operationFailed, operationError));
       }
     }, {
       timeoutMs: effectiveTimeoutMs,

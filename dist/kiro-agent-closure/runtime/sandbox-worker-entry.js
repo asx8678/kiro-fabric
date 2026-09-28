@@ -8,9 +8,8 @@ const require = __createRequire(import.meta.url);
 import {
   FABRIC_COMMIT_ACKNOWLEDGEMENT,
   LocalShellExitError,
-  ProbeRunExitError,
   runQuickJsSandbox
-} from "../chunks/chunk-GKVWD2NG.js";
+} from "../chunks/chunk-WEALNPBH.js";
 import "../chunks/chunk-XJTFSUKV.js";
 import {
   FabricRepairError
@@ -29,7 +28,7 @@ if (port) {
   let active;
   const rebuildHostError = (message) => {
     const text = message.error ?? "Provider failed";
-    const error = message.shellKind === "shell" ? new LocalShellExitError(message.shellResult) : message.shellKind === "probe" ? new ProbeRunExitError(message.shellResult) : message.failure ? new FabricRepairError(text, message.failure) : new Error(text);
+    const error = message.shellKind === "shell" ? new LocalShellExitError(message.shellResult) : message.failure ? new FabricRepairError(text, message.failure) : new Error(text);
     if (message.committed) {
       Object.defineProperty(error, FABRIC_COMMIT_ACKNOWLEDGEMENT, {
         value: Object.freeze({ version: 1, operation: message.committed.operation }),
