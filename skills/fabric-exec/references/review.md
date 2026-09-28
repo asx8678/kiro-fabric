@@ -1,6 +1,6 @@
 # Evidence-led repository reviews
 
-Explicit, optional task help for reviews, audits and bug finding, not an automatic bootstrap. A review alone does not authorize edits, deployments, secret use or network requests. User tool bans apply even to help, formatting and verification. No forced fixes, probes or steering when forbidden. Tool-only modes may use authorized tools without guidance injection.
+Task help for reviews, audits and bug finding; load it when one starts. It is not injected automatically. A review alone does not authorize edits, deployments, secret use or network requests. User tool bans apply even to help, formatting and verification. No forced fixes or probes when forbidden.
 
 ## Short review core
 
@@ -8,7 +8,7 @@ Apply the standing review contract. For each requested core path and success/fai
 
 For real SDK/parser/runtime probes, inspect imports/effects and identify stubs: an imitation is not a real SDK execution. Missing executable, SDK/module or input is unavailable evidence, not a pass or finding. Use only available, authorized probes; network effects require explicit authorization.
 
-Keep coverage notes in the conversation unless the user asks for them. Persisted state is workspace-shared; use task-specific keys and revision checks, never another chat's entries.
+Keep the candidate register in state under a review-specific key so compaction cannot drop entries; coverage notes can stay in the conversation. State is workspace-shared: use revision checks and never edit another chat's entries.
 
 The gate below operationalizes finding admission. At acceptance, report supported findings, checks run/unrun, material blockers and uninspected scope; repeat unchanged passing checks only for a concrete reason. Recipes remain optional mechanisms, not permission.
 
@@ -16,9 +16,10 @@ The gate below operationalizes finding admission. At acceptance, report supporte
 
 For every candidate keep: location/caller, concrete trigger, expected contract with its source, expected vs actual action, observable consequence, proof and counterexample checked. Evidence is a reproduction or complete static argument, not a suspicious line or a claimed probe ID.
 
-- Supported defect: reachable consequence proved; headline and explanation agree.
-- suspected/unverified: decisive runtime/configuration evidence is missing; state the unresolved dependency, not a confirmed headline.
-- maintenance concern: no demonstrated behavioral failure.
+- Supported defect: reachable consequence reproduced, or established by static analysis with stated assumptions; headline and explanation agree.
+- Conditional risk: the failure depends on configuration outside the repository; name the condition.
+- Needs verification: decisive runtime/configuration evidence is missing; state the unresolved dependency, not a confirmed headline.
+- Maintenance or documentation issue: no demonstrated behavioral failure.
 - Rejected: disproved by a guard, contract or probe; remove the defect, do not relabel it conditional.
 
 Assign severity only after admission. Confidence is not severity; record affected scope and recovery:
@@ -214,4 +215,4 @@ Seek counterexamples in upstream validation, settings, caller policy and alterna
 
 ## Completion and reporting
 
-Reconcile coverage and each candidate with the core and finding-evidence gate above; a final caveat cannot justify an unconditional headline. Report supported defects by impact with file:line, trigger, expected contract, evidence and any proposed correction (not automatic edits). See [recipes](recipes.md#evidence-counterexamples) for counterexamples and status-preserving validation. Green probes prove only tested paths; synthetic checks do not establish live model superiority.
+Reconcile coverage and each candidate with the core and finding-evidence gate above; a final caveat cannot justify an unconditional headline. Report supported defects by impact with file:line, trigger, expected contract, evidence and any proposed correction (not automatic edits). See [recipes](recipes.md#evidence-counterexamples) for counterexamples and status-preserving validation. Green probes prove only tested paths.

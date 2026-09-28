@@ -24,7 +24,7 @@ return {map:navigation.text, truncated:navigation.truncated, files:(sources?.fil
 
 - `repo.focus({query})`: known symbol or path. `repo.sketch({})`: unfamiliar repository. `repo.impact({files})`: likely affected code before a change. Add `fresh:true` after edits.
 - Pass `repo.focus(...).reads` to `local.readMany` when you want to choose windows yourself.
-- Results are leads, not proof. Check `coverage`, deferred reads and unread tails before concluding. Coverage detail lists are summarized as counts; `repo.result({resultId})` replays the full packet when you need them. On unavailable/no-match results, say so and fall back to `local.find`/`local.grep` plus reads.
+- Results are leads, not proof. Check `coverage`, deferred reads and unread tails before concluding. Coverage detail lists are summarized as counts; `repo.result({resultId})` replays the full packet when you need them. On unavailable/no-match results, say so and fall back to `local.find`/`local.grep` plus reads. A sparse sketch reflects index coverage, not code volume: PowerShell, C#, Helm templates and pipeline YAML get no symbol graph, so inventory them with `local.find`.
 - A stale hash means the file changed: refresh and reread; never drop the hash. See [Navigator reference](references/fovea.md) for retained results and settings.
 
 ## One program, many steps
@@ -44,6 +44,7 @@ Use `parallel(items, item => call(item))` for independent calls. Local shell/wri
 
 - `local.read({path,offset?,limit?})` returns `{text, sha256, totalLines, truncated, nextOffset?}`: one-based lines, default 200, max 2000. It reads UTF-8 text only.
 - `local.readMany({windows,maxChars?,partial?})` batches up to 32 windows and returns `{files, remaining, complete, unreadTails}`. Continue `remaining` exactly as given, then any relevant `unreadTails`. `complete` covers the requested windows, not whole files. With `partial:true`, per-window failures are reported instead of aborting.
+- Result shapes differ: `local.read` returns `text`; each `local.readMany` file has `path`, `startLine`, `endLine`, `totalLines`, `sha256`, `source` and `truncated`, with no `text`; `local.grep` returns `matches` of `{path, line, text}`; `local.find` returns `paths`, not `matches`. `readMany` accepts `maxChars` up to 40000: split larger reads or follow `remaining`.
 - `local.find({pattern})` globs paths; `local.grep({pattern,glob?,literal?})` searches contents; `local.list({path})` lists direct children only. Use `hidden:true` for dotfiles and CI config. If a search is truncated, narrow it before claiming something is absent.
 
 ## Editing
