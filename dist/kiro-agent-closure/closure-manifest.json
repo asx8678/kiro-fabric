@@ -21,7 +21,7 @@
       },
       {
         "path": "scripts/agent-profile.mjs",
-        "sha256": "cc1afa93e29e6ff045969ce26791b86adac3c4fa07a788023c49043c4d447ca0"
+        "sha256": "9927abc1084e6e6449f403aef5372f9765dd88243f8e45fbbb768c6ac6debfe0"
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
@@ -620,7 +620,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "256725444e62930740e01f50246db5886b5c7431a47660eb640e677ed2f8c88f"
+    "digest": "9960faa45e191100fa28320450a26ccb308280cd7b461627af7ae3a71d7d1ad3"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
