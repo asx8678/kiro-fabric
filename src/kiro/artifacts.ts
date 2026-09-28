@@ -1,6 +1,9 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { pinnedDirectoryIdentity, pinnedEntryIdentity, runPinnedDirectoryOperation } from "../installation/pinned-directory-child.mjs";
+import { initializePinnedStateFile, pinnedStatePath } from "../providers/state-directory.js";
+import type { OwnedFile } from "../providers/owned-file.js";
 import { privateStorageDirectoryGuard, sameStorageFile } from "./storage-identity.js";
 import type { FabricArtifactReadResult } from "../protocol.js";
 
@@ -33,6 +36,7 @@ class ArtifactStore implements KiroArtifactStore {
   readonly #uncertainCloses = new Set<unknown>();
   readonly #now: () => number;
   readonly #root?: string;
+  readonly #rootIdentity?: fs.Stats;
   readonly #checkRoot?: () => void;
   readonly #maxArtifacts: number;
   readonly #maxArtifactChars: number;
@@ -60,6 +64,8 @@ class ArtifactStore implements KiroArtifactStore {
       const canonicalRoot = fs.realpathSync(options.root);
       this.#root = canonicalRoot;
       this.#checkRoot = privateStorageDirectoryGuard(canonicalRoot, message => new KiroArtifactStoreError(message));
+      this.#rootIdentity = fs.lstatSync(canonicalRoot);
+      this.#checkRoot();
       for (const entry of fs.readdirSync(canonicalRoot, { withFileTypes: true })) {
         const target = path.join(canonicalRoot, entry.name);
         // Reject foreign entries even if they disappear after enumeration.
@@ -96,13 +102,51 @@ class ArtifactStore implements KiroArtifactStore {
     this.#checkRoot?.();
     let current: fs.Stats;
     try { current = fs.lstatSync(file); }
-    catch (error) { if (allowMissing && (error as NodeJS.ErrnoException).code === "ENOENT") return false; throw error; }
+    catch (error) {
+      if (allowMissing && (error as NodeJS.ErrnoException).code === "ENOENT") { this.#checkRoot?.(); return false; }
+      throw error;
+    }
     if (!sameStorageFile(current, identity)) throw new KiroArtifactStoreError(`artifact identity changed; preserve replacement: ${file}`);
     this.#checkRoot?.();
     return true;
   }
   #removeFile(file: string, identity: fs.Stats): void {
-    if (this.#assertFile(file, identity, true)) fs.rmSync(file, { force: true });
+    const descriptor = this.#openRoot();
+    try {
+      const directory = this.#directoryOptions(descriptor);
+      const name = path.basename(file);
+      const pinned = pinnedStatePath(directory, name);
+      if (!this.#assertFile(pinned ?? file, identity, true)) return;
+      const current = fs.lstatSync(pinned ?? file, { bigint: true });
+      if (!this.#assertFile(pinned ?? file, identity, true)) return;
+      if (pinned !== undefined) fs.rmSync(pinned, { force: true });
+      else {
+        if (process.platform === "win32") throw new KiroArtifactStoreError("descriptor-anchored artifact cleanup is unavailable");
+        runPinnedDirectoryOperation({ ...directory, operation: "unlink", name, expected: pinnedEntryIdentity(current) });
+      }
+      this.#checkRoot?.();
+    } finally { this.#closeRoot(descriptor); }
+  }
+  #openRoot(): number {
+    this.#checkRoot?.();
+    if (!this.#root || !this.#rootIdentity) throw new KiroArtifactStoreError("artifact root identity unavailable");
+    const descriptor = fs.openSync(this.#root, fs.constants.O_RDONLY | (fs.constants.O_DIRECTORY ?? 0) |
+      (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0));
+    try {
+      const stat = fs.fstatSync(descriptor);
+      if (!stat.isDirectory() || stat.dev !== this.#rootIdentity.dev || stat.ino !== this.#rootIdentity.ino) {
+        throw new KiroArtifactStoreError("artifact directory descriptor identity changed");
+      }
+      this.#checkRoot?.();
+      return descriptor;
+    } catch (error) { this.#closeRoot(descriptor); throw error; }
+  }
+  #closeRoot(descriptor: number): void {
+    try { fs.closeSync(descriptor); }
+    catch (error) { this.#uncertainCloses.add(error); throw error; }
+  }
+  #directoryOptions(descriptor: number) {
+    return { fd: descriptor, cwd: this.#root!, parent: pinnedDirectoryIdentity(fs.fstatSync(descriptor, { bigint: true })), check: () => this.#checkRoot?.() };
   }
   write(content: string, protectedIds: readonly string[] = []): string {
     this.#open();
@@ -133,28 +177,33 @@ class ArtifactStore implements KiroArtifactStore {
     if (file) {
       this.#checkRoot?.();
       // An exclusive-create failure never grants cleanup ownership.
-      let descriptor: number | undefined = fs.openSync(file, "wx", 0o600);
-      const close = (): void => {
-        if (descriptor === undefined) return;
-        const fd = descriptor; descriptor = undefined;
+      const rootFd = this.#openRoot();
+      const owned: OwnedFile = { created: false };
+      const close = (fd: number): void => {
         try { fs.closeSync(fd); }
         catch (error) { this.#uncertainCloses.add(error); throw error; } // Never retry a possibly reused descriptor.
       };
       try {
-        identity = fs.fstatSync(descriptor);
-        fs.writeFileSync(descriptor, content);
-        fs.fchmodSync(descriptor, 0o600);
-        fs.fsyncSync(descriptor);
-        identity = fs.fstatSync(descriptor);
-        close();
+        initializePinnedStateFile(this.#directoryOptions(rootFd), id, owned, (descriptor) => {
+          try {
+            identity = fs.fstatSync(descriptor);
+            fs.writeFileSync(descriptor, content);
+            fs.fchmodSync(descriptor, 0o600);
+            fs.fsyncSync(descriptor);
+            identity = fs.fstatSync(descriptor);
+          } catch (error) {
+            // Capture partial-write metadata only through the definitely-owned fd.
+            try { identity = fs.fstatSync(descriptor); }
+            catch (failure) { throw new AggregateError([error, failure], "artifact write identity unavailable", { cause: error }); }
+            throw error;
+          }
+        }, close);
+        if (!identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
         this.#assertFile(file, identity);
-      } catch (error) {
+      } catch (initialError) {
+        const error = initialError instanceof AggregateError && initialError.errors.length === 1 ? initialError.errors[0] : initialError;
+        if (!owned.created) throw error;
         const errors: unknown[] = [error];
-        if (descriptor !== undefined) {
-          // Capture partial-write metadata only through the definitely-owned fd.
-          try { identity = fs.fstatSync(descriptor); } catch (failure) { errors.push(failure); }
-        }
-        try { close(); } catch (failure) { errors.push(failure); }
         let residue = false;
         try {
           if (!identity) throw new KiroArtifactStoreError("artifact ownership identity unavailable; preserve evidence");
@@ -163,7 +212,7 @@ class ArtifactStore implements KiroArtifactStore {
         const failure = errors.length > 1 ? new AggregateError(errors, "artifact write and cleanup failed", { cause: error }) : error;
         if (residue) this.#failedWrites.set(file, { ...(identity ? { identity } : {}), error: failure });
         throw failure;
-      }
+      } finally { this.#closeRoot(rootFd); }
     }
     this.#entries.set(id, { content, lastReadAt: now, ...(file && identity ? { file, identity } : {}) });
     this.#totalChars += content.length;

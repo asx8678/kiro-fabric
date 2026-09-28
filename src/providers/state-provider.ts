@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { initializeOwnedFile, type OwnedFile } from "./owned-file.js";
+import type { OwnedFile } from "./owned-file.js";
+import { initializePinnedStateFile, pinnedStatePath, publishPinnedStateFile } from "./state-directory.js";
 import { runPinnedDirectoryOperation, pinnedDirectoryIdentity, pinnedEntryIdentity } from "../installation/pinned-directory-child.mjs";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT } from "../protocol.js";
 import { throwIfAbortedOrExpired } from "../async-settlement.js";
@@ -24,6 +25,7 @@ const LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_MS = 30_000;
 const STATE_LOCK_KIND = "kiro-fabric-state-lock";
 const MAX_LOCK_BYTES = 4096;
+const MAX_READ_ATTEMPTS = 4;
 interface StateLockOwner { pid: number; token?: string; text: string }
 const sameFile = (left: { dev: number; ino: number }, right: { dev: number; ino: number }): boolean =>
   left.dev === right.dev && left.ino === right.ino;
@@ -174,6 +176,7 @@ export class StateProvider implements FabricProvider {
   readonly #maxValueBytes: number;
   readonly #maxTotalBytes: number;
   #pendingLockCleanup: { dev: number; ino: number } | undefined;
+  #pendingTemporaryCleanup: { target: string; owned: OwnedFile } | undefined;
   #uncertainLock = false;
 
   constructor(root: string, options: {
@@ -372,70 +375,98 @@ export class StateProvider implements FabricProvider {
   }
 
   #read(): StateDocument {
-    this.#assertRoot();
-    let descriptor: number | undefined;
-    try {
-      const lexicalStats = fs.lstatSync(this.#file);
-      if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
-        throw new Error("state file is not a private regular file");
-      }
-      descriptor = fs.openSync(
-        this.#file,
-        fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
-      );
-      const stat = fs.fstatSync(descriptor);
-      if (!stat.isFile() || stat.nlink !== 1 ||
-          stat.dev !== lexicalStats.dev || stat.ino !== lexicalStats.ino) {
-        throw new Error("state file changed while it was being opened");
-      }
-      if (process.platform !== "win32") {
-        if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
-          throw new Error("state file must be owned by the current user");
-        }
-        if ((stat.mode & 0o077) !== 0) throw new Error("state file permissions must be private");
-      }
-      if (stat.size > Math.min(this.#maxTotalChars * 4, this.#maxTotalBytes)) throw new Error("state document exceeds configured bounds");
-      this.#assertRoot();
-      const text = fs.readFileSync(descriptor, "utf8");
-      this.#assertRoot();
-      if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
-      const parsed = JSON.parse(text) as unknown;
-      if (!isRecord(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) ||
-          parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) ||
-          (parsed.revision as number) < 0 || !isRecord(parsed.entries)) {
+    const text = this.#readText();
+    if (text === undefined) return emptyDocument();
+    if (text.length > this.#maxTotalChars || Buffer.byteLength(text, "utf8") > this.#maxTotalBytes) throw new Error("state document exceeds configured bounds");
+    const parsed = JSON.parse(text) as unknown;
+    if (!isRecord(parsed) || !hasExactKeys(parsed, ["schemaVersion", "revision", "entries"]) ||
+        parsed.schemaVersion !== 1 || !Number.isSafeInteger(parsed.revision) ||
+        (parsed.revision as number) < 0 || !isRecord(parsed.entries)) {
+      throw new Error("state file is malformed");
+    }
+    const entries = parsed.entries as Record<string, unknown>;
+    if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
+    const normalizedEntries = emptyEntries();
+    for (const [key, entry] of Object.entries(entries)) {
+      if (!validStateKey(key) || !isRecord(entry) ||
+          !hasExactKeys(entry, ["revision", "value", "updatedAt"]) ||
+          !Number.isSafeInteger(entry.revision) || (entry.revision as number) < 1 ||
+          (entry.revision as number) > (parsed.revision as number) ||
+          !Number.isSafeInteger(entry.updatedAt) || (entry.updatedAt as number) < 0) {
         throw new Error("state file is malformed");
       }
-      const entries = parsed.entries as Record<string, unknown>;
-      if (Object.keys(entries).length > this.#maxEntries) throw new Error("state entry limit reached");
-      const normalizedEntries = emptyEntries();
-      for (const [key, entry] of Object.entries(entries)) {
-        if (!validStateKey(key) || !isRecord(entry) ||
-            !hasExactKeys(entry, ["revision", "value", "updatedAt"]) ||
-            !Number.isSafeInteger(entry.revision) || (entry.revision as number) < 1 ||
-            (entry.revision as number) > (parsed.revision as number) ||
-            !Number.isSafeInteger(entry.updatedAt) || (entry.updatedAt as number) < 0) {
-          throw new Error("state file is malformed");
-        }
-        const value = JSON.stringify(entry.value);
-        if (value === undefined || value.length > this.#maxValueChars || Buffer.byteLength(value, "utf8") > this.#maxValueBytes) {
-          throw new Error("state value exceeds configured bounds");
-        }
-        normalizedEntries[key] = entry as unknown as StateEntry;
+      const value = JSON.stringify(entry.value);
+      if (value === undefined || value.length > this.#maxValueChars || Buffer.byteLength(value, "utf8") > this.#maxValueBytes) {
+        throw new Error("state value exceeds configured bounds");
       }
-      return {
-        schemaVersion: 1,
-        revision: parsed.revision as number,
-        entries: normalizedEntries,
-      };
-    } catch (error) {
-      if (errorCode(error) === "ENOENT") {
-        this.#assertRoot();
-        return emptyDocument();
-      }
-      throw error;
-    } finally {
-      if (descriptor !== undefined) fs.closeSync(descriptor);
+      normalizedEntries[key] = entry as unknown as StateEntry;
     }
+    return {
+      schemaVersion: 1,
+      revision: parsed.revision as number,
+      entries: normalizedEntries,
+    };
+  }
+
+  #readText(): string | undefined {
+    for (let attempt = 0; attempt < MAX_READ_ATTEMPTS; attempt++) {
+      this.#assertRoot();
+      let descriptor: number | undefined;
+      let observed = false;
+      try {
+        const lexicalStats = fs.lstatSync(this.#file);
+        observed = true;
+        if (!lexicalStats.isFile() || lexicalStats.isSymbolicLink() || lexicalStats.nlink !== 1) {
+          throw new Error("state file is not a private regular file");
+        }
+        descriptor = fs.openSync(
+          this.#file,
+          fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
+        );
+        const stat = fs.fstatSync(descriptor);
+        if (!stat.isFile() || stat.nlink > 1) {
+          throw new Error("state file is not a private regular file");
+        }
+        if (process.platform !== "win32") {
+          if (typeof process.getuid === "function" && stat.uid !== process.getuid()) {
+            throw new Error("state file must be owned by the current user");
+          }
+          if ((stat.mode & 0o077) !== 0) throw new Error("state file permissions must be private");
+        }
+        if (!sameFile(stat, lexicalStats) || stat.nlink === 0) continue;
+        const maxBytes = Math.min(this.#maxTotalChars * 4, this.#maxTotalBytes);
+        if (stat.size > maxBytes) throw new Error("state document exceeds configured bounds");
+        this.#assertRoot();
+        const chunks: Buffer[] = [];
+        let bytes = 0;
+        while (bytes <= maxBytes) {
+          const buffer = Buffer.allocUnsafe(Math.min(65_536, maxBytes + 1 - bytes));
+          let count = 0;
+          while (count < buffer.length) {
+            const read = fs.readSync(descriptor, buffer, count, buffer.length - count, null);
+            if (read === 0) break;
+            count += read;
+          }
+          bytes += count;
+          if (bytes > maxBytes) throw new Error("state document exceeds configured bounds");
+          if (count > 0) chunks.push(buffer.subarray(0, count));
+          if (count < buffer.length) break;
+        }
+        this.#assertRoot();
+        return Buffer.concat(chunks, bytes).toString("utf8");
+      } catch (error) {
+        if (errorCode(error) === "ENOENT") {
+          this.#assertRoot();
+          if (observed) continue;
+          return undefined;
+        }
+        throw error;
+      } finally {
+        if (descriptor !== undefined) fs.closeSync(descriptor);
+      }
+    }
+    this.#assertRoot();
+    throw new Error("state file changed while it was being opened");
   }
 
   /** Publish one state document atomically: exclusive owned temporary, write +
@@ -455,21 +486,28 @@ export class StateProvider implements FabricProvider {
       `.state-${process.pid}-${randomBytes(8).toString("hex")}.tmp`,
     );
     const owned: OwnedFile = { created: false };
+    const directory = this.#directoryOptions(rootFd);
     try {
-      initializeOwnedFile(temporary, owned, (descriptor) => {
+      initializePinnedStateFile(directory, path.basename(temporary), owned, (descriptor) => {
         this.#assertRoot();
         fs.writeFileSync(descriptor, text);
         fs.fchmodSync(descriptor, 0o600);
         fs.fsyncSync(descriptor);
       });
       beforeCommit();
-      const current = fs.lstatSync(temporary);
+      const current = fs.lstatSync(pinnedStatePath(directory, path.basename(temporary)) ?? temporary, { bigint: true });
       if (!owned.identity || !current.isFile() || current.isSymbolicLink() ||
-          current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
+          current.nlink !== 1n || !sameBigFile(current, owned.identity)) {
         throw new Error("uncertain state temporary publication: replacement preserved");
       }
-      fs.renameSync(temporary, this.#file);
-      observe.published();
+      let destination: fs.BigIntStats | undefined;
+      try { destination = fs.lstatSync(pinnedStatePath(directory, "state.json") ?? this.#file, { bigint: true }); }
+      catch (error) { if (errorCode(error) !== "ENOENT") throw error; }
+      beforeCommit();
+      publishPinnedStateFile(directory, path.basename(temporary), "state.json", pinnedEntryIdentity(current), destination ? pinnedEntryIdentity(destination) : undefined, () => {
+        owned.created = false;
+        observe.published();
+      });
       // The barrier must apply to the directory that actually received the
       // rename: re-verify the lexical root and the pinned descriptor before
       // flushing the directory entry.
@@ -480,7 +518,7 @@ export class StateProvider implements FabricProvider {
       }
       if (process.platform !== "win32") {
         fs.fsyncSync(rootFd);
-        observe.durable();
+        if (this.directoryBarrier === "fsync") observe.durable();
       }
       // Platforms without a directory fsync contract leave the mutation
       // published-but-unconfirmed; the barrier capability is reported
@@ -488,19 +526,23 @@ export class StateProvider implements FabricProvider {
     } catch (error) {
       if (owned.created) {
         try {
-          if (!owned.identity) throw new Error("uncertain state temporary ownership; operator recovery required");
-          try {
-            this.#assertRoot();
-            const current = fs.lstatSync(temporary);
-            if (!current.isFile() || current.isSymbolicLink() || current.dev !== owned.identity.dev || current.ino !== owned.identity.ino) {
-              throw new Error("uncertain state temporary cleanup: replacement preserved");
-            }
-            fs.rmSync(temporary);
-          } catch (cleanup) { if (errorCode(cleanup) !== "ENOENT") throw cleanup; }
-        } catch (cleanup) { throw new AggregateError([error, cleanup], "state write and temporary cleanup failed", { cause: error }); }
+          this.#removeTemporary(temporary, owned, rootFd);
+        } catch (cleanup) {
+          this.#pendingTemporaryCleanup = { target: temporary, owned };
+          throw new AggregateError([error, cleanup], "state write and temporary cleanup failed", { cause: error });
+        }
       }
       throw error;
     }
+  }
+
+  #removeTemporary(target: string, owned: OwnedFile, rootFd: number): void {
+    if (!owned.identity) throw new Error("uncertain state temporary ownership identity unavailable; operator recovery required");
+    this.#removeNamedEntry(owned.identity, target, rootFd);
+  }
+
+  #directoryOptions(rootFd: number) {
+    return { fd: rootFd, cwd: this.#root, parent: pinnedDirectoryIdentity(fs.fstatSync(rootFd, { bigint: true })), check: () => this.#assertRoot() };
   }
 
   #openRoot(): number {
@@ -529,8 +571,10 @@ export class StateProvider implements FabricProvider {
    * pathname and its legacy semantics. */
   #removeNamedEntry(identity: { dev: number; ino: number }, target: string, rootFd: number, strictMissing = false): void {
     const name = path.basename(target);
+    const directory = this.#directoryOptions(rootFd);
+    const pinned = pinnedStatePath(directory, name);
     let before: fs.BigIntStats;
-    try { before = fs.lstatSync(target, { bigint: true }); }
+    try { before = fs.lstatSync(pinned ?? target, { bigint: true }); }
     catch (error) {
       if (errorCode(error) !== "ENOENT") throw error;
       this.#assertRoot();
@@ -545,24 +589,19 @@ export class StateProvider implements FabricProvider {
       return;
     }
     if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || !sameBigFile(before, identity)) {
-      throw new Error("uncertain state lock cleanup: replacement lock preserved");
+      throw new Error("uncertain state entry cleanup: replacement preserved");
     }
     this.#assertRoot();
-    if (process.platform === "linux") {
-      const alias = `/proc/self/fd/${rootFd}`;
-      const pinned = fs.statSync(`${alias}/.`, { bigint: true });
-      if (!pinned.isDirectory() || !sameBigFile(pinned, this.#rootIdentity)) {
-        throw new Error("unsafe state directory descriptor traversal");
-      }
-      fs.rmSync(`${alias}/${name}`);
+    if (pinned !== undefined) {
+      const current = fs.lstatSync(pinned, { bigint: true });
+      if (!current.isFile() || current.nlink !== 1n || !sameBigFile(current, identity)) throw new Error("uncertain state entry cleanup: replacement preserved");
+      fs.rmSync(pinned);
+      this.#assertRoot();
       return;
     }
-    if (process.platform === "win32") { fs.rmSync(target); return; }
+    if (process.platform === "win32") throw new Error("descriptor-anchored state cleanup is unavailable");
     runPinnedDirectoryOperation({
-      fd: rootFd,
-      cwd: this.#root,
-      parent: pinnedDirectoryIdentity(fs.fstatSync(rootFd, { bigint: true })),
-      check: () => this.#assertRoot(),
+      ...directory,
       operation: "unlink",
       name,
       expected: pinnedEntryIdentity(before),
@@ -659,7 +698,7 @@ export class StateProvider implements FabricProvider {
     let reclaimFailed = false;
     try {
       try {
-        initializeOwnedFile(claim, owned, (fd) => {
+        initializePinnedStateFile(this.#directoryOptions(rootFd), path.basename(claim), owned, (fd) => {
           fs.writeFileSync(fd, `${JSON.stringify({ pid: process.pid, ownerToken: owner.token })}\n`);
           fs.fsyncSync(fd);
         });
@@ -711,13 +750,27 @@ export class StateProvider implements FabricProvider {
     let identity: { dev: number; ino: number } | undefined;
     let operationError: unknown;
     let failed = false;
+    let retry = false;
     try {
       while (!identity) {
         // A sibling invocation can lose its lock while this caller awaits
         // contention. Admission before the first await is not sufficient.
         if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
         throwIfAbortedOrExpired(context.signal, context.deadline);
+        if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
+        if (retry) {
+          await delay(Math.min(10, Math.max(0, lockDeadline - performance.now())));
+          throwIfAbortedOrExpired(context.signal, context.deadline);
+          if (this.#uncertainLock) throw new Error("uncertain state lock ownership; operator recovery required");
+          if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
+        }
+        retry = true;
         this.#assertRoot();
+        if (this.#pendingTemporaryCleanup) {
+          const { target, owned } = this.#pendingTemporaryCleanup;
+          this.#removeTemporary(target, owned, rootFd);
+          this.#pendingTemporaryCleanup = undefined;
+        }
         // Only a completed operation can leave this deferred responsibility.
         // Retry before acquisition, including callers already waiting here.
         if (this.#pendingLockCleanup) {
@@ -727,7 +780,7 @@ export class StateProvider implements FabricProvider {
         try {
           const owned: OwnedFile = { created: false };
           try {
-            initializeOwnedFile(this.#lock, owned, (descriptor) => {
+            initializePinnedStateFile(this.#directoryOptions(rootFd), LOCK_NAME, owned, (descriptor) => {
               this.#assertRoot();
               fs.writeFileSync(descriptor, `${JSON.stringify({ schemaVersion: 2, kind: STATE_LOCK_KIND, process: { pid: process.pid }, token: randomBytes(16).toString("hex"), acquiredAt: Date.now() })}\n`);
               fs.fsyncSync(descriptor);
@@ -750,10 +803,9 @@ export class StateProvider implements FabricProvider {
             if (owner === undefined) continue;
             if (!processIsAlive(owner.pid) && this.#reclaimStaleLock(stat, owner, rootFd)) continue;
           }
-          if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
-          await delay(10);
         }
       }
+      if (performance.now() >= lockDeadline) throw new Error("timed out waiting for state mutation lock");
       throwIfAbortedOrExpired(context.signal, context.deadline);
       const acquiredIdentity = identity;
       const assertOwnership = (): void => { this.#assertRoot(); this.#assertLock(acquiredIdentity); };

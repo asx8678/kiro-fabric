@@ -245,8 +245,8 @@ export const normalizeFabricConfig = (
   if (privacy.mode !== undefined && privacy.mode !== "standard" && privacy.mode !== "restricted-web") {
     throw new Error("config privacy.mode must be \"standard\" or \"restricted-web\"");
   }
-  const timeoutMs = integer(executor.timeoutMs, defaults.executor.timeoutMs, 1, 900_000);
-  const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, timeoutMs, 900_000);
+  const maxTimeoutMs = integer(executor.maxTimeoutMs, defaults.executor.maxTimeoutMs, 1, 900_000);
+  const timeoutMs = integer(executor.timeoutMs, Math.min(defaults.executor.timeoutMs, maxTimeoutMs), 1, maxTimeoutMs);
   const resultFormat = executor.resultFormat === "json" || executor.resultFormat === "text" || executor.resultFormat === "auto"
     ? executor.resultFormat
     : defaults.executor.resultFormat;
@@ -333,7 +333,7 @@ export const loadFabricConfig = (configFile: string, defaults = DEFAULT_FABRIC_C
     }
     descriptor = fs.openSync(
       configFile,
-      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0),
+      fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0) | (fs.constants.O_NONBLOCK ?? 0),
     );
     const stats = fs.fstatSync(descriptor, { bigint: true });
     if (!sameConfigFile(lexicalStats, stats)) {
