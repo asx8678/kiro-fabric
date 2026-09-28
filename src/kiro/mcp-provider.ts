@@ -1,7 +1,12 @@
 import { catalogWeight } from "../core/catalog-resources.js";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
+import { PassThrough } from "node:stream";
+import { isMainThread, parentPort, Worker, workerData } from "node:worker_threads";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { CallToolResultSchema, ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Runtime, ServerDefinition, ServerToolInfo } from "mcporter";
 import { runAbortable, settleWithin, throwIfAbortedOrExpired } from "../async-settlement.js";
 import type { FabricMcpConfig } from "../config.js";
@@ -97,6 +102,8 @@ const MAX_MCP_ARGUMENT_FILES = 32;
 const MAX_MCP_ARGUMENT_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_MCP_ARGUMENT_FILES_TOTAL_BYTES = 64 * 1024 * 1024;
 const MAX_EXPLICIT_MCP_CONFIG_BYTES = 256 * 1024;
+const MAX_MCP_STDERR_BYTES = 64 * 1024;
+const MCP_WORKER_MARKER = "kiro-fabric-mcp-connection-v1";
 const fileDigest = (file: string, maximumBytes = MAX_MCP_TRANSPORT_FILE_BYTES): string => {
   const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW ?? 0));
   try {
@@ -179,7 +186,7 @@ const readExplicitMcpConfiguration = (configPath: string): ExplicitMcpConfigurat
     throw new Error("MCP configuration must contain only mcpServers and imports: []");
   }
   const names = Object.keys(parsed.mcpServers);
-  if (names.length > 128 || names.some((name) => !name || name.length > 256)) throw new Error("MCP configuration server names exceed product bounds");
+  if (names.length > 128 || names.some((name) => !name || name.length > 256 || name !== name.trim())) throw new Error("MCP configuration server names must be non-empty, unpadded and within product bounds");
   return {
     names: new Set(names),
     digest: createHash("sha256").update(bytes).digest("hex"),
@@ -291,11 +298,40 @@ const assertNoAmbientMcporterOptions = (): void => {
   const option = AMBIENT_MCPORTER_OPTIONS.find((name) => process.env[name] !== undefined);
   if (option) throw new Error(`Ambient mcporter option is not allowed in the Fabric runtime: ${option}`);
 };
-const executablePath = (command: string, cwd = process.cwd()): string => {
+const configuredStdioPath = (server: ServerDefinition): string => {
+  if (server.env?.PATH === undefined) return process.env.PATH ?? "";
+  const environment = { ...process.env };
+  const resolve = (raw: string): string => {
+    if (/\$\{env:[^}]*\}/u.test(raw)) throw new Error("Unsupported MCP environment placeholder");
+    const whole = /^\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-|:|-)?([^}]*)\}$/u.exec(raw);
+    if (whole) return environment[whole[1]!] || whole[2]!;
+    if (raw.startsWith("$env:")) {
+      const value = environment[raw.slice(5)];
+      if (value === undefined) throw new Error("MCP PATH references an unavailable environment variable");
+      return value;
+    }
+    if (!raw.startsWith("$")) return raw;
+    return raw.replace(/\\?\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-(.*?))?\}/gu, (_match, name: string, fallback: string | undefined) => {
+      const value = environment[name];
+      if (value) return value;
+      if (fallback !== undefined) return fallback;
+      if (value === undefined) throw new Error("MCP PATH references an unavailable environment variable");
+      return value;
+    });
+  };
+  for (const [name, raw] of Object.entries(server.env)) {
+    if (!environment[name]) {
+      const value = resolve(raw);
+      if (value !== "") environment[name] = value;
+    }
+  }
+  return resolve(server.env.PATH) || environment.PATH || "";
+};
+const executablePath = (command: string, cwd = process.cwd(), searchPath = process.env.PATH ?? ""): string => {
   if (command.includes("/") || command.includes("\\")) {
     return fs.realpathSync(path.isAbsolute(command) ? command : path.resolve(cwd, command));
   }
-  for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
+  for (const directory of searchPath.split(path.delimiter)) {
     if (!directory) continue;
     const candidate = path.resolve(cwd, directory, command);
     try { if (fs.statSync(candidate).isFile()) return fs.realpathSync(candidate); } catch { /* continue */ }
@@ -333,7 +369,7 @@ const boundArgumentStatKey = (entry: ResolvedStdioArgumentFile): string => {
 const canonicalizeStdioTransport = (server: ServerDefinition): ServerDefinition => {
   if (server.command.kind !== "stdio") return server;
   const cwd = fs.realpathSync(server.command.cwd);
-  const command = executablePath(server.command.command, cwd);
+  const command = executablePath(server.command.command, cwd, configuredStdioPath(server));
   return {
     ...server,
     command: { ...server.command, command, cwd },
@@ -553,6 +589,218 @@ const normalizeMcpResult = (result: unknown, projection: ReturnType<typeof resul
 type McpRuntimeFactory = () => Promise<Runtime>;
 const catalogTicket = () => ({ current: true, isCurrent() { return this.current; } });
 type ServerLease = { quiescence: Promise<void> };
+type McpConnection = Awaited<ReturnType<Runtime["connect"]>>;
+type McpWorkerRequest = { id: number; method: "connect" | "request" | "callTool" | "close"; args: unknown[] };
+type McpWorkerResponse = { id: number; result?: unknown; error?: { message: string; code?: number | string } };
+
+const workerRequestOptions = (options: unknown): unknown => {
+  if (!isRecord(options)) return options;
+  const copy = { ...options };
+  delete copy.signal;
+  return copy;
+};
+
+class IsolatedMcpConnection {
+  readonly #worker: Worker;
+  readonly #definition: ServerDefinition;
+  readonly #pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+  #nextId = 0;
+  #failure: Error | undefined;
+  #connection: Promise<McpConnection> | undefined;
+  #closing: Promise<void> | undefined;
+  #closed = false;
+
+  constructor(definition: ServerDefinition, cwd: string) {
+    this.#definition = definition;
+    const loader = import.meta.url.endsWith(".ts") ? `
+      const { registerHooks } = await import("node:module");
+      const { existsSync } = await import("node:fs");
+      registerHooks({ resolve(specifier, context, next) {
+        if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL?.endsWith(".ts")) {
+          const source = new URL(specifier.slice(0, -3) + ".ts", context.parentURL);
+          if (existsSync(source)) return next(source.href, context);
+        }
+        return next(specifier, context);
+      } });
+    ` : "";
+    this.#worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(`${loader}\nawait import(${JSON.stringify(import.meta.url)});`)}`), {
+      workerData: {
+        marker: MCP_WORKER_MARKER,
+        cwd,
+        definition: definition.command.kind === "http"
+          ? { ...definition, command: { ...definition.command, url: definition.command.url.href } }
+          : definition,
+      },
+      stdout: true,
+      stderr: true,
+      execArgv: [],
+    });
+    this.#worker.stdout.resume();
+    this.#worker.stderr.pipe(process.stderr, { end: false });
+    this.#worker.on("message", (response: McpWorkerResponse) => {
+      const pending = this.#pending.get(response.id);
+      if (!pending) return;
+      this.#pending.delete(response.id);
+      if (response.error) {
+        const error = new Error(response.error.message);
+        if (response.error.code !== undefined) Object.assign(error, { code: response.error.code });
+        pending.reject(error);
+      } else pending.resolve(response.result);
+    });
+    this.#worker.on("error", (error) => this.#fail(error instanceof Error ? error : new Error("MCP connection worker failed", { cause: error })));
+    this.#worker.on("exit", (code) => {
+      if (!this.#closed) this.#fail(new Error(`MCP connection worker exited before cleanup completed (${code})`));
+    });
+  }
+
+  #fail(error: Error): void {
+    this.#failure ??= error;
+    for (const pending of this.#pending.values()) pending.reject(this.#failure);
+    this.#pending.clear();
+  }
+
+  #request(method: McpWorkerRequest["method"], args: unknown[]): Promise<unknown> {
+    if (this.#failure) return Promise.reject(this.#failure);
+    if (this.#closed || (this.#closing && method !== "close")) return Promise.reject(new Error("MCP connection worker is closing"));
+    const id = this.#nextId++;
+    return new Promise((resolve, reject) => {
+      this.#pending.set(id, { resolve, reject });
+      try { this.#worker.postMessage({ id, method, args } satisfies McpWorkerRequest); }
+      catch (error) {
+        this.#pending.delete(id);
+        reject(error);
+      }
+    });
+  }
+
+  connect(options: Parameters<Runtime["connect"]>[1]): Promise<McpConnection> {
+    return this.#connection ??= this.#request("connect", [options]).then((era) => ({
+      client: {
+        getProtocolEra: () => era,
+        request: (request: unknown, requestOptions: unknown) => this.#request("request", [request, workerRequestOptions(requestOptions)]),
+        callTool: (params: unknown, requestOptions: unknown) => this.#request("callTool", [params, workerRequestOptions(requestOptions)]),
+      },
+      transport: { close: () => this.close() },
+      definition: this.#definition,
+    }) as unknown as McpConnection);
+  }
+
+  close(): Promise<void> {
+    return this.#closing ??= this.#request("close", []).then(async () => {
+      this.#closed = true;
+      await this.#worker.terminate();
+    });
+  }
+}
+
+const isolateRuntimeConnections = (runtime: Runtime, cwd: string): Runtime => {
+  const connections = new Map<string, IsolatedMcpConnection>();
+  const closeRuntime = runtime.close.bind(runtime);
+  runtime.connect = async (server, options) => {
+    let connection = connections.get(server);
+    if (!connection) {
+      connection = new IsolatedMcpConnection(runtime.getDefinition(server), cwd);
+      connections.set(server, connection);
+    }
+    return connection.connect(options);
+  };
+  runtime.close = async (server) => {
+    const selected = server === undefined ? [...connections.entries()] : [...connections.entries()].filter(([name]) => name === server);
+    const results = await Promise.allSettled([
+      ...selected.map(async ([name, connection]) => {
+        await connection.close();
+        if (connections.get(name) === connection) connections.delete(name);
+      }),
+      closeRuntime(server),
+    ]);
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failures.length) throw new AggregateError(failures.map((result) => result.reason), "MCP connection worker cleanup failed");
+  };
+  return runtime;
+};
+
+const runMcpConnectionWorker = async (): Promise<never> => {
+  const port = parentPort!;
+  const subprocesses = createRequire(import.meta.url)("node:child_process") as typeof import("node:child_process");
+  const spawn = subprocesses.spawn;
+  const children = new Set<ReturnType<typeof spawn>>();
+  subprocesses.spawn = ((...args: Parameters<typeof spawn>) => {
+    const child = spawn(...args);
+    children.add(child);
+    child.once("close", () => children.delete(child));
+    const stderr = child.stderr;
+    if (stderr) {
+      const diagnostics = new PassThrough();
+      const tail = Buffer.alloc(MAX_MCP_STDERR_BYTES);
+      let offset = 0;
+      let length = 0;
+      stderr.on("data", (chunk: Buffer | string) => {
+        const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        const retained = buffer.subarray(Math.max(0, buffer.length - tail.length));
+        const first = Math.min(retained.length, tail.length - offset);
+        retained.copy(tail, offset, 0, first);
+        retained.copy(tail, 0, first);
+        offset = (offset + retained.length) % tail.length;
+        length = Math.min(tail.length, length + retained.length);
+      });
+      stderr.on("error", () => undefined);
+      diagnostics.on("error", () => undefined);
+      Object.assign(child, { stderr: diagnostics });
+      child.stdio[2] = diagnostics;
+      child.once("close", () => {
+        const start = (offset + tail.length - length) % tail.length;
+        const first = Math.min(length, tail.length - start);
+        diagnostics.end(Buffer.concat([tail.subarray(start, start + first), tail.subarray(0, length - first)], length));
+      });
+    }
+    return child;
+  }) as typeof spawn;
+  syncBuiltinESMExports();
+  const { createRuntime } = await import("mcporter");
+  const definition = workerData.definition as ServerDefinition;
+  const server = definition.command.kind === "http"
+    ? { ...definition, command: { ...definition.command, url: new URL(String(definition.command.url)) } }
+    : definition;
+  const runtime = await createRuntime({ rootDir: workerData.cwd, servers: [server], clientInfo: { name: "kiro-fabric", version: "1" } });
+  let connection: McpConnection | undefined;
+  let closing = false;
+  const active = new Set<Promise<void>>();
+  port.on("message", (request: McpWorkerRequest) => {
+    const operation = (async (): Promise<unknown> => {
+      if (request.method === "close") {
+        closing = true;
+        await runtime.close();
+        await Promise.allSettled([...active]);
+        if (children.size) throw new Error("MCP transport cleanup left active child processes");
+        return null;
+      }
+      if (closing) throw new Error("MCP connection worker is closing");
+      if (request.method === "connect") {
+        connection = await runtime.connect(server.name, request.args[0] as Parameters<Runtime["connect"]>[1]);
+        return connection.client.getProtocolEra() ?? "legacy";
+      }
+      if (!connection) throw new Error("MCP connection worker is not connected");
+      const result = request.method === "request"
+        ? await connection.client.request(...request.args as Parameters<McpConnection["client"]["request"]>)
+        : await connection.client.callTool(...request.args as Parameters<McpConnection["client"]["callTool"]>);
+      assertFabricJsonBudget(result);
+      return result;
+    })().then((result) => {
+      port.postMessage({ id: request.id, result } satisfies McpWorkerResponse);
+    }, (error: unknown) => {
+      const code = isRecord(error) && (typeof error.code === "number" || typeof error.code === "string") ? error.code : undefined;
+      port.postMessage({ id: request.id, error: {
+        message: (error instanceof Error ? error.message : "MCP connection worker operation failed").slice(0, 2_000),
+        ...(code === undefined ? {} : { code }),
+      } } satisfies McpWorkerResponse);
+    });
+    if (request.method !== "close") {
+      active.add(operation);
+      void operation.finally(() => active.delete(operation)).catch(() => undefined);
+    }
+  });
+  return new Promise<never>(() => undefined);
+};
 
 export class KiroMcpProvider implements FabricProvider {
   readonly name = "mcp";
@@ -566,6 +814,9 @@ export class KiroMcpProvider implements FabricProvider {
   #runtimeCreation: Promise<Runtime> | undefined;
   #loadedConfigDigest: string | null | undefined;
   readonly #serverTails = new Map<string, Promise<void>>();
+  readonly #connectionDigests = new Map<string, string>();
+  readonly #serverFailures = new Map<string, Error>();
+  readonly #serverClosures = new Map<string, Promise<void>>();
   readonly #snapshotCache = new Map<string, { envDigest: string; statKey: string; snapshot: McpTransportSnapshot }>();
   readonly #argumentFileBindings = new Map<string, ResolvedStdioArgumentFile[]>();
   #closed = false;
@@ -690,7 +941,7 @@ export class KiroMcpProvider implements FabricProvider {
         servers = servers.map(canonicalizeStdioTransport);
         this.#loadedConfigDigest = explicit.digest;
       }
-      return createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } });
+      return isolateRuntimeConnections(await createRuntime({ rootDir: this.#cwd, servers, clientInfo: { name: "kiro-fabric", version: "1" } }), this.#cwd);
     });
   }
 
@@ -704,7 +955,7 @@ export class KiroMcpProvider implements FabricProvider {
     if (actionName !== "$call" && actionName !== "$tools" && actionName !== "$describe") return { ...args };
     const server = typeof args.server === "string" ? args.server : "";
     const tool = typeof args.tool === "string" ? args.tool : "";
-    if (!server || ((actionName === "$call" || actionName === "$describe") && !tool)) {
+    if (!server || server !== server.trim() || ((actionName === "$call" || actionName === "$describe") && !tool)) {
       throw new Error("MCP call requires non-empty server/tool strings");
     }
     remoteComponent(server);
@@ -751,6 +1002,7 @@ export class KiroMcpProvider implements FabricProvider {
       const servers = runtime.listServers();
       if (servers.length > 128) throw new Error("Configured MCP server limit exceeded");
       return servers.map((name) => {
+        if (name !== name.trim()) throw new Error("Configured MCP server names must not contain surrounding whitespace");
         remoteComponent(name);
         const definition = runtime.getDefinition(name);
         return {
@@ -769,7 +1021,7 @@ export class KiroMcpProvider implements FabricProvider {
     const toolArgs = args.args === undefined ? {} : args.args;
     const expectedDescriptorDigest = args.expectedDescriptorDigest;
     const projection = actionName === "$call" ? resultProjection(args.projection) : "full";
-    if (!server || ((actionName === "$call" || actionName === "$describe") && !toolName) ||
+    if (!server || server !== server.trim() || ((actionName === "$call" || actionName === "$describe") && !toolName) ||
         (actionName === "$call" && (!isRecord(toolArgs) ||
           (expectedDescriptorDigest !== undefined &&
             (typeof expectedDescriptorDigest !== "string" || !/^[a-f0-9]{64}$/u.test(expectedDescriptorDigest)))))) {
@@ -815,7 +1067,7 @@ export class KiroMcpProvider implements FabricProvider {
         // the configured limit.
         const actionDeadline = performance.now() + this.#config.callTimeoutMs;
         const discoveryBudget = this.#remainingCallBudget(actionDeadline);
-        const rawTools = await this.#bounded(
+        const discovery = await this.#bounded(
           runtime,
           server,
           this.#listRawTools(runtime, server, actionDeadline, signal),
@@ -824,7 +1076,7 @@ export class KiroMcpProvider implements FabricProvider {
           discoveryBudget,
           lease,
         );
-        const tools = freezeInventory(structuredClone(normalizeServerTools(rawTools)));
+        const tools = freezeInventory(structuredClone(normalizeServerTools(discovery.tools)));
         // Reserve all lazy projection/container overhead before remote dispatch.
         const weight = catalogWeight(tools);
         weight.bytes = weight.bytes * 2 + tools.reduce((n, tool) => n + remoteRef(server, tool.name).length * 4 + 1024, 0);
@@ -895,18 +1147,21 @@ export class KiroMcpProvider implements FabricProvider {
         const result = await this.#bounded(
           runtime,
           server,
-          runtime.callTool(server, toolName, {
-            args: toolArgs as Record<string, unknown>,
-            timeoutMs: callBudget,
-            disableOAuth: this.#config.disableOAuth,
-          }),
+          this.#callTool(runtime, server, discovery.connection, selected, toolArgs as Record<string, unknown>, callBudget, signal),
           signal,
           "tool call",
           callBudget,
           lease,
         );
         throwIfAbortedOrExpired(signal, context.deadline);
-        return normalizeMcpResult(result, projection);
+        const normalized = normalizeMcpResult(result, projection);
+        if (selected.outputSchema !== undefined && isRecord(result) && Array.isArray(result.content)) {
+          if (result.structuredContent === undefined) throw new Error("MCP tool has an output schema but did not return structured content");
+          const validation = validateSchemaValue(selected.outputSchema, result.structuredContent);
+          if (validation.status === "invalid") throw new Error(`MCP tool output does not match its schema: ${validation.message}`);
+        }
+        this.#remainingCallBudget(actionDeadline, true);
+        return normalized;
       } catch (error) {
         this.#evict(server);
         if (error instanceof FabricRepairError) throw error;
@@ -956,11 +1211,18 @@ export class KiroMcpProvider implements FabricProvider {
   }
 
   #disposeRuntime(runtime: Runtime): Promise<void> {
-    return this.#runtimeDisposal ??= Promise.resolve().then(() => runtime.close());
+    return this.#runtimeDisposal ??= Promise.resolve().then(async () => {
+      const results = await Promise.allSettled([...this.#serverClosures.values(), Promise.resolve().then(() => runtime.close())]);
+      const failures = results.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+      if (failures.length) throw new AggregateError(failures.map((result) => result.reason), "MCP transport cleanup failed");
+    });
   }
 
   #transportSnapshot(runtime: Runtime, server: string): McpTransportSnapshot {
-    try { return this.#currentTransportSnapshot(runtime, server); }
+    try {
+      this.#assertServerUsable(server);
+      return this.#currentTransportSnapshot(runtime, server);
+    }
     catch (error) { this.#evict(server); throw error; }
   }
 
@@ -979,7 +1241,7 @@ export class KiroMcpProvider implements FabricProvider {
       // Re-resolve at every approval/use boundary. The stat-key cache below
       // avoids rehashing unchanged bytes, but never pins a stale symlink/PATH
       // resolution that differs from the command mcporter is about to use.
-      executable = executablePath(definition.command.command, definition.command.cwd);
+      executable = executablePath(definition.command.command, definition.command.cwd, configuredStdioPath(definition));
       argumentFiles = this.#boundArgumentFiles(server, definition.command);
     }
     const argumentStatKey = argumentFiles.map(boundArgumentStatKey).join("|");
@@ -1049,7 +1311,7 @@ export class KiroMcpProvider implements FabricProvider {
     };
     const details = definition.command.kind === "stdio"
       ? (() => {
-          const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd);
+          const executable = resolvedExecutable ?? executablePath(definition.command.command, definition.command.cwd, configuredStdioPath(definition));
           const stats = fs.statSync(executable, { bigint: true });
           const configured = definition.env ?? {};
           const arguments_ = [...(definition.command.args ?? [])];
@@ -1117,10 +1379,45 @@ export class KiroMcpProvider implements FabricProvider {
     }
   }
 
-  async #listRawTools(runtime: Runtime, server: string, deadline: number, signal?: AbortSignal): Promise<unknown> {
+  async #callTool(
+    runtime: Runtime,
+    server: string,
+    connection: Awaited<ReturnType<Runtime["connect"]>>,
+    tool: NormalizedServerTool,
+    args: Record<string, unknown>,
+    timeout: number,
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const options = { timeout, maxTotalTimeout: timeout, resetTimeoutOnProgress: true, signal };
+    const params = { name: tool.name, arguments: args };
+    if (typeof connection.client.request !== "function") {
+      return runtime.callTool(server, tool.name, { args, timeoutMs: timeout, disableOAuth: this.#config.disableOAuth });
+    }
+    try {
+      return await (typeof connection.client.getProtocolEra === "function"
+        ? connection.client.callTool(params, { ...options, toolDefinition: { name: tool.name, inputSchema: tool.inputSchema as { type: "object" } } })
+        : (connection.client as unknown as Client).request({ method: "tools/call", params }, CallToolResultSchema, options));
+    } catch (error) {
+      try { await this.#closeServer(runtime, server); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], "MCP tool call and transport cleanup failed", { cause: error }); }
+      throw error;
+    }
+  }
+
+  async #listRawTools(runtime: Runtime, server: string, deadline: number, signal?: AbortSignal): Promise<{
+    tools: unknown[];
+    connection: Awaited<ReturnType<Runtime["connect"]>>;
+  }> {
     try {
       throwIfAbortedOrExpired(signal);
       this.#remainingCallBudget(deadline);
+      const snapshot = this.#transportSnapshot(runtime, server);
+      const connected = this.#connectionDigests.get(server);
+      if (connected !== undefined && connected !== snapshot.digest) await this.#closeServer(runtime, server);
+      throwIfAbortedOrExpired(signal);
+      this.#assertTransportSnapshot(runtime, server, snapshot);
+      this.#remainingCallBudget(deadline);
+      this.#connectionDigests.set(server, snapshot.digest);
       const connection = await runtime.connect(server, {
         disableOAuth: this.#config.disableOAuth,
         oauthTimeoutMs: this.#remainingCallBudget(deadline),
@@ -1133,12 +1430,18 @@ export class KiroMcpProvider implements FabricProvider {
         this.#remainingCallBudget(deadline);
         if (page >= MAX_MCP_DISCOVERY_PAGES) throw new Error("Configured MCP discovery page limit exceeded");
         const remaining = this.#remainingCallBudget(deadline);
-        const response = await connection.client.listTools(cursor === undefined ? undefined : { cursor }, {
+        const options = {
           timeout: remaining,
           resetTimeoutOnProgress: true,
           maxTotalTimeout: remaining,
           ...(signal ? { signal } : {}),
-        });
+        };
+        const params = cursor === undefined ? undefined : { cursor };
+        const response = typeof connection.client.request !== "function"
+          ? await connection.client.listTools(params, options)
+          : typeof connection.client.getProtocolEra === "function"
+            ? await connection.client.request({ method: "tools/list", ...(params ? { params } : {}) }, options)
+            : await (connection.client as unknown as Client).request({ method: "tools/list", ...(params ? { params } : {}) }, ListToolsResultSchema, options);
         throwIfAbortedOrExpired(signal);
         this.#remainingCallBudget(deadline);
         if (!Array.isArray(response.tools) || tools.length + response.tools.length > MAX_MCP_DISCOVERY_TOOLS) {
@@ -1157,19 +1460,42 @@ export class KiroMcpProvider implements FabricProvider {
       // Validate the complete raw inventory before applying configured filters.
       normalizeServerTools(tools);
       const definition = runtime.getDefinition(server);
-      return tools.filter((tool) => {
+      const filtered = tools.filter((tool) => {
         if (!isRecord(tool) || typeof tool.name !== "string") return true;
         if (definition.allowedTools !== undefined) return definition.allowedTools.includes(tool.name);
         if (definition.blockedTools !== undefined) return !definition.blockedTools.includes(tool.name);
         return true;
       });
+      return { tools: filtered, connection };
     } catch (error) {
       // Match mcporter's public listTools recovery behavior: a failed raw MCP
       // listing invalidates the cached connection before a later retry.
       this.#evict(server);
-      try { await runtime.close(server); } catch { /* retain the discovery error */ }
+      try { await this.#closeServer(runtime, server); }
+      catch (cleanup) { throw new AggregateError([error, cleanup], "MCP discovery and transport cleanup failed", { cause: error }); }
       throw error;
     }
+  }
+
+  #assertServerUsable(server: string): void {
+    const failure = this.#serverFailures.get(server);
+    if (failure) throw failure;
+  }
+
+  #closeServer(runtime: Runtime, server: string): Promise<void> {
+    const existing = this.#serverClosures.get(server);
+    if (existing) return existing;
+    const closing = Promise.resolve().then(() => runtime.close(server)).then(() => {
+      this.#connectionDigests.delete(server);
+      if (this.#serverClosures.get(server) === closing) this.#serverClosures.delete(server);
+    }, (cause: unknown) => {
+      const error = new Error(`MCP transport cleanup failed for ${server}; restart the provider before calling this server`, { cause });
+      this.#serverFailures.set(server, error);
+      this.#evict(server);
+      throw error;
+    });
+    this.#serverClosures.set(server, closing);
+    return closing;
   }
 
   async #getRuntime(requestSignal?: AbortSignal): Promise<Runtime> {
@@ -1212,6 +1538,7 @@ export class KiroMcpProvider implements FabricProvider {
     try {
       await runAbortable(signal, () => previous);
       throwIfAbortedOrExpired(signal);
+      this.#assertServerUsable(server);
       return await operation(lease);
     } finally {
       // A cancelled queued waiter has no raw work of its own, but still owns
@@ -1224,10 +1551,11 @@ export class KiroMcpProvider implements FabricProvider {
     }
   }
 
-  #remainingCallBudget(deadline: number): number {
+  #remainingCallBudget(deadline: number, dispatched = false): number {
     const remaining = Math.ceil(deadline - performance.now());
     if (remaining < 1) throw new FabricRepairError(`MCP call timed out after ${this.#config.callTimeoutMs}ms`, {
-      code: "timeout", phase: "discovery", dispatchState: "not_dispatched", effectOutcome: "none",
+      code: "timeout", phase: dispatched ? "dispatch" : "discovery",
+      dispatchState: dispatched ? "dispatched" : "not_dispatched", effectOutcome: dispatched ? "uncertain" : "none",
     });
     return remaining;
   }
@@ -1259,13 +1587,16 @@ export class KiroMcpProvider implements FabricProvider {
         terminating = true;
         this.#evict(server);
         cleanup();
-        const close = Promise.resolve().then(() => runtime.close(server));
+        const close = this.#closeServer(runtime, server);
         // Lease release requires both transport close and raw operation
         // settlement; close() alone is not treated as proof of quiescence.
         lease.quiescence = Promise.allSettled([lease.quiescence, operation, close]).then(() => undefined);
         void settleWithin([close], MCP_CLOSE_GRACE_MS).then(() => {
           settled = true;
-          reject(error);
+          const failure = this.#serverFailures.get(server);
+          reject(failure && error instanceof FabricRepairError
+            ? new FabricRepairError(`${error.message}; ${failure.message}`, error.failure)
+            : error);
         });
       };
       const classified = (message: string, code: "timeout" | "provider_error"): FabricRepairError => new FabricRepairError(message, {
@@ -1287,3 +1618,5 @@ export class KiroMcpProvider implements FabricProvider {
     });
   }
 }
+
+if (!isMainThread && workerData?.marker === MCP_WORKER_MARKER) await runMcpConnectionWorker();
