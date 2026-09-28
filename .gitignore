@@ -1,8 +1,6 @@
 node_modules/
 .pnpm-store/
-dist/*
-!dist/kiro-agent-closure/
-!dist/kiro-agent-closure/**
+dist/
 coverage/
 .tmp/
 # Historical audit reports and one-off probes are not application inputs.
