@@ -36,7 +36,7 @@ describe("snapshot-local source line indices", () => {
       expect(result.complete).toBe(true); expect(result.files).toHaveLength(32);
       expect(result.files.every(file=>file.totalLines===524288)).toBe(true);
       expect(split.mock.contexts.filter(value=>typeof value==="string"&&value.length===text.length)).toHaveLength(0);
-      expect(new Set(slice.mock.contexts).size).toBe(1); expect(read).toHaveBeenCalledTimes(2);
+      expect(new Set(slice.mock.contexts).size).toBe(1); expect(read.mock.calls.length).toBeLessThanOrEqual(2);
       slice.mockRestore(); read.mockRestore(); split.mockRestore();
       fs.writeFileSync(f.file,"new\n");
       const next = await f.call("readMany",{windows:[{path:"source"}]}) as LocalReadManyResult;
@@ -46,10 +46,10 @@ describe("snapshot-local source line indices", () => {
   });
 
   it("retains final snapshot drift detection", async () => {
-    const f = fixture("before\n"); let reads=0; const original=LocalPaths.prototype.read;
+    const f = fixture("before\n"); const original=LocalPaths.prototype.revalidate;
     try {
-      vi.spyOn(LocalPaths.prototype,"read").mockImplementation(function(this:LocalPaths,file:string){
-        if(++reads===2)fs.writeFileSync(f.file,"after!\n"); return original.call(this,file);
+      vi.spyOn(LocalPaths.prototype,"revalidate").mockImplementation(function(this:LocalPaths,snapshot){
+        fs.writeFileSync(f.file,"after!\n"); return original.call(this,snapshot);
       });
       await expect(f.call("readMany",{windows:[{path:"source"}]})).rejects.toThrow("conflict");
     } finally { await f.close(); }

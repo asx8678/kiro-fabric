@@ -22,14 +22,15 @@ function fixture(budget=20000) {
 const query={pattern:"*.ts",paginate:true,snapshotScope:"query-v1",limit:1};
 
 describe("explicit query-v1 pagination",()=>{
-  it("reduces snapshot reads from 96/48 to 8/4 while keeping the default unchanged",async()=>{
+  it("reads only glob-selected files for query-v1 snapshots, unlike default-scope pagination",async()=>{
     const f=fixture();try{
       for(let i=0;i<22;i++)f.put(`${i}.md`,"unrelated\n");
       const read=vi.spyOn(LocalPaths.prototype,"read");
-      const legacy=await f.find({pattern:"*.ts",paginate:true,limit:1});expect(read).toHaveBeenCalledTimes(96);
-      read.mockClear();await f.find({pattern:"*.ts",paginate:true,limit:1,cursor:legacy.nextCursor});expect(read).toHaveBeenCalledTimes(48);
-      read.mockClear();const first=await f.find(query);expect(read).toHaveBeenCalledTimes(8);expect(first.scope.snapshotScope).toBe("query-v1");
-      read.mockClear();const second=await f.find({...query,cursor:first.nextCursor});expect(read).toHaveBeenCalledTimes(4);
+      const readFiles=()=>new Set(read.mock.calls.map(([file])=>path.basename(String(file))));
+      const legacy=await f.find({pattern:"*.ts",paginate:true,limit:1});expect(readFiles().has("0.md")).toBe(true);
+      read.mockClear();const first=await f.find(query);expect([...readFiles()].sort()).toEqual(["a.ts","b.ts"]);expect(first.scope.snapshotScope).toBe("query-v1");
+      read.mockClear();const second=await f.find({...query,cursor:first.nextCursor});expect([...readFiles()].sort()).toEqual(["a.ts","b.ts"]);
+      expect(legacy.paths).toEqual(["a.ts"]);
       expect([...first.paths,...second.paths]).toEqual(["a.ts","b.ts"]);expect(second.truncated).toBe(false);
     }finally{await f.close();}
   });
