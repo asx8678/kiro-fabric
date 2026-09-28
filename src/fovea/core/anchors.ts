@@ -36,7 +36,7 @@ import {
 import { PATH_TOKEN_RE } from "./extract.js";
 import { normalizeLiteral } from "./join.js";
 import { readAll, type FileSource } from "./source.js";
-import type { Anchor } from "./types.js";
+import type { Anchor, NodeKind } from "./types.js";
 
 export interface AnchorRule {
   id: string;
@@ -112,7 +112,7 @@ const PLACEHOLDER_ONLY = /^(:[A-Za-z_]\w*|\{[A-Za-z_]\w*\}|\[[A-Za-z_]\w*\])$/;
 const METHOD_ALIASES: Record<string, string> = {
   PATH: "ANY", RE_PATH: "ANY", URL: "ANY", MATCH: "ANY", ROOT: "ANY",
   REQUESTMAPPING: "ANY", RESOURCES: "ANY", FORWARD: "ANY",
-  USE: "ANY", ROUTE: "ANY", GROUP: "ANY",
+  USE: "ANY", ROUTE: "ANY", GROUP: "ANY", ADD_URL_RULE: "ANY",
   FETCH: "GET", REDIRECT: "GET", RESPONDREDIRECT: "GET", REDIRECT_TO: "GET",
 };
 
@@ -272,7 +272,7 @@ export const DEFAULT_PACK: AnchorRule[] = [
   {
     id: "flask-add-url-rule",
     langs: ["Python"],
-    pattern: "$R.add_url_rule($P, $$$H)",
+    pattern: "$R.$M($P, $$$H)",
     methods: "^add_url_rule$",
     kind: "route",
   },
@@ -297,7 +297,7 @@ export const DEFAULT_PACK: AnchorRule[] = [
   {
     id: "rust-router-chain",
     langs: ["Rust"],
-    pattern: '$R.route("$P", $$$H)',
+    pattern: '$R.$M("$P", $$$H)',
     methods: "^route$",
     kind: "route",
   },
@@ -459,7 +459,7 @@ const restProcedure = (
 
 const anchorsFromGroups = (
   groups: readonly AnchorMatchGroup[],
-  resolveEnclosing: (file: string, line: number) => string | undefined,
+  resolveEnclosing: (file: string, line: number, column?: number, kind?: NodeKind) => string | undefined,
 ): AnchorDraft[] => {
   const out: AnchorDraft[] = [];
   for (const { rule, prefixes: prefixMatches, matches } of groups) {
@@ -470,7 +470,8 @@ const anchorsFromGroups = (
     const prefixes = new Map<string, string>();
     for (const match of prefixMatches) {
       const prefix = match.single.P?.trim();
-      if (prefix !== undefined && !prefixes.has(match.file)) prefixes.set(match.file, unquote(prefix));
+      const owner = resolveEnclosing(match.file, match.line, match.column, "class");
+      if (prefix !== undefined && owner && owner !== `file:${match.file}`) prefixes.set(owner, unquote(prefix));
     }
     for (const match of matches) {
       // Router members after the captured first slot anchor from the $$$REST
@@ -516,7 +517,8 @@ const anchorsFromGroups = (
       } else {
         const pathLike = match.single.P;
         if (!pathLike) continue;
-        const prefix = prefixes.get(match.file);
+        const owner = resolveEnclosing(match.file, match.line, match.column, "class");
+        const prefix = owner ? prefixes.get(owner) : undefined;
         let raw = prefix !== undefined && prefix !== "" ? joinRoute(prefix, unquote(pathLike)) : unquote(pathLike);
         if (rule.mountRoot && !raw.startsWith("/")) raw = "/" + raw.replace(/^\/+/, "");
         const verbInPath = VERB_IN_PATH.exec(raw);
@@ -525,7 +527,7 @@ const anchorsFromGroups = (
           verbOverride = verbInPath[1]!.toUpperCase();
           raw = verbInPath[2]!;
         }
-        if (!PATH_TOKEN_RE.test(raw) && !PLACEHOLDER_ONLY.test(raw)) continue;
+        if (raw !== "/" && !PATH_TOKEN_RE.test(raw) && !PLACEHOLDER_ONLY.test(raw)) continue;
         let httpMethod: string;
         if (rule.verbFrom) {
           const verb = match.single[rule.verbFrom];
@@ -539,7 +541,7 @@ const anchorsFromGroups = (
       // The captured key sits on its own line even when the call spans
       // many; anchors point there, not at the call head.
       const anchorLine = match.singleLines[rule.keyFrom ?? "P"] ?? match.line;
-      const enclosing = resolveEnclosing(match.file, anchorLine);
+      const enclosing = resolveEnclosing(match.file, match.line, match.column);
       const nodeId = enclosing ?? `file:${match.file}`;
       out.push({
         id: label,
@@ -622,7 +624,7 @@ export const anchorScanPlan = (files: string[], pack: AnchorRule[] = DEFAULT_PAC
 export const anchorsFromScan = (
   matches: readonly ScanMatch[],
   plan: AnchorScanPlan,
-  resolveEnclosing: (file: string, line: number) => string | undefined,
+  resolveEnclosing: (file: string, line: number, column?: number, kind?: NodeKind) => string | undefined,
 ): AnchorDraft[] => {
   const byRule = new Map<string, ScanMatch[]>();
   for (const match of matches) {
@@ -641,7 +643,7 @@ export const anchorsFromScan = (
 export const extractAnchors = async (
   files: string[],
   cwd: string,
-  resolveEnclosing: (file: string, line: number) => string | undefined,
+  resolveEnclosing: (file: string, line: number, column?: number, kind?: NodeKind) => string | undefined,
   pack: AnchorRule[] = DEFAULT_PACK,
 ): Promise<AnchorDraft[]> => {
   const plan = anchorScanPlan(files, pack);

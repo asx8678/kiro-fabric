@@ -50,6 +50,7 @@ const CONFIG_EXTS = new Set([
 export interface AgMatch {
   file: string;                    // as passed to ast-grep (repo-relative)
   line: number;                    // 1-indexed
+  column?: number | undefined;
   text: string;                    // full matched node text
   single: Record<string, string>;  // $VAR -> text (single metavars)
   /** Line (1-indexed) of each single capture; 0 when the raw match lacks ranges. */
@@ -341,7 +342,7 @@ const fromRawMatch = (m: RawMatch): AgMatch => {
   }
   for (const [key, value] of Object.entries(m.metaVariables?.multi ?? {}).sort(([a], [b]) => lexical(a, b)))
     multi[key] = value.map((item) => ({ text: item.text, line: item.range ? item.range.start.line + 1 : 0 }));
-  return { file: m.file, line: m.range.start.line + 1, text: m.text, single, singleLines, multi };
+  return { file: m.file, line: m.range.start.line + 1, column: m.range.start.column, text: m.text, single, singleLines, multi };
 };
 
 const scanSupport = owned('astgrep.ts:scanSupport', () => new Map<string, { ok: boolean; at: number }>());

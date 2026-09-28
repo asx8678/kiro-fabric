@@ -225,7 +225,9 @@ const parseStructuredOutline = async (
       // but do not emit a duplicate parent node when the struct is local.
       if (!(item.symbolType === "object" && concreteParents.has(item.name))) {
         const location = topLocation(item, sourceLines);
-        out.push({ name, kind, file, line: location.line, sig: location.sig, lang: record.language });
+        out.push({ name, kind, file, line: location.line, sig: location.sig, lang: record.language,
+          ...(item.range.end ? { range: { start: { ...item.range.start, line: item.range.start.line + 1 }, end: { ...item.range.end, line: item.range.end.line + 1 } } } : {}),
+        });
       }
       for (const member of item.members ?? []) {
         const memberName = outlineName(member.name);
@@ -236,6 +238,7 @@ const parseStructuredOutline = async (
           kind: memberKind,
           file,
           line: member.range.start.line + 1,
+          ...(member.range.end ? { range: { start: { ...member.range.start, line: member.range.start.line + 1 }, end: { ...member.range.end, line: member.range.end.line + 1 } } } : {}),
           sig: cleanSig(member.signature || `${memberKind} ${item.name}.${memberName}`),
           lang: record.language,
         });
@@ -443,7 +446,7 @@ const callsFromMatches = (matches: readonly AgMatch[]): CallSite[] => {
     if (!callee) continue;
     const name = callee.trim();
     if (CALL_WARDS.has(name.toLowerCase())) continue;
-    if (name.length > 1) out.push({ file: m.file, line: m.line, callee: name });
+    if (name.length > 1) out.push({ file: m.file, line: m.line, column: m.column, callee: name });
   }
   return out;
 };
@@ -525,7 +528,7 @@ const literalsFromMatches = (matches: readonly AgMatch[]): LiteralSite[] => {
   const out: LiteralSite[] = [];
   for (const m of matches) {
     const text = stripQuotes(m.text);
-    if (text) out.push({ file: m.file, line: m.line, text });
+    if (text) out.push({ file: m.file, line: m.line, column: m.column, text });
   }
   return out;
 };

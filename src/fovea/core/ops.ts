@@ -1,5 +1,6 @@
 import { owned, context, privateTmpdir, coreDisplayName, coreToolName } from "./context.js";
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 // Derived from pi-fovea b594483868d27b7eb37a9b185c59ce812f8a9c01 (MIT); see UPSTREAM-LICENSE.txt.
 // The four operations. Each is: resolve seeds -> diffuse -> reveal within
 // budget. sketch surveys the whole repo (large t, hub + anchor seeds, grouped
@@ -11,14 +12,14 @@ import { createHash } from "node:crypto";
 import { join, posix } from "node:path";
 import { diffHunks, prFiles, uncommittedFiles } from "./git.js";
 import { chebyshevVectors, chooseOrder, extendChebyshevVectors, forwardHeat, heatField } from "./heat.js";
-import { formatNodeLocation, revealFoveated, revealGroups, tokenEstimate, type GroupLine, type RevealedNode } from "./render.js";
+import { budgetText, formatNodeLocation, revealFoveated, revealGroups, tokenEstimate, type GroupLine, type RevealedNode } from "./render.js";
 import { clearSessionFocus, getSession, observeSessionPaths, retainSessionVectors } from "./session.js";
 import { detectBasins } from "./basins.js";
 import { classifyLiteral, normalizeLiteral } from "./join.js";
 import { isTestFile } from "./extract.js";
 import { effectiveWeight, expectationResiduals, type CoChangeHistory } from "./cochange.js";
 import type { EdgeEvidence, Graph, NodeKind, NodeRec } from "./types.js";
-import { ensureState, explainPathCoverage } from "./state.js";
+import { ensureState, explainPathCoverage, relativeRequest } from "./state.js";
 import type { RepoState } from "./state.js";
 
 export interface OpResult {
@@ -268,8 +269,9 @@ const resolveSeeds = (state: RepoState, query: string, options: FocusOptions = {
     });
   }
   // File path suffix (e.g. "web/api.ts").
+  const pathQuery = relativeRequest(state.root, q);
   for (const f of g.files) {
-    if (f === q || f.endsWith(`/${q}`)) {
+    if (pathQuery && (f === pathQuery || f.endsWith(`/${pathQuery}`))) {
       const arr = g.byFile.get(f) ?? [];
       if (arr[0] !== undefined) bump(arr[0], 1);
     }
@@ -566,11 +568,14 @@ export const focus = async (
     let shown = suggestions.length;
     let text = renderMiss(shown);
     while (shown > 0 && tokenEstimate(text) > B) text = renderMiss(--shown);
+    const truncated = shown < suggestions.length || tokenEstimate(text) > B;
+    text = budgetText(text, B);
     return {
       text,
       tokens: tokenEstimate(text),
       details: {
         seeds: 0,
+        truncated,
         suggestions: suggestions.slice(0, shown).map(({ name, file, line, lineApproximate, score }) => ({
           name,
           file,
@@ -722,7 +727,7 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
   const requestedCoverage = args.files?.length
     ? await explainPathCoverage(state, args.files)
     : [];
-  const files = new Set<string>((args.files ?? []).map((file) => file.startsWith("@") ? file.slice(1) : file));
+  const files = new Set<string>((args.files ?? []).map((file) => relativeRequest(state.root, file)).filter((file): file is string => !!file));
   if (args.base) for (const f of await prFiles(root, args.base)) files.add(f);
   if (args.includeUncommitted !== false && !args.base) for (const f of await uncommittedFiles(root)) files.add(f);
 
@@ -733,12 +738,23 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
   const hunksByFile = files.size && useDiffHunks ? await diffHunks(root, args.base) : undefined;
   const seedSet = new Set<number>();
   const seededFileNodes = new Set<number>();
+  const deletedSeeds = new Set<number>();
+  const byId = new Map(g.nodes.map((node, index) => [node.id, index]));
   const s = new Float64Array(g.nodes.length);
   for (const rel of files) {
     const normalized = posix.normalize(rel);
     const arr = g.byFile.get(rel) ?? g.byFile.get(normalized) ?? [];
     const fileNode = arr.find((i) => g.nodes[i]!.kind === "file");
-    if (fileNode === undefined || seededFileNodes.has(fileNode)) continue;
+    if (fileNode === undefined) {
+      const neighbors = (state.deletedNeighbors?.get(normalized) ?? []).map((id) => byId.get(id)).filter((index): index is number => index !== undefined);
+      for (const neighbor of neighbors) {
+        seedSet.add(neighbor);
+        deletedSeeds.add(neighbor);
+        s[neighbor]! += 1 / neighbors.length;
+      }
+      continue;
+    }
+    if (seededFileNodes.has(fileNode)) continue;
     seededFileNodes.add(fileNode);
     const graphFile = g.nodes[fileNode]!.file;
     const parsed = hunksByFile?.get(graphFile) ?? hunksByFile?.get(normalized) ?? hunksByFile?.get(rel);
@@ -756,6 +772,11 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
 
     const touched = new Map<number, number>();
     let precise = !!parsed && !parsed.fallback && symbols.length > 0;
+    if (precise) {
+      const bytes = parsed?.postimage ? await readFile(join(root, graphFile)).catch(() => undefined) : undefined;
+      precise = !!bytes && createHash("sha1").update(bytes).digest("hex") === state.facts[graphFile]?.sha1 &&
+        createHash(parsed!.postimage!.length === 64 ? "sha256" : "sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex") === parsed!.postimage;
+    }
     const upperBound = (line: number): number => {
       let lo = 0;
       let hi = symbols.length;
@@ -829,12 +850,12 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
     return {
       text: fit.text,
       tokens: fit.tokens,
-      details: { seeds: 0, requestedCoverage, ...extractionDetails(state) },
+      details: { seeds: 0, truncated: fit.truncated, requestedCoverage, ...extractionDetails(state) },
     };
   }
   const seeds = [...seedSet];
   const t = 4;
-  const seedFiles = new Set(seeds.map((i) => g.nodes[i]!.file));
+  const seedFiles = new Set([...files, ...seeds.filter((i) => !deletedSeeds.has(i)).map((i) => g.nodes[i]!.file)]);
   // History heat layer: past co-change re-seeds partner files into the SAME
   // diffusion at recency-decayed strength instead of pinning a permanent
   // structural edge. Linearity makes this exactly heat(seeds + partners·w):
@@ -855,7 +876,7 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
     historyPartners++;
   }
   const field = heatField(chebyshevVectors(state.csr, s, chooseOrder(t)), t, g.nodes.length);
-  const exclude = new Set(seeds.map((i) => g.nodes[i]!.id));
+  const exclude = new Set(seeds.filter((i) => !deletedSeeds.has(i)).map((i) => g.nodes[i]!.id));
   // Conserved view of the same cascade: degree-corrected random-walk heat
   // keeps total mass per component (raw field mass drifts with the sqrt-degree
   // bias). Emitted alongside the raw field until sync thresholds are
@@ -1001,7 +1022,7 @@ export const impact = async (root: string, args: ImpactArgs, ensured?: RepoState
     // needs the dominant masses, and the pruned tail is per-node noise anyway.
     const warmed: Array<[string, { file: string; m: number; r: string[] }]> = [];
     g.nodes.forEach((n, i) => {
-      if (exclude.has(n.id) || seedFiles.has(n.file)) return;
+      if (n.kind === "file" || exclude.has(n.id) || seedFiles.has(n.file)) return;
       const v = field[i]!;
       if (v <= 1e-6) return;
       warmed.push([`${n.kind}|${n.id}`, {

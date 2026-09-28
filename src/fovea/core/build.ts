@@ -1,4 +1,4 @@
-import { owned } from "./context.js";
+import { context, owned } from "./context.js";
 // Derived from pi-fovea b594483868d27b7eb37a9b185c59ce812f8a9c01 (MIT); see UPSTREAM-LICENSE.txt.
 // Repo -> typed graph. Extraction is a pure function of file content, so the
 // on-disk cache (keyed by content sha1) makes re-indexing incremental: dirty
@@ -49,8 +49,9 @@ import {
 } from "./anchors.js";
 import { aggregateFiles, harvestFile, promote, type FileSigs } from "./discover.js";
 import { makeFileSource } from "./source.js";
+import { symbolRanges } from "./ranges.js";
 import { extractProtocolAnchors } from "./protocols.js";
-import type { CallSite, ImportSite, LiteralSite, SymbolRec } from "./types.js";
+import type { CallSite, ImportSite, LiteralSite, NodeKind, SymbolRec } from "./types.js";
 import type { AnchorDraft } from "./anchors.js";
 
 export interface FileFacts {
@@ -394,6 +395,19 @@ export const discoverFiles = async (
 
 interface FileMeta { size: number; mtime: number }
 
+interface FailureRetry { sha1: string; attempts: number; retryAt: number }
+const FAILURE_BACKOFF_MAX_MS = 60_000;
+const parserIdentity = async (): Promise<string> => {
+  const path = context().parserPath;
+  const meta = await stat(path).catch(() => undefined);
+  return JSON.stringify([1, path, meta?.dev, meta?.ino, meta?.size, meta?.mtimeMs, meta?.ctimeMs]);
+};
+const failurePending = (store: FactStore, file: string): boolean => {
+  const remaining = (store.retries.get(file)?.retryAt ?? 0) - Date.now();
+  return store.failedSha.has(file) && remaining > 0 && remaining <= FAILURE_BACKOFF_MAX_MS;
+};
+export const factsRetryDue = (store: FactStore): boolean => [...store.tainted].some((file) => !failurePending(store, file));
+
 const statFile = async (root: string, rel: string): Promise<FileMeta | undefined> => {
   try {
     const s = await stat(joinPath(root, rel));
@@ -455,6 +469,8 @@ export interface FactStore {
   tainted: Set<string>;
   /** Content hashes for honest, fact-free failure backoff. */
   failedSha: Map<string, string>;
+  retries: Map<string, FailureRetry>;
+  parserIdentity: string;
   /** Files whose content could not be read at last pass. */
   unreadable: Set<string>;
   /** Files deliberately omitted because source size exceeded MAX_FILE_BYTES. */
@@ -477,6 +493,8 @@ const newFactStore = (root: string): FactStore => ({
   meta: new Map(),
   tainted: new Set(),
   failedSha: new Map(),
+  retries: new Map(),
+  parserIdentity: "",
   unreadable: new Set(),
   oversized: new Set(),
   generated: new Set(),
@@ -504,7 +522,7 @@ const pendingFileFacts = (file: string, sha1: string, text: string): FileFacts =
   return facts;
 };
 
-interface CacheHeader { fovea: number; root: string; rulesSha: string; enrolled?: (string[]) | undefined }
+interface CacheHeader { fovea: number; root: string; rulesSha: string; parserIdentity?: string | undefined; enrolled?: (string[]) | undefined }
 interface CacheLine {
   file: string;
   sha1: string;
@@ -513,6 +531,7 @@ interface CacheLine {
   facts?: (Omit<FileFacts, "sha1">) | undefined;
   /** Marker only: no partial semantic facts cross the cache boundary. */
   failed?: (true) | undefined;
+  retry?: FailureRetry | undefined;
   /** Marker only: generated sources carry empty facts, never partial ones. */
   generated?: (true) | undefined;
 }
@@ -522,7 +541,7 @@ interface CacheLine {
 export const cachePathFor = (root: string): string =>
   joinPath(tmpdir(), `pi-fovea-${createHash("sha1").update(root).digest("hex").slice(0, 16)}.json`);
 
-const loadDiskStore = async (root: string): Promise<FactStore | undefined> => {
+const loadDiskStore = async (root: string, parser: string): Promise<FactStore | undefined> => {
   void maintainTempStorage();
   const handle = await openTempRead(cachePathFor(root)).catch(() => undefined);
   if (!handle) return undefined;
@@ -540,8 +559,9 @@ const loadDiskStore = async (root: string): Promise<FactStore | undefined> => {
           return undefined;
         }
         // v8 caches were one JSON document; a marker miss is a cold start.
-        if (header.fovea !== CACHE_VERSION || header.root !== root) return undefined;
+        if (header.fovea !== CACHE_VERSION || header.root !== root || header.parserIdentity !== parser) return undefined;
         store = newFactStore(root);
+        store.parserIdentity = parser;
         store.rulesSha = header.rulesSha;
         if (Array.isArray(header.enrolled)) {
           for (const b of header.enrolled) if (typeof b === "string") store.enrolled.add(b);
@@ -556,6 +576,7 @@ const loadDiskStore = async (root: string): Promise<FactStore | undefined> => {
         if (rec.failed) {
           store.tainted.add(rec.file);
           store.failedSha.set(rec.file, rec.sha1);
+          if (rec.retry?.sha1 === rec.sha1 && Number.isFinite(rec.retry.retryAt) && Number.isInteger(rec.retry.attempts) && rec.retry.attempts > 0) store.retries.set(rec.file, rec.retry);
         } else if (rec.facts) {
           store.facts.set(rec.file, { sha1: rec.sha1, ...rec.facts });
         }
@@ -582,6 +603,7 @@ export const persistFacts = async (store: FactStore): Promise<void> => {
     fovea: CACHE_VERSION,
     root: store.root,
     rulesSha: store.rulesSha,
+    parserIdentity: store.parserIdentity,
     enrolled: [...store.enrolled].sort(),
   } satisfies CacheHeader);
   const target = cachePathFor(store.root);
@@ -596,7 +618,7 @@ export const persistFacts = async (store: FactStore): Promise<void> => {
       let line: CacheLine | undefined;
       if (store.tainted.has(file)) {
         const sha1 = store.failedSha.get(file) ?? facts?.sha1;
-        if (sha1) line = { file, sha1, size: meta.size, mtime: meta.mtime, failed: true };
+        if (sha1) line = { file, sha1, size: meta.size, mtime: meta.mtime, failed: true, retry: store.retries.get(file) };
       } else if (facts) {
         const { sha1, ...rest } = facts;
         line = { file, sha1, size: meta.size, mtime: meta.mtime, facts: rest };
@@ -702,15 +724,9 @@ const extractInto = async (
       extractFileRoutes(code, root, packRules.fileRoutes, source),
       extractProtocolAnchors(batch, source),
     ]);
-    const symsByFile = new Map<string, SymbolRec[]>();
-    for (const rel of code) symsByFile.set(rel, []);
-    for (const symbol of symbols) symsByFile.get(symbol.file)?.push(symbol);
-    const enclosingId = (file: string, line: number): string | undefined => {
-      const syms = symsByFile.get(file) ?? [];
-      let best: SymbolRec | undefined;
-      for (const symbol of syms) {
-        if (symbol.line <= line && (!best || symbol.line > best.line)) best = symbol;
-      }
+    const enclosing = symbolRanges(symbols);
+    const enclosingId = (file: string, line: number, column?: number, kind?: NodeKind): string | undefined => {
+      const best = enclosing(file, line, column, kind);
       return best ? `${best.name}@${best.file}` : `file:${file}`;
     };
 
@@ -776,14 +792,9 @@ const runAnchorPass = async (
     if (batch.length) batches.push(batch);
   }
   const extracted = await mapLimit(batches, SPAWN_CONCURRENCY, async (anchorFiles) => {
-    const symsByFile = new Map<string, SymbolRec[]>();
-    for (const rel of anchorFiles) symsByFile.set(rel, store.facts.get(rel)?.symbols ?? []);
-    const enclosingId = (file: string, line: number): string | undefined => {
-      const syms = symsByFile.get(file) ?? [];
-      let best: SymbolRec | undefined;
-      for (const symbol of syms) {
-        if (symbol.line <= line && (!best || symbol.line > best.line)) best = symbol;
-      }
+    const enclosing = symbolRanges(anchorFiles.flatMap((rel) => store.facts.get(rel)?.symbols ?? []));
+    const enclosingId = (file: string, line: number, column?: number, kind?: NodeKind): string | undefined => {
+      const best = enclosing(file, line, column, kind);
       return best ? `${best.name}@${best.file}` : `file:${file}`;
     };
     const [anchors, fileRouteAnchors] = await Promise.all([
@@ -796,7 +807,7 @@ const runAnchorPass = async (
   for (const result of extracted) {
     for (const file of result.anchorFiles) {
       const previous = store.facts.get(file);
-      if (previous?.anchors.length) store.facts.set(file, { ...previous, anchors: [] });
+      if (previous) store.facts.set(file, { ...previous, anchors: [] });
     }
     for (const anchor of result.anchors) store.facts.get(anchor.file)?.anchors.push(anchor);
     for (const anchor of result.fileRouteAnchors) store.facts.get(anchor.file)?.anchors.push(anchor);
@@ -850,7 +861,12 @@ const settleTaint = (store: FactStore, batch: ReadonlySet<string>): void => {
     if (!batch.has(f)) continue;
     store.tainted.add(f);
     const sha1 = store.facts.get(f)?.sha1;
-    if (sha1) store.failedSha.set(f, sha1);
+    if (sha1) {
+      store.failedSha.set(f, sha1);
+      const previous = store.retries.get(f);
+      const attempts = previous?.sha1 === sha1 ? Math.min(previous.attempts + 1, 7) : 1;
+      store.retries.set(f, { sha1, attempts, retryAt: Date.now() + Math.min(1000 * 2 ** (attempts - 1), FAILURE_BACKOFF_MAX_MS) });
+    }
   }
 };
 
@@ -878,8 +894,10 @@ export interface FactsOutcome {
  */
 export const loadFacts = async (root: string, files: string[]): Promise<FactsOutcome> => {
   drainExtractionFailures();
-  const disk = await loadDiskStore(root);
+  const parser = await parserIdentity();
+  const disk = await loadDiskStore(root, parser);
   const store = disk ?? newFactStore(root);
+  store.parserIdentity = parser;
   let cacheDirty = disk === undefined;
   const fileSet = new Set(files);
   const knownFiles = new Set([...store.facts.keys(), ...store.failedSha.keys(), ...store.unreadable, ...store.oversized]);
@@ -889,6 +907,7 @@ export const loadFacts = async (root: string, files: string[]): Promise<FactsOut
       store.meta.delete(f);
       store.tainted.delete(f);
       store.failedSha.delete(f);
+      store.retries.delete(f);
       store.unreadable.delete(f);
       store.oversized.delete(f);
       store.generated.delete(f);
@@ -918,7 +937,7 @@ export const loadFacts = async (root: string, files: string[]): Promise<FactsOut
     }
     store.oversized.delete(rel);
     const cachedMeta = store.meta.get(rel);
-    if (store.failedSha.has(rel) && metaEquals(meta, cachedMeta)) {
+    if (failurePending(store, rel) && metaEquals(meta, cachedMeta)) {
       store.meta.set(rel, meta);
       continue; // unchanged known failure: report it, do not retry it
     }
@@ -949,12 +968,6 @@ export const loadFacts = async (root: string, files: string[]): Promise<FactsOut
       return;
     }
     store.generated.delete(rel);
-    const failedSha = store.failedSha.get(rel);
-    if (failedSha === got.sha1) {
-      store.meta.set(rel, meta);
-      cacheDirty = true;
-      return;
-    }
     const cached = store.facts.get(rel);
     if (cached && cached.sha1 === got.sha1 && !store.tainted.has(rel)) {
       // Content identical under a moved mtime (checkout, touch): reuse.
@@ -986,6 +999,7 @@ export const loadFacts = async (root: string, files: string[]): Promise<FactsOut
     store.failedSha.delete(f);
   }
   for (const f of oversized) store.oversized.add(f);
+  for (const f of store.retries.keys()) if (!store.failedSha.has(f)) store.retries.delete(f);
   store.unreadable.forEach((f) => { if (!unreadable.includes(f) && files.includes(f)) store.unreadable.delete(f); });
   store.oversized.forEach((f) => { if (!oversized.includes(f) && files.includes(f)) store.oversized.delete(f); });
 
@@ -1003,6 +1017,7 @@ export const loadFacts = async (root: string, files: string[]): Promise<FactsOut
 };
 
 export interface RefreshStats {
+  factsChanged: boolean;
   /** Files whose semantic facts were rebuilt (content moved). */
   reExtracted: string[];
   /** Files that vanished since the last pass. */
@@ -1025,6 +1040,14 @@ export const refreshFacts = async (
   deletedPaths: readonly string[] = [],
 ): Promise<{ report: ExtractionReport; stats: RefreshStats }> => {
   drainExtractionFailures();
+  const previousFacts = new Map(store.facts);
+  const parser = await parserIdentity();
+  const parserMoved = store.parserIdentity !== parser;
+  store.parserIdentity = parser;
+  if (parserMoved) {
+    store.retries.clear();
+    for (const file of store.facts.keys()) if (!store.generated.has(file)) store.tainted.add(file);
+  }
   const fileSet = new Set(files);
   const deleted: string[] = [];
   const removeFile = (known: string): void => {
@@ -1032,6 +1055,7 @@ export const refreshFacts = async (
     store.meta.delete(known);
     store.tainted.delete(known);
     store.failedSha.delete(known);
+    store.retries.delete(known);
     store.unreadable.delete(known);
     store.oversized.delete(known);
     store.generated.delete(known);
@@ -1067,7 +1091,7 @@ export const refreshFacts = async (
       continue;
     }
     const cachedMeta = store.meta.get(rel);
-    if (store.failedSha.has(rel) && metaEquals(meta, cachedMeta)) continue;
+    if (failurePending(store, rel) && metaEquals(meta, cachedMeta)) continue;
     store.meta.set(rel, meta);
     if (meta.size > maxFileBytes(rel)) {
       oversized.push(rel);
@@ -1087,14 +1111,14 @@ export const refreshFacts = async (
     store.unreadable.delete(rel);
     spend(rel, got.text, contents);
     if (isGeneratedSource(rel, got.text)) {
+      const unchanged = store.generated.has(rel) && store.facts.get(rel)?.sha1 === got.sha1;
       store.generated.add(rel);
       store.tainted.delete(rel);
       store.failedSha.delete(rel);
-      store.facts.set(rel, emptyFileFacts(got.sha1));
+      if (!unchanged) store.facts.set(rel, emptyFileFacts(got.sha1));
       continue;
     }
     store.generated.delete(rel);
-    if (store.failedSha.get(rel) === got.sha1) continue;
     const prev = store.facts.get(rel);
     if (prev && prev.sha1 === got.sha1 && !store.tainted.has(rel)) continue;
     dirty.push(rel);
@@ -1118,6 +1142,7 @@ export const refreshFacts = async (
     store.failedSha.delete(f);
   }
   for (const f of oversized) store.oversized.add(f);
+  for (const f of store.retries.keys()) if (!store.failedSha.has(f)) store.retries.delete(f);
 
   persistFactsSoon(store);
   return {
@@ -1128,6 +1153,7 @@ export const refreshFacts = async (
       generated: [...store.generated].sort(),
     },
     stats: {
+      factsChanged: previousFacts.size !== store.facts.size || [...previousFacts].some(([file, facts]) => store.facts.get(file) !== facts),
       reExtracted: dirty.sort(),
       deleted: deleted.sort(),
       added: added.filter((f) => !unreadable.includes(f) && !store.oversized.has(f) && !store.generated.has(f) && !store.tainted.has(f)).sort(),

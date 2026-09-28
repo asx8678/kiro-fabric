@@ -11,6 +11,13 @@ import type { Edge, EdgeEvidence, EdgeKind, Graph, NodeRec } from "./types.js";
 
 export const tokenEstimate = (text: string): number => Math.ceil(text.length / 4);
 
+export const budgetText = (text: string, budget: number): string => {
+  const limit = Math.max(0, Math.floor(budget) * 4);
+  if (text.length <= limit) return text;
+  const marker = limit >= 19 ? "\n… [text truncated]" : "…";
+  return limit ? text.slice(0, Math.max(0, limit - marker.length)) + marker : "";
+};
+
 const HOT_TIER = 0.3;
 const WARM_TIER = 0.02;
 const HEAT_EPS = 1e-9;
@@ -142,7 +149,9 @@ export const revealFoveated = (
   let vmax = 0;
   for (let i = 0; i < field.length; i++) if (field[i]! > vmax) vmax = field[i]!;
   if (vmax <= 0) {
-    return { text: `${opts.header ?? coreDisplayName()}\n(nothing matched the current graph)`, tokens: 0, shown: 0, suppressed: 0, litTotal: 0, candidateOmitted: 0, truncated: false, revealedIds: [], revealed: [] };
+    const full = `${opts.header ?? coreDisplayName()}\n(nothing matched the current graph)`;
+    const text = budgetText(full, opts.budget);
+    return { text, tokens: tokenEstimate(text), shown: 0, suppressed: 0, litTotal: 0, candidateOmitted: 0, truncated: text !== full, revealedIds: [], revealed: [] };
   }
   const seedSet = new Set(opts.seeds ?? []);
   const relations = directRelations(g, seedSet);
@@ -275,12 +284,12 @@ export const revealFoveated = (
     }
     if (!fits(0)) k = -1; // extreme budgets: header + footer only
   }
-  let text = k >= 0 ? renderK(k) : header;
+  let text = renderK(Math.max(0, k));
   const shown = k >= 0 ? Math.min(k, individual) : 0;
   // The footer appears whenever anything was omitted — a collapsed glow
   // periphery counts even when the rendered prefix fit — so the artifact
   // write must gate on the same condition, or the footer names a dead path.
-  const truncated = collapsed + individual - shown > 0;
+  const truncated = collapsed + individual - shown > 0 || tokenEstimate(text) > opts.budget;
   let overflowPath: string | undefined;
   if (truncated && opts.overflowTo) {
     try {
@@ -289,9 +298,10 @@ export const revealFoveated = (
     } catch {
       // An unwritable artifact drops the footer pointer; that only shortens
       // the text, so the budget still holds.
-      text = k >= 0 ? renderK(k, "") : header;
+      text = renderK(Math.max(0, k), "");
     }
   }
+  text = budgetText(text, opts.budget);
   const tokens = tokenEstimate(text);
   return {
     text,
@@ -348,14 +358,16 @@ export const revealGroups = (
       text = renderK(kBest, "");
     }
   }
+  const truncated = kBest < ordered.length || tokenEstimate(text) > opts.budget;
+  text = budgetText(text, opts.budget);
   return {
     text,
     tokens: tokenEstimate(text),
-    shown: Math.min(ordered.length, ordered.length),
+    shown: kBest,
     suppressed: 0,
     litTotal: ordered.length,
     candidateOmitted: 0,
-    truncated: ordered.length > 0 && kBest < ordered.length,
+    truncated,
     overflowPath,
   };
 };

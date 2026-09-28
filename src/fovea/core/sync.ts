@@ -23,6 +23,7 @@ import { gitProbe, gitReflogAction } from "./git.js";
 import { discoverFiles, filterSupported } from "./build.js";
 import { loadRepoRules } from "./anchors.js";
 import { focus, impact, isTestScope } from "./ops.js";
+import { budgetText } from "./render.js";
 import { ensureState, ensureStateBackground, getInflight, getState } from "./state.js";
 import type { RepoState } from "./state.js";
 import { getSession, observeSessionPaths, syncScopeForPath } from "./session.js";
@@ -46,6 +47,7 @@ interface SyncBaseline {
    * artifact (parallel-load sweeps can drop a file's anchors transiently),
    * not a route change. */
   anchors: Map<string, string>;
+  implicitAnchors?: Set<string> | undefined;
   /** file -> content sha1 at baseline; used only for fast drift detection. */
   shas: Map<string, string>;
   /** file -> extracted semantic facts, excluding the content hash. */
@@ -265,6 +267,7 @@ const coldDrift = async (root: string, baseline: SyncBaseline): Promise<boolean>
 
 const snapshot = async (state: RepoState): Promise<SyncBaseline> => {
   const anchors = new Map<string, string>();
+  const implicitAnchors = new Set(state.graph.anchors.filter((anchor) => anchor.implicit).map((anchor) => anchor.id));
   await forEachChunked(state.graph.anchors, 256, (anchor) => anchors.set(anchor.id, anchor.file));
   const shas = new Map<string, string>();
   const semantics = new Map<string, string>();
@@ -272,7 +275,7 @@ const snapshot = async (state: RepoState): Promise<SyncBaseline> => {
     shas.set(file, facts.sha1);
     semantics.set(file, semanticFacts(state, file));
   });
-  return { version: state.version, capturedAt: Date.now(), anchors, shas, semantics, gitKind: state.gitKind, head: state.head,
+  return { version: state.version, capturedAt: Date.now(), anchors, implicitAnchors, shas, semantics, gitKind: state.gitKind, head: state.head,
     dirty: new Set(state.dirty), files: [...state.files], meta: new Map(state.store.meta), enrolled: new Set(state.store.enrolled),
     closed: state.discovery.closedBoundariesSeen > 0, rulesSha: state.store.rulesSha };
 };
@@ -515,8 +518,8 @@ export const sync = async (
   const suspectRemoved = removed.filter((id) => !evidence.has(prev.anchors.get(id) ?? ""));
   const suspectAdded = added.filter((id) => !evidence.has(currentCarrier.get(id) ?? ""));
   const evidentialAdded = added.filter((id) => !suspectAdded.includes(id));
-  const evidentialRemoved = removed.filter((id) => !suspectRemoved.includes(id));
-  const structuralRed = (evidentialAdded.length - newlyImplicit.length) > 0 ||
+  const evidentialRemoved = removed.filter((id) => !suspectRemoved.includes(id) && !prev.implicitAnchors?.has(id));
+  const structuralRed = evidentialAdded.some((id) => !current.get(id)) ||
     (evidentialRemoved.length > 0 && !degraded) ||
     deleted.some((file) => !isTestScope(file));
   const prevArmed = prev.warmthArmed !== false;
@@ -635,10 +638,12 @@ export const sync = async (
   while (lines.length > 3 && Math.ceil(lines.join("\n").length / 4) > params.budget) {
     lines.splice(lines.length - 2, 1);
   }
-  const text = lines.join("\n");
+  const full = lines.join("\n");
+  const text = budgetText(full, params.budget);
   return {
     structural: true, red: true, text, delivery, tokens: Math.ceil(text.length / 4),
     details: {
+      truncated: text !== full,
       version: state.version,
       added,
       removed,

@@ -25,6 +25,8 @@ export const extractBend = (file: string, text: string): BendFacts => {
   let quote = "";
   let value = "";
   let literalLine = 0;
+  let literalColumn = 0;
+  let activeSymbol: SymbolRec | undefined;
   const lines = text.split("\n");
   for (let at = 0; at < lines.length; at++) {
     const raw = lines[at]!;
@@ -48,7 +50,7 @@ export const extractBend = (file: string, text: string): BendFacts => {
         } else if (ch === quote) {
           if (quote === '"') {
             strings.push({ start, text: value });
-            if (value.length >= 2 && value.length <= 200) facts.literals.push({ file, line: literalLine, text: value });
+            if (value.length >= 2 && value.length <= 200) facts.literals.push({ file, line: literalLine, column: literalColumn, text: value });
           }
           quote = "";
         } else value += ch;
@@ -58,6 +60,7 @@ export const extractBend = (file: string, text: string): BendFacts => {
         quote = ch;
         value = "";
         literalLine = line;
+        literalColumn = i;
         start = i;
         code += " ";
         visible += ch;
@@ -69,10 +72,17 @@ export const extractBend = (file: string, text: string): BendFacts => {
     if (quote) value += "\n";
     if (!code.trim()) continue;
     const decl = DECL.exec(code);
+    if ((decl || (!header && /^\S/.test(code))) && activeSymbol) {
+      activeSymbol.range!.end = { line, column: 0 };
+      activeSymbol = undefined;
+    }
     if (decl) {
       const kind = decl[1] === "def" ? "function" : decl[1] === "type" ? "type" : "decl";
       const sig = visible.trim();
-      facts.symbols.push({ file, line, name: decl[2]!, kind, sig: sig.length > 140 ? sig.slice(0, 137) + "..." : sig, lang: "Bend" });
+      activeSymbol = { file, line, name: decl[2]!, kind, sig: sig.length > 140 ? sig.slice(0, 137) + "..." : sig, lang: "Bend",
+        range: { start: { line, column: 0 }, end: { line: lines.length + 1, column: 0 } },
+      };
+      facts.symbols.push(activeSymbol);
       inType = decl[1] === "type";
       header = true;
       brackets = [];
@@ -113,7 +123,7 @@ export const extractBend = (file: string, text: string): BendFacts => {
     for (const call of code.matchAll(CALL)) {
       // Kind is syntax, not a user-defined function. Keep dotted names whole:
       // their dots may be literal name characters, not module boundaries.
-      if (!CALL_KEYWORDS.has(call[1]!)) facts.calls.push({ file, line, callee: call[1]! });
+      if (!CALL_KEYWORDS.has(call[1]!)) facts.calls.push({ file, line, column: call.index, callee: call[1]! });
     }
   }
   // A law and its implementation share a graph identity. Prefer the concrete

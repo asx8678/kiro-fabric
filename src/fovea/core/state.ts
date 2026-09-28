@@ -9,6 +9,7 @@ import {
   discoverFiles,
   discoveryExclusionReason,
   filterSupported,
+  factsRetryDue,
   loadFacts,
   readEnrolledBoundaries,
   refreshFacts,
@@ -62,6 +63,7 @@ export interface RepoState {
    * is NOT structure: impact re-seeds these partners at recency-decayed
    * strength whenever a change lands, so old co-work cools like any heat. */
   history: CoChangeHistory;
+  deletedNeighbors?: Map<string, string[]> | undefined;
 }
 
 // State lifecycle: background builds, probe-gated refreshes, LRU eviction.
@@ -69,6 +71,7 @@ export interface RepoState {
 // resolvable answer behind a full rebuild.
 
 const states = owned('state.ts:states', () => new Map<string, RepoState>()); // insertion order doubles as LRU order
+const dependencies = owned('state.ts:dependencies', () => new Map<string, { generation: string; neighbors: Map<string, string[]> }>(), true);
 const inflight = owned('state.ts:inflight', () => new Map<string, Promise<RepoState>>());
 // Each resident root holds a full fact store + graph; all heavyweight root
 // caches use ROOT_CACHE_LIMIT so one override cannot leave hidden retainers.
@@ -94,7 +97,13 @@ const evictLru = (): void => {
 };
 
 /** Warm state if present (does not block). */
-export const getState = (root: string): RepoState | undefined => touch(root);
+export const getState = (root: string): RepoState | undefined => {
+  const state = touch(root);
+  if (state && dependencies.get(root)?.generation !== state.generation) {
+    state.deletedNeighbors = new Map([...state.deletedNeighbors ?? [], ...retainDependencies(root, state.graph, state.generation)]);
+  }
+  return state && !factsRetryDue(state.store) ? state : undefined;
+};
 
 /** Ongoing build/refresh for root, if any (does not block). */
 export const getInflight = (root: string): Promise<RepoState> | undefined => inflight.get(root);
@@ -123,12 +132,39 @@ const factPass = <T>(job: () => Promise<T>): Promise<T> => {
 const graphGeneration = (graph: Graph): string => {
   const hash = createHash("sha1");
   for (const node of graph.nodes) {
-    hash.update(JSON.stringify([node.id, node.kind, node.file, node.line, node.lang, node.sig])).update("\0");
+    hash.update(JSON.stringify([node.id, node.kind, node.file, node.line, node.range, node.lang, node.sig])).update("\0");
   }
   for (const edge of graph.edges) {
     hash.update(JSON.stringify([edge.a, edge.b, edge.kind, edge.w, edge.evidence])).update("\n");
   }
   return hash.digest("hex").slice(0, 12);
+};
+
+const retainDependencies = (root: string, graph: Graph, generation: string): Map<string, string[]> => {
+  const files = new Set(graph.files);
+  const ids = new Set(graph.nodes.map((node) => node.id));
+  const deleted = new Map<string, string[]>();
+  for (const [file, neighbors] of dependencies.get(root)?.neighbors ?? []) {
+    if (!files.has(file)) {
+      const surviving = neighbors.filter((id) => ids.has(id));
+      if (surviving.length) deleted.set(file, surviving);
+    }
+  }
+  const current = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    const a = graph.nodes[edge.a]!, b = graph.nodes[edge.b]!;
+    if (a.file === b.file) continue;
+    for (const [from, to] of [[a, b], [b, a]] as const) {
+      const neighbors = current.get(from.file) ?? new Set<string>();
+      neighbors.add(to.id);
+      neighbors.add(`file:${to.file}`);
+      current.set(from.file, neighbors);
+    }
+  }
+  dependencies.delete(root);
+  dependencies.set(root, { generation, neighbors: new Map([...deleted, ...[...current].map(([file, neighbors]): [string, string[]] => [file, [...neighbors]])]) });
+  while (dependencies.size > ROOT_CACHE_LIMIT) dependencies.delete(dependencies.keys().next().value!);
+  return deleted;
 };
 
 const stateVersion = (
@@ -165,6 +201,7 @@ const assembleState = async (
   await yieldToLoop();
   const { graph, joinIndex } = await assembleGraphWithIndex(root, files, store.facts);
   const generation = graphGeneration(graph);
+  const deletedNeighbors = retainDependencies(root, graph, generation);
   const version = stateVersion(facts, generation, files, store.rulesSha, extraction, discovery);
   await yieldToLoop();
   const csr = buildCsr(graph);
@@ -188,7 +225,7 @@ const assembleState = async (
   // structure. Cached by HEAD + tracked set, so a rebuild is cheap.
   const history = await coChangeHistory(root, files);
   const stamp = Date.now();
-  return { root, version, generation, graph, csr, joinIndex, facts, extraction, discovery, adjacency, store, files, gitKind, head, dirty, history, probedAt: stamp, walkedAt: stamp, sweptAt: stamp };
+  return { root, version, generation, graph, csr, joinIndex, facts, extraction, discovery, adjacency, store, files, gitKind, head, dirty, history, deletedNeighbors, probedAt: stamp, walkedAt: stamp, sweptAt: stamp };
 };
 
 const requireExtractionBackend = async (files: readonly string[]): Promise<void> => {
@@ -231,6 +268,7 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
   let files = state.files;
   let discovery = state.discovery;
   const changed: string[] = [];
+  changed.push(...store.tainted);
   const deleted: string[] = [];
   // A checkout re-materializes the worktree from another ref; flag the
   // rebuilt generation so sync re-baselines quietly. Only a HEAD move whose
@@ -238,6 +276,7 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
   // foreign work and keep the loud drift path, and reflog-less repos stay
   // conservative (undefined -> false).
   let checkout = false;
+  let historyChanged = false;
   const hinted = [...new Set([...filterSupported(hints, routeRes), ...hints.filter((h) => store.facts.has(h))])];
   changed.push(...hinted);
 
@@ -280,6 +319,7 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
     const probe = await gitProbe(state.root);
     if (probe) {
       const headMoved = probe.head !== state.head;
+      historyChanged = headMoved;
       state.head = probe.head;
       if (headMoved) {
         checkout = (await gitReflogAction(state.root))?.startsWith("checkout:") ?? false;
@@ -354,6 +394,8 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
     } else {
       // .git vanished (moved/renamed out from under us): degrade to plain.
       state.gitKind = "plain";
+      state.head = undefined;
+      historyChanged = true;
     }
   }
   if (state.gitKind === "plain") {
@@ -370,6 +412,7 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
     }
   }
 
+  if (historyChanged) state.history = await coChangeHistory(state.root, files);
   if (!changed.length && !deleted.length && files === state.files) {
     state.probedAt = Date.now();
     return state;
@@ -379,7 +422,7 @@ const refreshState = async (state: RepoState, hints: string[] = [], force = fals
     refreshFacts(state.root, store, files, [...new Set(changed)], [...new Set(deleted)]),
   );
   const noDelta =
-    !stats.reExtracted.length && !stats.deleted.length && !stats.added.length && files.length === state.files.length;
+    !stats.factsChanged && files.length === state.files.length && files.every((file, index) => file === state.files[index]);
   if (noDelta) {
     state.probedAt = Date.now();
     state.extraction = report; // reports are state-wide (taint/unreadable live in the store)
@@ -439,7 +482,7 @@ export interface PathCoverage {
   reason: string;
 }
 
-const relativeRequest = (root: string, input: string): string | undefined => {
+export const relativeRequest = (root: string, input: string): string | undefined => {
   const raw = input.startsWith("@") ? input.slice(1) : input;
   const rootPath = resolve(root);
   const absolute = isAbsolute(raw) ? resolve(raw) : resolve(rootPath, raw);

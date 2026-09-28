@@ -20,6 +20,13 @@ export const gitOut = async (
 ): Promise<string | undefined> => {
   if (!context().gitPath) { context().gitFailures.push("Git executable not configured"); return undefined; }
   context().signal.throwIfAborted();
+  if (args.includes("status") || args.includes("diff")) {
+    const config = await gitOut(root, ["config", "--includes", "--null", "--list"], { maxBuffer: 1024 * 1024 });
+    if (config === undefined || config.split("\0").some((entry) => /^filter\.[\s\S]*\.(?:clean|process)\n[\s\S]+$/.test(entry))) {
+      context().gitFailures.push("Git worktree analysis unavailable: executable filters or unreadable configuration");
+      return undefined;
+    }
+  }
   return spawnGate.run(
     () =>
       new Promise<string | undefined>((resolve) => {
@@ -228,6 +235,7 @@ interface DiffHunk {
 
 export interface FileDiffHunks {
   hunks: DiffHunk[];
+  postimage?: string | undefined;
   /** The file must use coarse file-node seeding instead of line nuclei. */
   fallback: boolean;
 }
@@ -237,6 +245,7 @@ const MAX_DIFF_HUNKS_PER_FILE = 200;
 const DIFF_MAX_BUFFER = 32 * 1024 * 1024;
 
 interface PendingDiff {
+  postimage?: string | undefined;
   oldPath?: (string) | undefined;
   newPath?: (string) | undefined;
   renameFrom?: (string) | undefined;
@@ -322,10 +331,10 @@ const parseZeroContextDiff = (
   const merge = (path: string, hunks: DiffHunk[], fallback: boolean): void => {
     const previous = result.get(path);
     if (!previous) {
-      result.set(path, fallback ? { hunks: [], fallback: true } : { hunks: [...hunks], fallback: false });
+      result.set(path, fallback ? { hunks: [], fallback: true } : { hunks: [...hunks], fallback: false, postimage: pending?.postimage });
       return;
     }
-    if (previous.fallback || fallback || previous.hunks.length + hunks.length > limit) {
+    if (previous.fallback || fallback || previous.postimage !== pending?.postimage || previous.hunks.length + hunks.length > limit) {
       result.set(path, { hunks: [], fallback: true });
       return;
     }
@@ -427,6 +436,8 @@ const parseZeroContextDiff = (
       }
     }
 
+    const index = /^index [a-f0-9]+\.\.([a-f0-9]{40}|[a-f0-9]{64})(?: |$)/.exec(line);
+    if (index) pending.postimage = index[1];
     if (!line.startsWith("@@")) continue;
     pending.hunkCount++;
     if (pending.hunkCount > limit) {
@@ -468,7 +479,7 @@ export const diffHunks = async (
   if (prefix === undefined) return undefined;
   const out = await gitOut(root, [
     "-c", "core.quotePath=false",
-    "diff", "--unified=0", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames",
+    "diff", "--unified=0", "--full-index", "--no-color", "--no-ext-diff", "--no-textconv", "--find-renames",
     range, "--", ".",
   ], { maxBuffer: DIFF_MAX_BUFFER });
   return out === undefined ? undefined : parseZeroContextDiff(out, prefix);

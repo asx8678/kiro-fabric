@@ -4,6 +4,7 @@ import { forEachChunked } from "./asyncutil.js";
 import { LANG_BY_EXT } from "./astgrep.js";
 import { isTestFile, supportsImportExtraction } from "./extract.js";
 import { buildJoinIndex, type JoinIndex } from "./join.js";
+import { symbolRanges } from "./ranges.js";
 import type { AnchorDraft } from "./anchors.js";
 import type { FileFacts } from "./build.js";
 import type { Edge, EdgeEvidence, Graph, ImportCoverage, ImportSite, LiteralSite, NodeRec } from "./types.js";
@@ -24,6 +25,8 @@ const langFamily = (file: string): string => {
   return ext;
 };
 
+const identifierKey = (name: string, language: string | undefined): string => language === "Php" ? name.toLowerCase() : name;
+
 /**
  * Precomputed suffix indexes. The naive resolvers scanned the whole file set
  * per import (O(imports × files)), which quadratic-blows on big trees; these
@@ -40,7 +43,7 @@ interface ImportIndex {
   tsByTailStem: Map<string, string[]>;
 }
 
-const pushIndex = (m: Map<string, string[]>, key: string, value: string): void => {
+const pushIndex = <T>(m: Map<string, T[]>, key: string, value: T): void => {
   (m.get(key) ?? m.set(key, []).get(key)!).push(value);
 };
 
@@ -109,7 +112,15 @@ const resolveImportToFile = (
     let base = posix.normalize(posix.join(posix.dirname(fromFile), spec));
     // NodeNext convention: TS files import "./sibling.js" — the .js refers to
     // the .ts source. Strip a runtime extension before probing.
-    base = base.replace(/\.(?:[cm]?js|jsx)$/, "");
+    const runtime = fam === "ts" ? /\.(mjs|cjs|jsx|js)$/.exec(base) : undefined;
+    if (runtime) {
+      const substitutions: Record<string, string[]> = {
+        mjs: [".mts", ".d.mts", ".mjs"], cjs: [".cts", ".d.cts", ".cjs"],
+        jsx: [".tsx", ".ts", ".d.ts", ".jsx", ".js"], js: [".ts", ".tsx", ".d.ts", ".js", ".jsx"],
+      };
+      base = base.slice(0, -runtime[0].length);
+      return exact(substitutions[runtime[1]!]!.map((ext) => base + ext), "relative-import");
+    }
     const candidates: string[] = [];
     for (const ext of CODE_EXTS_BY_LANGFAMILY[fam] ?? []) {
       candidates.push(base + ext, `${base}/index${ext}`);
@@ -118,8 +129,15 @@ const resolveImportToFile = (
     return exact(candidates, "relative-import");
   }
   if (fam === "py") {
-    const p = spec.replace(/\./g, "/");
-    return exact([`${p}.py`, `${p}/__init__.py`], "python-module");
+    const dots = /^\.+/.exec(spec)?.[0].length ?? 0;
+    let directory = posix.dirname(fromFile);
+    for (let level = 1; level < dots; level++) {
+      if (directory === "." || directory === "..") return undefined;
+      directory = posix.dirname(directory);
+    }
+    const p = dots ? posix.normalize(posix.join(directory, spec.slice(dots).replace(/\./g, "/"))) : spec.replace(/\./g, "/");
+    if (p === ".." || p.startsWith("../")) return undefined;
+    return exact(dots === spec.length ? [`${p}/__init__.py`] : [`${p}.py`, `${p}/__init__.py`], "python-module");
   }
   if (fam === "go") {
     const segs = spec.split("/").filter(Boolean);
@@ -271,18 +289,13 @@ export const assembleGraphWithIndex = async (
   // Order each file's node list by line for enclosing-symbol queries.
   for (const [, arr] of byFile) arr.sort((x, y) => nodes[x]!.line - nodes[y]!.line);
 
-  const enclosingIdx = (file: string, line: number): number => {
-    const arr = byFile.get(file) ?? [];
-    let best = fileIdx.get(file)!;
-    for (const idx of arr) {
-      const n = nodes[idx]!;
-      if (n.kind !== "file" && n.line <= line && nodes[best]!.line <= n.line) best = idx;
-    }
-    return best;
-  };
+  const enclosing = symbolRanges(nodes);
+  const enclosingIdx = (file: string, line: number, column?: number): number =>
+    seen.get(enclosing(file, line, column)?.id ?? "") ?? fileIdx.get(file)!;
 
   // byName index: exact, lowercased, and short suffix (methods).
   const byName = new Map<string, number[]>();
+  const byIdentifier = new Map<string, number[]>();
   {
     const addKey = (key: string, idx: number): void => {
       if (!key) return;
@@ -291,8 +304,12 @@ export const assembleGraphWithIndex = async (
     nodes.forEach((n, i) => {
       if (n.kind === "file" || n.kind === "anchor") return;
       addKey(n.name.toLowerCase(), i);
+      pushIndex(byIdentifier, identifierKey(n.name, n.lang), i);
       const dot = n.name.indexOf(".");
-      if (dot > 0) addKey(n.name.slice(dot + 1).toLowerCase(), i);
+      if (dot > 0) {
+        addKey(n.name.slice(dot + 1).toLowerCase(), i);
+        pushIndex(byIdentifier, identifierKey(n.name.slice(dot + 1), n.lang), i);
+      }
     });
   }
 
@@ -368,13 +385,15 @@ export const assembleGraphWithIndex = async (
     if (!f) return;
     const targets = importTargets.get(rel) ?? [];
     const imported = new Set(targets.map((target) => target.file));
+    const language = LANG_BY_EXT[rel.split(".").pop()?.toLowerCase() ?? ""];
     const bend = langFamily(rel) === "bend";
     const aliases = bend ? targets.filter((target) => target.alias).sort((a, b) => b.alias!.length - a.alias!.length) : [];
     for (const call of f.calls) {
       const alias = aliases.find((target) => call.callee.startsWith(`${target.alias}.`));
       const name = alias ? call.callee.slice(alias.alias!.length + 1) : call.callee;
-      const cands = (byName.get(name.toLowerCase()) ?? []).filter((i) => !bend ||
-        (nodes[i]!.lang === "Bend" && nodes[i]!.name === name && nodes[i]!.file === (alias?.file ?? rel)));
+      const cands = (byIdentifier.get(identifierKey(name, language)) ?? []).filter((i) => (nodes[i]!.lang === language ||
+        (langFamily(rel) === "ts" && langFamily(nodes[i]!.file) === "ts")) && (!bend ||
+        (nodes[i]!.name === name && nodes[i]!.file === (alias?.file ?? rel))));
       if (!cands.length || cands.length > 48) continue;
       let strategy: EdgeEvidence["strategy"] = "same-file-symbol";
       let chosen: number[] = cands.filter((i) => nodes[i]!.file === rel);
@@ -388,7 +407,7 @@ export const assembleGraphWithIndex = async (
       }
       if (!chosen.length || chosen.length > 3) continue;
       const w = cands.length <= 8 ? 0.7 : cands.length <= 24 ? 0.45 : 0.25;
-      const from = enclosingIdx(rel, call.line);
+      const from = enclosingIdx(rel, call.line, call.column);
       for (const to of chosen) {
         pushEdge(from, to, "invokes", w, { strategy, rule: "call-target-resolution", source: call.callee, candidates: cands.length });
       }
@@ -399,7 +418,7 @@ export const assembleGraphWithIndex = async (
   nodes.forEach((node, i) => {
     if (node.kind !== "class") return;
     for (const match of node.sig.matchAll(/extends\s+([A-Za-z_$][\w$.]*)/g)) {
-      const candidates = byName.get(match[1]!.toLowerCase()) ?? [];
+      const candidates = byIdentifier.get(identifierKey(match[1]!, node.lang)) ?? [];
       for (const to of candidates) {
         pushEdge(i, to, "inherits", 0.9, {
           strategy: "signature-extends", rule: "extends-clause", source: match[1]!, candidates: candidates.length,
@@ -410,7 +429,7 @@ export const assembleGraphWithIndex = async (
     if (impl) {
       for (const raw of impl[1]!.split(",")) {
         const name = raw.trim();
-        const candidates = byName.get(name.toLowerCase()) ?? [];
+        const candidates = byIdentifier.get(identifierKey(name, node.lang)) ?? [];
         for (const to of candidates) {
           pushEdge(i, to, "inherits", 0.9, {
             strategy: "signature-implements", rule: "implements-clause", source: name, candidates: candidates.length,
@@ -423,7 +442,7 @@ export const assembleGraphWithIndex = async (
   // Literal join edges (the cross-language bridge).
   const allSites: LiteralSite[] = [];
   for (const f of factValues()) for (const literal of f.literals) allSites.push(literal);
-  const joinIdx = buildJoinIndex(allSites, (file, line) => enclosingIdx(file, line));
+  const joinIdx = buildJoinIndex(allSites, enclosingIdx);
   for (const edge of joinIdx.edges) pushEdge(edge.a, edge.b, "join", edge.w, edge.evidence);
 
   // Anchors: one node per exact feature id, not per site. Registrations, schema

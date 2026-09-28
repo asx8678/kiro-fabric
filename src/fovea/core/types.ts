@@ -25,12 +25,18 @@ export type EdgeKind =
   | "join"       // shared normalized literal (cross-language bridge)
   | "anchors";   // route anchor -> handler symbol (site-collapsed feature hub)
 
+export interface SourceRange {
+  start: { line: number; column: number };
+  end: { line: number; column: number };
+}
+
 export interface NodeRec {
   id: string;        // stable identity: "name@file" (methods: "Type.name@file")
   name: string;
   kind: NodeKind;
   file: string;      // repo-relative path
   line: number;      // 1-indexed
+  range?: SourceRange | undefined;
   lineApproximate?: (boolean) | undefined; // legacy outlines only know the enclosing declaration
   sig: string;       // one-line signature for foveated rendering
   lang: string;      // ast-grep language name, or "config" / "text"
@@ -120,6 +126,7 @@ export interface SymbolRec {
   kind: NodeKind;
   file: string;
   line: number;
+  range?: SourceRange | undefined;
   lineApproximate?: (boolean) | undefined;
   sig: string;
   lang: string;
@@ -134,5 +141,5 @@ export interface ImportSite {
   /** Captured computed expression; absent bounds mean the target is unresolved. */
   dynamic?: { prefix?: string | undefined; suffix?: string | undefined } | undefined;
 }
-export interface CallSite { file: string; line: number; callee: string; }
-export interface LiteralSite { file: string; line: number; text: string; }
+export interface CallSite { file: string; line: number; column?: number | undefined; callee: string; }
+export interface LiteralSite { file: string; line: number; column?: number | undefined; text: string; }

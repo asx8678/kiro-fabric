@@ -62,7 +62,7 @@ export interface JoinIndex {
 // (symbol, else the file node).
 export const buildJoinIndex = (
   sites: LiteralSite[],
-  resolveOccurrence: (file: string, line: number) => number | undefined,
+  resolveOccurrence: (file: string, line: number, column?: number) => number | undefined,
 ): JoinIndex => {
   // One occurrence per (key, file): repetition inside a single file must not
   // inflate document frequency, or lockfile-ish files dominate the bridge.
@@ -71,7 +71,7 @@ export const buildJoinIndex = (
   for (const s of sites) {
     const cls = classifyLiteral(s.text);
     if (!cls) continue;
-    const node = resolveOccurrence(s.file, s.line);
+    const node = resolveOccurrence(s.file, s.line, s.column);
     if (node === undefined) continue;
     const key = normalizeLiteral(s.text, cls);
     const g = grouped.get(key) ?? { cls, occ: [], seenFiles: new Set<string>() };
