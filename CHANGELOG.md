@@ -1,10 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Breaking:** `memory.*` is merged into `state`, which gains `state.search`; existing memory entries are not migrated. `review.*`, `probe.*` and `continuity.*` are removed. Old `memory` and `continuity` configuration sections are ignored.
+- **Breaking:** the managed installer (generations, private Node/ripgrep, journals, rollback) is replaced by `bash ./install.sh`, which installs to `~/.kiro/kiro-fabric/{app,tools,resources}` using the system Node and ripgrep and the pinned `@ast-grep/cli` npm binary. Reinstall; old `runtime/` generations are no longer used.
+- **Breaking (library):** `KiroHostSessionAdapter`, the `hostSessions` and `foveaPostToolContext` server options, the ACP capability probe and the `fovea-hook` entry point are removed.
+- Rewrite the agent prompt, first-turn triage, skill and references in plain language; small tasks skip Navigator/impact ritual, and duplicated or stale guidance is removed.
+- Keep TypeScript out of the sandbox worker and trim redundant search checks; `pnpm test` and `pnpm run check` run the real Vitest suite.
+
 ## 0.65.0
 
 Prepared source release; not published or release-qualified. Historical 0.64.0 evidence remains historical and does not qualify these bytes.
 
-- **Breaking mutation contract:** `local.edit` requires `expectedSha256`; `local.write` replacing an existing file requires both `overwrite: true` and `expectedSha256`. Use the digest returned by the read that supplied the edit anchors or replacement source, not a hash of a bounded text excerpt. Create-only writes omit the digest. Stale or missing binding fails closed before approval; reread and reconsider the change rather than retrying blindly. See [migration and release checklist](docs/release.md#0650-migration).
+- **Breaking mutation contract:** `local.edit` requires `expectedSha256`; `local.write` replacing an existing file requires both `overwrite: true` and `expectedSha256`. Use the digest returned by the read that supplied the edit anchors or replacement source, not a hash of a bounded text excerpt. Create-only writes omit the digest. Stale or missing binding fails closed before approval; reread and reconsider the change rather than retrying blindly.
 
 - Make repository reviews coverage-led rather than brevity-led: exempt audits from the routine 120-word default, follow high-risk scripts/overrides/consumers, falsify suspected defects, and report unreviewed scope. Ship task-loaded `fabric.help({topic:"review"})` guidance without adding model tools or raising execution budgets.
 - Add `hidden:true` to local grep/find with explicit search `scope`, retaining ignore rules, VCS exclusions and path protections. Include `totalLines` in reads and optimize recursive all-files manifests to one ripgrep launch. These additive result fields change exact serialized result shapes; `truncated:false` is not whole-repository completeness.

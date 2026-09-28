@@ -128,7 +128,7 @@ The model-facing guidance is split across these sources:
 | Standing prompt | `scripts/agent-profile.mjs` | Standard owns task scope, proportional planning, acceptance, Navigator-first navigation and output. Review adds a short review core; minimal keeps operation/authorization rules without task steering. |
 | First-request context | `src/kiro/first-prompt-guidance.ts` | The submit hook reinforces complexity assessment, Code Mode and Navigator entry points once per session where hooks run. |
 | Attached skill | `skills/fabric-exec/SKILL.md` | Standard/review execution mechanics, source evidence, fallback and bounded composition. |
-| Installation steering | `resources/steering/fabric.md` | Generation, workspace and shell boundaries. |
+| Installation steering | `resources/steering/fabric.md` | Installation is not the workspace, restart after updates, shell authority. |
 | Tool description and help | `src/kiro/mcp-server.ts`, `src/kiro/bootstrap-provider.ts`, `skills/fabric-exec/references/` | Compact API entry points plus on-demand API, workflow and review recipes; generated guidance embeds canonical Markdown. |
 | Navigator result context | `src/kiro/fovea-context.ts` | Bounded untrusted repository hints after eligible tool work, not another instruction prompt or proof of source inspection. |
 
