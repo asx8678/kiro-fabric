@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { verifyBuildClosure } from "./build-inputs.mjs";
+import { pruneGeneratedOutputs } from "./prepare-generated-output.mjs";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -96,3 +97,6 @@ for (const root of [
     }
   }
 }
+
+pruneGeneratedOutputs(path.resolve("."), "dist");
+pruneGeneratedOutputs(path.resolve("."), "dist/kiro-agent-closure");

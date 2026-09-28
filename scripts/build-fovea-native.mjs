@@ -24,7 +24,7 @@ export function compileSourceBinding(root, output) {
   const flags = process.platform === 'darwin' ? ['-bundle', '-undefined', 'dynamic_lookup', '-mmacosx-version-min=13.5', '-arch', process.arch === 'arm64' ? 'arm64' : 'x86_64'] : ['-shared'];
   const result = spawnSync('/usr/bin/cc', ['-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-D_FILE_OFFSET_BITS=64', ...flags,
     `-I${headers}`, `-I${uv}`, path.join(root, 'src/fovea/source-platform-native.c'), '-o', output],
-  { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C' } });
+  { encoding: 'utf8', timeout: 30_000, maxBuffer: 1024 * 1024, env: { PATH: '/usr/bin:/bin', LANG: 'C', LC_ALL: 'C', TMPDIR: path.dirname(path.resolve(output)) } });
   if (result.error || result.status !== 0) throw Error(`Native source compiler failed: ${result.error?.message ?? result.stderr}`);
 }
 

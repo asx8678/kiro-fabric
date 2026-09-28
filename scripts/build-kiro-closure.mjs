@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import { uniquePackageRecords } from "./package-identity.mjs";
 import { sharedEsbuildOptions } from "./esbuild-common.mjs";
 import { buildFoveaNative } from "./build-fovea-native.mjs";
-import { prepareGeneratedOutput } from "./prepare-generated-output.mjs";
+import { prepareGeneratedOutput, pruneGeneratedOutputs } from "./prepare-generated-output.mjs";
 
 import { captureBuildInputs, assertBuildInputs } from "./build-inputs.mjs";
 import { renderAgentGuidance } from "./generate-agent-guidance.mjs";
@@ -251,3 +251,4 @@ for (const file of files.filter((file) => file.endsWith(".js") || file.endsWith(
 const finalFiles = [...files, path.join(outdir, "closure-manifest.json")];
 const bytes = finalFiles.reduce((total, file) => total + fs.statSync(file).size, 0);
 console.log(`Agent closure built: ${finalFiles.length} files, ${bytes} bytes, ${sourceInputs.length} source modules`);
+if (!args.length) pruneGeneratedOutputs(root, "dist/kiro-agent-closure");

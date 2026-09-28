@@ -31,6 +31,9 @@ const readTrace = (target) => {
 const finiteNonnegative = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
 const nullableNumber = (value) => finiteNonnegative(value) ? value : null;
 const nullableBoolean = (value) => typeof value === "boolean" ? value : null;
+const failure = (event) => event.data?.error || (event.data?.ok === false || event.data?.errorKind
+  ? (typeof event.data?.errorKind === "string" && /^[a-z][a-z0-9_]{0,63}$/u.test(event.data.errorKind) ? event.data.errorKind : "provider_failed")
+  : undefined);
 const timing = (span) => {
   if (!finiteNonnegative(span.monoUs) || !finiteNonnegative(span.durUs)) return null;
   const end = span.monoUs + span.durUs;
@@ -155,7 +158,7 @@ const analyze = (events, malformed) => {
         ev: span.ev, ref: span.data?.actionRef ?? span.ev,
         durUs: timing(span)?.duration ?? null, selfUs: selfTimeUs(span),
         parent: span.parentId ? spanById.get(span.parentId)?.ev : undefined,
-        ...(span.data?.error ? { error: span.data.error } : {}),
+        ...(failure(span) ? { error: failure(span) } : {}),
       })).sort((left, right) => (right.selfUs ?? -Infinity) - (left.selfUs ?? -Infinity)),
     };
   });
@@ -180,7 +183,7 @@ const analyze = (events, malformed) => {
     entry.durations.push(timing(span)?.duration ?? null);
     entry.argsChars.push(span.data?.argsChars);
     entry.resultChars.push(span.data?.resultChars);
-    if (span.data?.error) entry.errors += 1;
+    if (failure(span)) entry.errors += 1;
     byRef.set(ref, entry);
   }
   const bridgeTable = [...byRef.entries()].map(([ref, entry]) => {
@@ -234,8 +237,8 @@ const analyze = (events, malformed) => {
     if (event.ev === "trace.truncated") { incompleteMarkers += 1; anomalies.push({ kind: "file-cap-truncated" }); }
     if (event.ev === "line.truncated") { incompleteMarkers += 1; anomalies.push({ kind: "line-truncated", bytes: nullableNumber(event.data?.bytes ?? event.bytes) }); }
     if (event.ev === "exec.end" && event.data?.status && event.data.status !== "succeeded") anomalies.push({ kind: "failed-execution", execId: event.execId, status: event.data.status, typeErrors: event.data.typeErrors });
-    if (event.cat === "bridge" && event.data?.error) anomalies.push({ kind: "bridge-error", ref: event.data.actionRef ?? event.ev, error: event.data.error });
-    if (event.ev === "approval.wait" && event.data?.approved === false) anomalies.push({ kind: "approval-denied", ref: event.data.ref, error: event.data.error });
+    if (event.cat === "bridge" && failure(event)) anomalies.push({ kind: "bridge-error", ref: event.data?.actionRef ?? event.ev, error: failure(event) });
+    if (event.ev === "approval.wait" && event.data?.approved === false) anomalies.push({ kind: "approval-denied", ref: event.data.ref, error: failure(event) });
   }
   const observedExecutions = executions.filter((execution) => execution.attempts === 1);
   const compileResults = events.filter((event) => event.ev === "compile.result");
