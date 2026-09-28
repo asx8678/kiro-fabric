@@ -12,7 +12,7 @@ import {
 } from "./chunk-TVIJCO2F.js";
 import {
   FabricCompilerPool
-} from "./chunk-TIFOU53F.js";
+} from "./chunk-K2YC27CH.js";
 import "./chunk-ODEJLNJ5.js";
 import "./chunk-AE4E2KSU.js";
 export {

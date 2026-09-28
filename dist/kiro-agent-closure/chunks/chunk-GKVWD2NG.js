@@ -10277,9 +10277,7 @@ var runQuickJsSandbox = async (code, hostCall, options, cancellationFlag) => {
   if (!Number.isSafeInteger(options.memoryLimitBytes) || options.memoryLimitBytes < 1 || options.memoryLimitBytes > 4294967295) {
     return { value: void 0, logs: [], terminationReason: "runtime_error", error: "QuickJS memory limit is outside the WASM32 range", effectiveTimeoutMs: requestedTimeoutMs };
   }
-  const { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } = await import("./type-checker-3YIHH47E.js");
-  const bundle = options.transpiledCode === void 0 ? transpileFabricCodeWithSourceMap(code) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
-  assertFabricTranspiledWrapper(bundle.code);
+  const bundle = options.transpiledCode === void 0 ? (await import("./type-checker-C3TBVMY2.js")).transpileFabricCodeWithSourceMap(code) : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
   const transpiledError = fabricTranspiledLimitError(bundle.code);
   if (transpiledError) {
     return { value: void 0, logs: [], terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: requestedTimeoutMs };
@@ -10637,7 +10635,7 @@ var runQuickJsSandbox = async (code, hostCall, options, cancellationFlag) => {
     teardownSpan?.end();
   }
 };
-var SANDBOX_WORKER_IDLE_MS = 1e4;
+var SANDBOX_WORKER_IDLE_MS = 6e4;
 var SANDBOX_WORKER_BACKSTOP_MS = 1e3;
 var SANDBOX_WORKER_MEMORY_MB = 256;
 var sandboxWorkerUrl = () => import.meta.url.endsWith(".ts") ? new URL("../../dist/runtime/sandbox-worker-entry.js", import.meta.url) : new URL("../runtime/sandbox-worker-entry.js", import.meta.url);

@@ -96,13 +96,16 @@ export class LocalPaths {
       let text: string;
       try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(data); }
       catch { throw new LocalNonTextError("local file is not valid UTF-8"); }
-      this.verifyRoot();
       const again = this.check(found.path);
       if (!again.stat || !sameLocalIdentity(again.stat, before) || JSON.stringify(again.parents) !== JSON.stringify(found.parents)) throw new Error("local file identity changed during read");
       return { text, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
     } finally { fs.closeSync(fd); }
   }
   snapshot(input: string): { text: string; snapshot: LocalPathSnapshot } {
+    try { return this.read(input); }
+    catch (error) {
+      if (code(error) !== "ENOENT") throw error;
+    }
     const found = this.check(input, true);
     return found.stat ? this.read(found.path) : { text: "", snapshot: { path: found.path, parents: found.parents, file: null } };
   }

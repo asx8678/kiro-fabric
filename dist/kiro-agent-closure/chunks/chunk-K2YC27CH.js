@@ -10,6 +10,7 @@ import {
 } from "./chunk-ODEJLNJ5.js";
 
 // src/runtime/compiler-pool.ts
+import { createHash } from "node:crypto";
 import { Worker } from "node:worker_threads";
 var DEFAULT_COMPILER_TIMEOUT_MS = 1e4;
 var COMPILER_MEMORY_MB = 128;
@@ -31,6 +32,7 @@ var FabricCompilerPool = class {
   #idle;
   #cache = /* @__PURE__ */ new Map();
   #cachedChars = 0;
+  #lastDeclarations;
   #nextId = 0;
   #closed = false;
   #closing;
@@ -54,6 +56,12 @@ var FabricCompilerPool = class {
       this.#cachedChars -= this.#cache.get(oldest).chars;
       this.#cache.delete(oldest);
     }
+  }
+  #declarationsDigest(declarations) {
+    if (this.#lastDeclarations?.text !== declarations) {
+      this.#lastDeclarations = { text: declarations, digest: createHash("sha256").update(Buffer.from(declarations, "utf16le")).digest("hex") };
+    }
+    return this.#lastDeclarations.digest;
   }
   #detachIdle(state) {
     if (state.idleTimer) {
@@ -119,7 +127,7 @@ var FabricCompilerPool = class {
         return;
       }
       const { code, declarations } = request;
-      const cacheKey = options.workerUrl === void 0 && code.length + declarations.length <= MAX_COMPILER_CACHE_CHARS ? `${declarations.length}:${declarations}${code}` : void 0;
+      const cacheKey = options.workerUrl === void 0 && code.length + declarations.length <= MAX_COMPILER_CACHE_CHARS ? `${this.#declarationsDigest(declarations)}:${code}` : void 0;
       const cached = cacheKey === void 0 ? void 0 : this.#cache.get(cacheKey);
       if (cached) {
         this.#cache.delete(cacheKey);

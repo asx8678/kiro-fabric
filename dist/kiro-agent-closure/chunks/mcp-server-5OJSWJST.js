@@ -36,7 +36,7 @@ import {
 } from "./chunk-762YYRNE.js";
 import {
   FabricCompilerPool
-} from "./chunk-TIFOU53F.js";
+} from "./chunk-K2YC27CH.js";
 import {
   Any,
   BigInt as BigInt2,
@@ -182,7 +182,7 @@ import {
   traceFailureMetadata,
   validateSchemaValue,
   value_exports
-} from "./chunk-JXLQJ76T.js";
+} from "./chunk-GKVWD2NG.js";
 import "./chunk-XJTFSUKV.js";
 import {
   FabricCompilerTimeoutError,
@@ -11281,7 +11281,6 @@ var LocalPaths = class {
       } catch {
         throw new LocalNonTextError("local file is not valid UTF-8");
       }
-      this.verifyRoot();
       const again = this.check(found.path);
       if (!again.stat || !sameLocalIdentity(again.stat, before) || JSON.stringify(again.parents) !== JSON.stringify(found.parents)) throw new Error("local file identity changed during read");
       return { text: text3, snapshot: { path: found.path, parents: found.parents, file: { identity: localIdentity(before), mode: before.mode, size: before.size, mtimeMs: before.mtimeMs, ctimeMs: before.ctimeMs, sha256: localHash(data) } } };
@@ -11290,6 +11289,11 @@ var LocalPaths = class {
     }
   }
   snapshot(input) {
+    try {
+      return this.read(input);
+    } catch (error) {
+      if (code(error) !== "ENOENT") throw error;
+    }
     const found = this.check(input, true);
     return found.stat ? this.read(found.path) : { text: "", snapshot: { path: found.path, parents: found.parents, file: null } };
   }
@@ -18527,10 +18531,13 @@ var LocalCodingProvider = class {
     return [`local-workspace:${this.#paths.root}`];
   }
   #check(context) {
+    this.#checkActive(context);
+    this.#paths.verifyRoot();
+  }
+  #checkActive(context) {
     if (this.#closed) throw new Error("local provider is closed");
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#controller.signal.throwIfAborted();
-    this.#paths.verifyRoot();
   }
   #validate(name, args, prepared = false) {
     if (typeof args !== "object" || args === null || Array.isArray(args)) throw new Error(`Invalid arguments for local.${name}: must be an object`);
@@ -18823,7 +18830,7 @@ No content change`;
         return this.#read({ ...window }, budget2, captured);
       }, args.partial === true, name === "readEvidence" ? { serialize: formatLocalEvidence, operation: "local.readEvidence" } : {});
       for (const captured of snapshots.values()) {
-        this.#check(context);
+        this.#checkActive(context);
         this.#paths.revalidate(captured.snapshot);
       }
       const bounded3 = this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget2);
@@ -18946,7 +18953,7 @@ No content change`;
     }
     if (files.length > 1e4) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
     const checked = files.map((file) => {
-      this.#check(context);
+      this.#checkActive(context);
       return this.#paths.check(file);
     });
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
@@ -19000,7 +19007,7 @@ No content change`;
         const file = candidates[index];
         if (snapshots.length && batchBytes + file.stat.size > LOCAL_MAX_FILE_BYTES) break;
         index++;
-        this.#check(context);
+        this.#checkActive(context);
         searchedBytes += file.stat.size;
         searchedPathChars += Buffer.byteLength(file.path) + 1;
         if (searchedBytes > 32 * 1024 * 1024 || searchedPathChars > 128e3) throw new Error("local.grep exceeded aggregate search work limit; narrow path or glob");
@@ -19016,6 +19023,7 @@ No content change`;
       outputBytes += Buffer.byteLength(output);
       if (outputBytes > 2 * 1024 * 1024) throw new Error("local rg exceeded bounded work/output; narrow path or glob");
       for (const snapshot2 of snapshots) this.#paths.revalidate(snapshot2);
+      const batchPaths = new Set(snapshots.map((snapshot2) => snapshot2.path));
       for (const line of output.split("\n")) {
         if (!line) continue;
         const record6 = JSON.parse(line);
@@ -19026,8 +19034,9 @@ No content change`;
         }
         const data = record6.data;
         if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
+        if (!batchPaths.has(data.path.text)) throw new Error("local rg returned a path outside the searched batch");
         const text3 = data.lines.text.replace(/\r?\n$/u, "");
-        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text3.slice(0, 500) });
+        result.matches.push({ path: this.#paths.relative(data.path.text), line: data.line_number, text: text3.slice(0, 500) });
         if (text3.length > 500) mark(result, "match-text");
         if (!searchFits(result)) {
           result.matches.pop();
@@ -19054,7 +19063,7 @@ No content change`;
     const hashes = [];
     const snapshots = [];
     for (const file of files) {
-      this.#check(context);
+      this.#checkActive(context);
       const checked = this.#paths.check(file);
       bytes3 += checked.stat.size;
       if (bytes3 > 32 * 1024 * 1024) throw new Error("local snapshot exceeds 32MiB work limit");
@@ -19066,7 +19075,7 @@ No content change`;
     }
     if (await enumerate() !== output) throw new Error("local search snapshot enumeration drift during validation");
     for (const snapshot2 of snapshots) {
-      this.#check(context);
+      this.#checkActive(context);
       this.#paths.revalidate(snapshot2);
     }
     this.#check(context);

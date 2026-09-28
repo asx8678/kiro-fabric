@@ -137,10 +137,13 @@ export class LocalCodingProvider implements FabricProvider {
   }
   effectResources(): readonly string[] { return [`local-workspace:${this.#paths.root}`]; }
   #check(context: FabricInvocationContext): void {
+    this.#checkActive(context);
+    this.#paths.verifyRoot();
+  }
+  #checkActive(context: FabricInvocationContext): void {
     if (this.#closed) throw new Error("local provider is closed");
     throwIfAbortedOrExpired(context.signal, context.deadline);
     this.#controller.signal.throwIfAborted();
-    this.#paths.verifyRoot();
   }
   #validate(name: string, args: Record<string, unknown>, prepared = false): void {
     if (typeof args !== "object" || args === null || Array.isArray(args)) throw new Error(`Invalid arguments for local.${name}: must be an object`);
@@ -425,7 +428,7 @@ export class LocalCodingProvider implements FabricProvider {
         }
         return this.#read({ ...window }, budget, captured);
       }, args.partial === true, name === "readEvidence" ? { serialize: formatLocalEvidence, operation: "local.readEvidence" } : {});
-      for (const captured of snapshots.values()) { this.#check(context); this.#paths.revalidate(captured.snapshot); }
+      for (const captured of snapshots.values()) { this.#checkActive(context); this.#paths.revalidate(captured.snapshot); }
       const bounded = this.#bounded(name === "readEvidence" ? formatLocalEvidence(result) : result, budget);
       const sources = result.files.map(file => ({ path: path.resolve(this.#paths.root, file.path), sha256: file.sha256 }));
       if (sources.length) observeFovea(context, { phase: "access", paths: sources.map(source => source.path), sources });
@@ -533,7 +536,7 @@ export class LocalCodingProvider implements FabricProvider {
       files = files.filter((file) => selected.has(file));
     }
     if (files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
-    const checked = files.map((file) => { this.#check(context); return this.#paths.check(file); });
+    const checked = files.map((file) => { this.#checkActive(context); return this.#paths.check(file); });
     for (const file of checked) if (!file.stat?.isFile()) throw new Error("local search requires regular files");
     return { scope, files, checked };
   }
@@ -583,7 +586,7 @@ export class LocalCodingProvider implements FabricProvider {
         const file = candidates[index]!;
         if (snapshots.length && batchBytes + file.stat!.size > LOCAL_MAX_FILE_BYTES) break;
         index++;
-        this.#check(context);
+        this.#checkActive(context);
         searchedBytes += file.stat!.size;
         searchedPathChars += Buffer.byteLength(file.path) + 1;
         if (searchedBytes > 32 * 1024 * 1024 || searchedPathChars > 128000) throw new Error("local.grep exceeded aggregate search work limit; narrow path or glob");
@@ -596,6 +599,7 @@ export class LocalCodingProvider implements FabricProvider {
       outputBytes += Buffer.byteLength(output);
       if (outputBytes > 2 * 1024 * 1024) throw new Error("local rg exceeded bounded work/output; narrow path or glob");
       for (const snapshot of snapshots) this.#paths.revalidate(snapshot);
+      const batchPaths = new Set(snapshots.map(snapshot => snapshot.path));
       for (const line of output.split("\n")) {
         if (!line) continue;
         const record = JSON.parse(line) as { type: string; data?: { path?: { text?: string }; line_number?: number; lines?: { text?: string } } };
@@ -603,8 +607,9 @@ export class LocalCodingProvider implements FabricProvider {
         if (result.matches.length >= limit) { mark(result, "count"); return finish(result); }
         const data = record.data;
         if (typeof data?.path?.text !== "string" || !Number.isSafeInteger(data.line_number) || !data.line_number || typeof data.lines?.text !== "string") throw new Error("local rg returned unsupported non-UTF-8 match data");
+        if (!batchPaths.has(data.path.text)) throw new Error("local rg returned a path outside the searched batch");
         const text = data.lines.text.replace(/\r?\n$/u, "");
-        result.matches.push({ path: this.#paths.relative(this.#paths.check(data.path.text).path), line: data.line_number, text: text.slice(0, 500) });
+        result.matches.push({ path: this.#paths.relative(data.path.text), line: data.line_number, text: text.slice(0, 500) });
         if (text.length > 500) mark(result, "match-text");
         if (!searchFits(result)) { result.matches.pop(); mark(result, "output"); return finish(result); }
       }
@@ -629,7 +634,7 @@ export class LocalCodingProvider implements FabricProvider {
     const hashes: string[] = [];
     const snapshots: LocalPathSnapshot[] = [];
     for (const file of files) {
-      this.#check(context);
+      this.#checkActive(context);
       const checked = this.#paths.check(file);
       bytes += checked.stat!.size;
       if (bytes > 32 * 1024 * 1024) throw new Error("local snapshot exceeds 32MiB work limit");
@@ -642,7 +647,7 @@ export class LocalCodingProvider implements FabricProvider {
     // A resume must not publish cached records if an earlier file changed while
     // later files were fingerprinted, or enumeration changed during capture.
     if (await enumerate() !== output) throw new Error("local search snapshot enumeration drift during validation");
-    for (const snapshot of snapshots) { this.#check(context); this.#paths.revalidate(snapshot); }
+    for (const snapshot of snapshots) { this.#checkActive(context); this.#paths.revalidate(snapshot); }
     this.#check(context);
     return localHash(JSON.stringify([base.path, hashes]));
   }

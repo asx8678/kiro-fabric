@@ -162,11 +162,9 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
     // synchronous CPU work, and on a cold worker it can exceed a short guest
     // timeout on its own; charging it to the guest would expire the deadline
     // before a single guest instruction ran.
-    const { assertFabricTranspiledWrapper, transpileFabricCodeWithSourceMap } = await import("./type-checker.js");
     const bundle = options.transpiledCode === undefined
-      ? transpileFabricCodeWithSourceMap(code)
+      ? (await import("./type-checker.js")).transpileFabricCodeWithSourceMap(code)
       : { code: options.transpiledCode, sourceMap: options.transpiledSourceMap };
-    assertFabricTranspiledWrapper(bundle.code);
     const transpiledError = fabricTranspiledLimitError(bundle.code);
     if (transpiledError) {
       return { value: undefined, logs: [], terminationReason: "runtime_error", error: transpiledError, effectiveTimeoutMs: requestedTimeoutMs };
@@ -583,7 +581,7 @@ export type SandboxWorkerMessage = { executionId: string } & (
   | { type: "fatal"; message: string });
 
 /** Idle window before a spare worker is retired. */
-const SANDBOX_WORKER_IDLE_MS = 10_000;
+const SANDBOX_WORKER_IDLE_MS = 60_000;
 /** Extra margin past a deadline and its cleanup grace before the host declares
  * a worker unresponsive and terminates it. */
 const SANDBOX_WORKER_BACKSTOP_MS = 1_000;

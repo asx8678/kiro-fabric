@@ -1,4 +1,5 @@
 import { FabricCompilerTimeoutError } from "../core/repair-error.js";
+import { createHash } from "node:crypto";
 import { Worker } from "node:worker_threads";
 
 export interface FabricTypeError {
@@ -65,6 +66,7 @@ export class FabricCompilerPool {
   #idle: FabricCompilerWorkerState | undefined;
   readonly #cache = new Map<string, CachedFabricCompilation>();
   #cachedChars = 0;
+  #lastDeclarations: { text: string; digest: string } | undefined;
   #nextId = 0;
   #closed = false;
   #closing: Promise<void> | undefined;
@@ -90,6 +92,13 @@ export class FabricCompilerPool {
       this.#cachedChars -= this.#cache.get(oldest)!.chars;
       this.#cache.delete(oldest);
     }
+  }
+
+  #declarationsDigest(declarations: string): string {
+    if (this.#lastDeclarations?.text !== declarations) {
+      this.#lastDeclarations = { text: declarations, digest: createHash("sha256").update(Buffer.from(declarations, "utf16le")).digest("hex") };
+    }
+    return this.#lastDeclarations.digest;
   }
 
   #detachIdle(state: FabricCompilerWorkerState): void {
@@ -150,10 +159,10 @@ export class FabricCompilerPool {
       if (this.#closed) { reject(new Error("Fabric compiler pool is closed")); return; }
       if (options.signal?.aborted) { reject(options.signal.reason ?? new Error("Fabric compiler aborted")); return; }
       const { code, declarations } = request;
-      // Length framing preserves exact UTF-16 source/declarations without hash
-      // collisions or delimiter ambiguity. Custom workers never read/write it.
+      // A fixed-width digest of the exact UTF-16 declarations precedes the exact
+      // source, so there is no delimiter ambiguity. Custom workers never read/write it.
       const cacheKey = options.workerUrl === undefined && code.length + declarations.length <= MAX_COMPILER_CACHE_CHARS
-        ? `${declarations.length}:${declarations}${code}` : undefined;
+        ? `${this.#declarationsDigest(declarations)}:${code}` : undefined;
       const cached = cacheKey === undefined ? undefined : this.#cache.get(cacheKey);
       if (cached) {
         this.#cache.delete(cacheKey!); this.#cache.set(cacheKey!, cached);
