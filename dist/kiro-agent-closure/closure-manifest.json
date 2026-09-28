@@ -13,7 +13,7 @@
       },
       {
         "path": "package.json",
-        "sha256": "20c7f61aa7a0885fffe3dd1aa3f198cd7ed89cfaefadcd2612d57f18b5b89968"
+        "sha256": "624d7fcaf20d511f2813a2b1de1e80a6480c297529e4058588b852a9b9f67fdf"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -185,7 +185,7 @@
       },
       {
         "path": "scripts/package-policy.mjs",
-        "sha256": "94fdcaf73d890af991e5dd766618b42ce49a1b4f351b1b9339ed2165059730ba"
+        "sha256": "0b077258af49299942d7627855e422914c53e2fcf7bab99f72fa40afa4520cb6"
       },
       {
         "path": "scripts/pinned-directory-child.mjs",
@@ -333,7 +333,7 @@
       },
       {
         "path": "src/fovea/README.md",
-        "sha256": "742a640529ed75e15bee715399fa11ae41c4857b2c9fef4c488f5da27a27b577"
+        "sha256": "6638cb48847a305c651f7431da80037a600bf2dbeadf8ed5497485c0a425dc15"
       },
       {
         "path": "src/fovea/ast-grep-LICENSE.txt",
@@ -353,7 +353,7 @@
       },
       {
         "path": "src/fovea/core/PORT.md",
-        "sha256": "b4468d0861f575aefa4bde9845877eaa779036240fdfc8c7dfeb3d22a98f6d86"
+        "sha256": "d530d231ad1a1dc374a1deb6ec1c0097ddabdb0686bd3ca93cf9122162d3eb65"
       },
       {
         "path": "src/fovea/core/UPSTREAM-LICENSE.txt",
@@ -537,7 +537,7 @@
       },
       {
         "path": "src/fovea/upstream.json",
-        "sha256": "e67a08ae6094ab0fdf6c9ba1c4203d473d58a7ff7808199761b31839e93d6c11"
+        "sha256": "c8e6755f66bbb6d3a33b2b8b2c1da0019efeb40e93b1b45b37b03f4f41e2cf67"
       },
       {
         "path": "src/index.ts",
@@ -884,7 +884,7 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "d4fb5aab58f08bef810d4e10a3f3a6ebb44b5da2322dc12d5079763360e5f69c"
+    "digest": "2d659cf473bbf10da1f089b157d5e1011de9945e7136b21d5db49de04d01e255"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
@@ -1651,8 +1651,8 @@
     },
     {
       "path": "fovea/upstream.json",
-      "bytes": 3090,
-      "sha256": "e67a08ae6094ab0fdf6c9ba1c4203d473d58a7ff7808199761b31839e93d6c11"
+      "bytes": 3041,
+      "sha256": "c8e6755f66bbb6d3a33b2b8b2c1da0019efeb40e93b1b45b37b03f4f41e2cf67"
     },
     {
       "path": "kiro/fovea-hook.js",
@@ -1680,5 +1680,5 @@
       "sha256": "7d34493dd572662d4ab0d0eacb2abb905f3864da8368a359b65e9303d05883b3"
     }
   ],
-  "contentDigest": "9cb67ff655d40e8e75f0358f051743fa78a9f2c07377c55cca6d68c819361347"
+  "contentDigest": "884afb9ce25dfeb5617968333da85f52ab5f4853d97774aea62e49c7a4a37fbf"
 }
