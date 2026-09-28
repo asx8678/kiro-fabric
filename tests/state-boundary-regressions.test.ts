@@ -24,6 +24,7 @@ const startWriter = (base: string, root: string, mode: string) => {
   const code = `
     import fs from 'node:fs';
     import path from 'node:path';
+    import childProcess from 'node:child_process';
     import { pathToFileURL } from 'node:url';
     const [base, root, mode] = process.argv.slice(1);
     const { StateProvider } = await import(pathToFileURL(path.join(base, 'state-provider.mjs')).href);
@@ -37,6 +38,17 @@ const startWriter = (base: string, root: string, mode: string) => {
         Atomics.wait(word, 0, 0, 10);
       }
     };
+    const spawn = childProcess.spawnSync;
+    childProcess.spawnSync = (command, args, options) => {
+      const result = spawn(command, args, options);
+      if (Buffer.isBuffer(options?.input)) {
+        const request = JSON.parse(options.input.subarray(4, 4 + options.input.readUInt32BE()).toString('utf8'));
+        if (mode === 'contender' && request.operation === 'writeExclusive' && request.name.endsWith('.claim') && !announced && JSON.parse(result.stdout).code === 'EEXIST') {
+          announced = true; process.send({type:'contending'});
+        }
+      }
+      return result;
+    };
     fs.openSync = (file, flags, perms) => {
       let fd;
       try { fd = open(file, flags, perms); }
@@ -46,7 +58,7 @@ const startWriter = (base: string, root: string, mode: string) => {
         }
         throw error;
       }
-      if (String(file).endsWith('.state-mutation.lock') && (flags & fs.constants.O_CREAT)) lockFd = fd;
+      if (String(file).endsWith('.state-mutation.lock') && (flags & fs.constants.O_WRONLY)) lockFd = fd;
       if (mode === 'hold' && String(file).endsWith('.claim') && !announced) {
         announced = true; process.send({type:'claimed'}); pause();
       }

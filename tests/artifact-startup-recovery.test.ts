@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
+import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 
 const roots: string[] = [];
 afterEach(() => { vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
@@ -18,15 +19,21 @@ const fixture = (name = `ka_${"a".repeat(48)}`) => {
 describe("artifact startup disappearance recovery", () => {
   it.each(["lstat", "remove"] as const)("tolerates another process removing a valid entry before %s", (phase) => {
     const { root, file } = fixture();
-    const lstat = fs.lstatSync, remove = fs.rmSync;
+    const lstat = fs.lstatSync, remove = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
     if (phase === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation((target, options) => {
       if (String(target) === file) fs.unlinkSync(file);
       return lstat(target, options as never);
     });
-    else vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
-      if (String(target) === file) remove(file);
-      return remove(target, options);
-    });
+    else {
+      vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
+        if (path.basename(String(target)) === path.basename(file)) remove(file);
+        return remove(target, options);
+      });
+      vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
+        if (options.operation === "unlink" && options.name === path.basename(file)) remove(file);
+        return removePinned(options);
+      });
+    }
     const store = createKiroArtifactStore({ root });
     expect(fs.existsSync(file)).toBe(false);
     const id = store.write("new evidence");
@@ -38,15 +45,21 @@ describe("artifact startup disappearance recovery", () => {
     it.each(["EACCES", "EIO", "ENOTDIR"])("does not suppress %s", (code) => {
       const { root, file } = fixture();
       const failure = Object.assign(new Error("startup failure"), { code });
-      const lstat = fs.lstatSync, remove = fs.rmSync;
+      const lstat = fs.lstatSync, remove = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
       if (phase === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation((target, options) => {
         if (String(target) === file) throw failure;
         return lstat(target, options as never);
       });
-      else vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
-        if (String(target) === file) throw failure;
-        return remove(target, options);
-      });
+      else {
+        vi.spyOn(fs, "rmSync").mockImplementation((target, options) => {
+          if (path.basename(String(target)) === path.basename(file)) throw failure;
+          return remove(target, options);
+        });
+        vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
+          if (options.operation === "unlink" && options.name === path.basename(file)) throw failure;
+          return removePinned(options);
+        });
+      }
       expect(() => createKiroArtifactStore({ root })).toThrow(failure);
       expect(fs.readFileSync(file, "utf8")).toBe("residue");
     });

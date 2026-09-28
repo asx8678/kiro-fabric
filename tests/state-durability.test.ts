@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
+import * as stateDirectory from "../src/providers/state-directory.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import { causes, failLockRemoval } from "./state-fault-helpers.js";
 
@@ -23,16 +24,15 @@ const acknowledgementError = (value: unknown): Error => {
 /** Record fsync and rename events with fd classification (file vs directory
  * and inode identity) instead of brittle ordinal counts. */
 const trackPublication = (): { events: string[]; restore: () => void } => {
-  const sync = fs.fsyncSync, stat = fs.fstatSync, rename = fs.renameSync;
+  const sync = fs.fsyncSync, stat = fs.fstatSync, publish = stateDirectory.publishPinnedStateFile;
   const events: string[] = [];
   const syncSpy = vi.spyOn(fs, "fsyncSync").mockImplementation((fd) => {
     const observed = stat(fd);
     events.push(observed.isDirectory() ? `fsync:directory:${observed.ino}` : `fsync:file:${observed.ino}`);
     return sync(fd);
   });
-  const renameSpy = vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
-    events.push(`rename:${path.basename(String(to))}`);
-    return rename(from, to);
+  const renameSpy = vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation((directory, name, target, expected, targetExpected, published) => {
+    return publish(directory, name, target, expected, targetExpected, () => { events.push(`rename:${target}`); published(); });
   });
   return { events, restore: () => { syncSpy.mockRestore(); renameSpy.mockRestore(); } };
 };
@@ -117,7 +117,7 @@ describe("state publication durability barrier", () => {
       return sync(fd);
     });
     const renameSpy = fault === "rename"
-      ? vi.spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("injected rename failure"); })
+      ? vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation(() => { throw new Error("injected rename failure"); })
       : undefined;
     const error = await provider.invoke("set", { key: "fixture", value: "new" }, context).catch(error => error);
     openSpy.mockRestore(); syncSpy.mockRestore(); renameSpy?.mockRestore();

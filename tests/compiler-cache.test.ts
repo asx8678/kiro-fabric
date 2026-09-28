@@ -16,6 +16,7 @@ vi.mock("node:worker_threads", async () => {
     terminated = 0;
     request: (FabricCompilerRequest & { id: number }) | undefined;
     constructor() { super(); workers.push(this); }
+    ref() {}
     unref() {}
     postMessage(request: FabricCompilerRequest & { id: number }) {
       this.request = structuredClone(request);

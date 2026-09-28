@@ -51,7 +51,7 @@ function fixture() {
   return { root, call };
 }
 it.each([128, 600])("amortizes rg launches for %i tiny files", async count => {
-  const target = resolveCold(() => resolveSearchExecutable()).path;
+  const target = (await resolveCold(() => resolveSearchExecutable())).path;
   const f = fixture();
   for (let i = 0; i < count; i++) fs.writeFileSync(path.join(f.root, `${String(i).padStart(4, "0")}.txt`), "ordinary content\n");
   const launches = vi.spyOn(childProcess, "execFile");

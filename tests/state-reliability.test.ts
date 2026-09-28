@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
+import * as stateDirectory from "../src/providers/state-directory.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 import { causes, failLockRemoval } from "./state-fault-helpers.js";
@@ -42,10 +43,11 @@ describe("state ownership fault matrix", () => {
       expect(fabricCommitAcknowledgement(error)).toBeUndefined();
       expect(causes(error)).toContain(`fault-${fault}`);
       expect(live.size).toBe(0); expect(closes).toBe(fault === "open" ? 0 : 1);
-      if (fault === "identity") expect(causes(error)).toContain("ownership identity unavailable");
+      const unavailableIdentity = fault === "identity" && process.platform === "linux";
+      if (unavailableIdentity) expect(causes(error)).toContain("ownership identity unavailable");
       vi.restoreAllMocks();
       expect(fs.existsSync(path.join(root, "state.json"))).toBe(false);
-      if (fault !== "identity") {
+      if (!unavailableIdentity) {
         expect(fs.readdirSync(root)).toEqual([]);
         expect(await provider.invoke("set", { key: "key", value: true }, context)).toMatchObject({ revision: 1 });
       } else {
@@ -56,13 +58,13 @@ describe("state ownership fault matrix", () => {
   }
   it.each(["lstat", "rm", "replacement"] as const)("release %s reports proof and retains deferred responsibility", async (fault) => {
     const { root, provider, context } = fixture(); const lock = path.join(root, ".state-mutation.lock");
-    const rename = fs.renameSync, stat = fs.lstatSync;
-    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
-      rename(from, to);
+    const rename = fs.renameSync, stat = fs.lstatSync, publish = stateDirectory.publishPinnedStateFile;
+    vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation((directory, name, target, expected, targetExpected, published) => publish(directory, name, target, expected, targetExpected, () => {
+      published();
       if (fault === "replacement") { rename(lock, `${lock}.original`); fs.writeFileSync(lock, "foreign"); }
-      if (fault === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation(((file: fs.PathLike) => { if (String(file) === lock) throw new Error("release stat"); return stat(file); }) as typeof fs.lstatSync);
+      if (fault === "lstat") vi.spyOn(fs, "lstatSync").mockImplementation(((file: fs.PathLike) => { if (path.basename(String(file)) === path.basename(lock)) throw new Error("release stat"); return stat(file); }) as typeof fs.lstatSync);
       if (fault === "rm") failLockRemoval("release rm");
-    });
+    }));
     const error = await provider.invoke("set", { key: "key", value: true }, context).catch(e => e);
     expect(error).toMatchObject({ committed: true, revision: 1 });
     expect(fabricCommitAcknowledgement(error)).toEqual({ version: 1, operation: "set" });
@@ -145,8 +147,10 @@ describe("state execution acknowledgement", () => {
     if (operation === "delete") await provider.invoke("set", { key: "PRIVATE-key", value: "PRIVATE-value" }, context);
     const registry = new ActionRegistry(); registry.register(provider);
     const service = new FabricExecutionService(registry, normalizeFabricConfig({ executor: { timeoutMs: 5000 } }), root);
-    const controller = new AbortController(); const rename = fs.renameSync; let publications = 0;
-    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => { rename(from, to); publications++; if (fault === "aborted") controller.abort(new Error("PRIVATE abort")); if (fault === "timed_out") vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER); });
+    const controller = new AbortController(); const publish = stateDirectory.publishPinnedStateFile; let publications = 0;
+    vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation((directory, name, target, expected, targetExpected, published) => publish(directory, name, target, expected, targetExpected, () => {
+      published(); publications++; if (fault === "aborted") controller.abort(new Error("PRIVATE abort")); if (fault === "timed_out") vi.spyOn(performance, "now").mockReturnValue(Number.MAX_SAFE_INTEGER);
+    }));
     if (fault === "cleanup") failLockRemoval("PRIVATE cleanup");
     try {
       const result = await service.execute({ code: `return await state.${operation}({key:'PRIVATE-key'${operation === "set" ? ",value:'PRIVATE-value'" : ""}})`, signal: controller.signal, approver: { async approve() {} } });

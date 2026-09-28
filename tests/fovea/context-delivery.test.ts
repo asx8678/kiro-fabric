@@ -48,11 +48,18 @@ describe('execution-owned Fovea projection and transport', () => {
     const original = projection('committed');
     expect(await collectFoveaContext(f.collect, original, { cwd: '/root' }, 4000)).toEqual({ projection: original });
   });
-  it.each(['cancel', 'revoke'])('suppresses only advisory on %s between preparation and transport', async kind => {
+  it.each(['cancel', 'revoke'])('settles claims on %s between preparation and transport', async kind => {
     const f = fixture(), original = projection('committed result'), abort = new AbortController(), ledger = new FoveaResponseDelivery();
     const result = await collectFoveaContext(f.collect, original, { cwd: '/root' }, 4000);
     ledger.track('r', result.delivery!, abort.signal, original.text);
-    if (kind === 'cancel') abort.abort(); else f.state.value = 'revoked';
+    if (kind === 'cancel') {
+      abort.abort();
+      expect(f.state.value).toBe('cancelled');
+      expect(ledger.track('r', result.delivery!, new AbortController().signal, original.text)).toBe(true);
+      ledger.close();
+      return;
+    }
+    f.state.value = 'revoked';
     const write = vi.fn(async (_m: unknown) => {});
     await ledger.send({ id: 'r', result: { content: [{ type: 'text', text: result.projection.text }], structuredContent: { retryProgram: false } } }, write);
     expect(write).toHaveBeenCalledWith({ id: 'r', result: { content: [{ type: 'text', text: original.text }], structuredContent: { retryProgram: false } } });
@@ -62,7 +69,7 @@ describe('execution-owned Fovea projection and transport', () => {
     const f = fixture(), original = projection(), ledger = new FoveaResponseDelivery();
     const result = await collectFoveaContext(f.collect, original, { cwd: '/root' }, 4000);
     ledger.track(1, result.delivery!, new AbortController().signal, original.text);
-    await expect(ledger.send({ id: 1, result: {} }, async () => { throw new Error('pipe closed'); })).rejects.toThrow('pipe closed');
+    await expect(ledger.send({ id: 1, result: { content: [{ type: 'text', text: result.projection.text }] } }, async () => { throw new Error('pipe closed'); })).rejects.toThrow('pipe closed');
     expect(f.state.value).toBe('uncertain');
     const next = await collectFoveaContext(f.collect, original, { cwd: '/root' }, 4000);
     ledger.track(2, next.delivery!, new AbortController().signal, original.text); ledger.close();

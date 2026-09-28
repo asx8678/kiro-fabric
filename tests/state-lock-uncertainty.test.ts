@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { StateProvider } from "../src/providers/state-provider.js";
+import * as stateDirectory from "../src/providers/state-directory.js";
 
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers(); });
 
@@ -13,17 +14,17 @@ it.each(["set", "delete"])("refuses an already queued %s after a sibling loses i
   const store = path.join(root, "state"), provider = new StateProvider(store), context = { cwd: store };
   await provider.invoke("set", { key: "queued", value: "before" }, context);
   const lock = path.join(store, ".state-mutation.lock"), stateFile = path.join(store, "state.json");
-  const rename = fs.renameSync;
+  const rename = fs.renameSync, publish = stateDirectory.publishPinnedStateFile;
   fs.writeFileSync(lock, JSON.stringify({ pid: process.pid }) + "\n", { mode: 0o600, flag: "wx" });
   let lost = false;
-  vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
-    rename(from, to);
-    if (String(to) === stateFile && !lost) {
+  vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation((directory, name, target, expected, targetExpected, published) => publish(directory, name, target, expected, targetExpected, () => {
+    published();
+    if (target === path.basename(stateFile) && !lost) {
       lost = true;
       // Simulate another actor removing the held lock, retaining its bytes.
       rename(lock, path.join(root, "lost-lock"));
     }
-  });
+  }));
   vi.useFakeTimers();
   const first = provider.invoke("set", { key: "first", value: 1 }, context);
   const queued = provider.invoke(action, { key: "queued", ...(action === "set" ? { value: "after" } : {}) }, context);

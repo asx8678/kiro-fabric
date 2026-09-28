@@ -13,6 +13,7 @@ vi.mock("node:worker_threads", async () => {
     messages: SandboxWorkerRequest[] = [];
     terminate = vi.fn(async () => 0);
     constructor() { super(); workers.push(this); }
+    ref() {}
     unref() {}
     postMessage(message: SandboxWorkerRequest) { this.messages.push(message); }
   } };

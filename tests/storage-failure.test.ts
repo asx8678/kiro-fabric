@@ -7,6 +7,7 @@ import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import { StateProvider } from "../src/providers/state-provider.js";
+import * as stateDirectory from "../src/providers/state-directory.js";
 import * as pinnedDirectory from "../src/installation/pinned-directory-child.mjs";
 
 const roots: string[] = [];
@@ -20,6 +21,7 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
   vi.spyOn(fs, "openSync").mockImplementation((file, flags, mode) => {
     const fd = open(file, flags, mode);
     if (matches(String(file))) target = fd;
+    else if (fd === target) target = undefined;
     return fd;
   });
   const fail = () => { throw Object.assign(new Error("injected owned-file failure"), { code: "EIO" }); };
@@ -232,10 +234,14 @@ describe("operation-owned storage failure cleanup", () => {
     const id = store.write("old");
     const other = createKiroArtifactStore({ root });
     const otherId = other.write("other store");
-    const failure = new Error("artifact deletion failed"), remove = fs.rmSync;
+    const failure = new Error("artifact deletion failed"), remove = fs.rmSync, removePinned = pinnedDirectory.runPinnedDirectoryOperation;
     vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
-      if (String(file) === path.join(root, id)) throw failure;
+      if (path.basename(String(file)) === id) throw failure;
       remove(file, options);
+    });
+    vi.spyOn(pinnedDirectory, "runPinnedDirectoryOperation").mockImplementation(options => {
+      if (options.operation === "unlink" && options.name === id) throw failure;
+      return removePinned(options);
     });
     if (operation === "expiry") now += 101;
     const attempt = () => {
@@ -321,7 +327,7 @@ describe("operation-owned storage failure cleanup", () => {
     if (failure === "cancel") {
       const chmod = fs.fchmodSync;
       vi.spyOn(fs, "fchmodSync").mockImplementationOnce((fd, mode) => { chmod(fd, mode); controller.abort(new Error("pre-commit cancellation")); });
-    } else { vi.spyOn(fs, "renameSync").mockImplementationOnce(() => { throw new Error("pre-commit rename failure"); }); }
+    } else { vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementationOnce(() => { throw new Error("pre-commit rename failure"); }); }
     await expect(provider.invoke("set", { key: "fixture", value: "new" }, { ...context, signal: controller.signal })).rejects.toThrow("pre-commit");
     vi.restoreAllMocks();
     expect(fs.readdirSync(root)).toEqual(["state.json"]);
@@ -330,10 +336,10 @@ describe("operation-owned storage failure cleanup", () => {
 
   it("establishes permissions before rename and reports post-commit cancellation accurately", async () => {
     const root = temporary(); const provider = new StateProvider(root); const controller = new AbortController();
-    const rename = fs.renameSync;
-    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => {
-      expect(fs.statSync(from).mode & 0o777).toBe(0o600);
-      rename(from, to); controller.abort(new Error("cancelled after commit"));
+    const publish = stateDirectory.publishPinnedStateFile;
+    vi.spyOn(stateDirectory, "publishPinnedStateFile").mockImplementation((directory, name, target, expected, targetExpected, published) => {
+      expect(fs.statSync(path.join(directory.cwd, name)).mode & 0o777).toBe(0o600);
+      publish(directory, name, target, expected, targetExpected, () => { published(); controller.abort(new Error("cancelled after commit")); });
     });
     const error = await provider.invoke("set", { key: "fixture", value: "committed" }, { cwd: root, signal: controller.signal }).catch((error: unknown) => error);
     expect(error).toBeInstanceOf(Error);

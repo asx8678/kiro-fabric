@@ -8,9 +8,9 @@ import { resolveSearchExecutable, verifySearchExecutable, searchEnvironment } fr
 const roots: string[] = [];
 const fixture = () => { const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-rg-")); roots.push(root); return root; };
 afterEach(() => { vi.unstubAllEnvs(); vi.restoreAllMocks(); for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
-it("resolves real rg once and supplies no ambient credentials/configuration", () => {
+it("resolves real rg once and supplies no ambient credentials/configuration", async () => {
   vi.stubEnv("KIRO_API_KEY", "secret"); vi.stubEnv("NODE_OPTIONS", "secret"); vi.stubEnv("RIPGREP_CONFIG_PATH", "secret");
-  const executable = resolveSearchExecutable();
+  const executable = await resolveSearchExecutable();
   expect(path.isAbsolute(executable.path)).toBe(true); expect(executable.version).toMatch(/^ripgrep /);
   expect(searchEnvironment()).toEqual({ LANG: "C.UTF-8", LC_ALL: "C" });
   expect(() => verifySearchExecutable(executable)).not.toThrow();
@@ -31,7 +31,7 @@ it.each([0o600, 0o720, 0o702])("rejects unsafe executable mode %i", (mode) => {
   const root = fixture(); fs.writeFileSync(path.join(root, "rg"), "x", { mode }); fs.chmodSync(path.join(root, "rg"), mode); vi.stubEnv("PATH", root);
   expect(resolveSearchExecutable).toThrow(/trust changed/);
 });
-it("bounds and validates executable version response", () => {
+it("bounds and validates executable version response", async () => {
   const root = fixture(); fs.writeFileSync(path.join(root, "rg"), '#!/bin/sh\nprintf "not-ripgrep\\n"\n', { mode: 0o700 }); vi.stubEnv("PATH", root);
-  expect(resolveSearchExecutable).toThrow(/prerequisite check failed/);
+  await expect(resolveSearchExecutable()).rejects.toThrow(/prerequisite check failed/);
 });

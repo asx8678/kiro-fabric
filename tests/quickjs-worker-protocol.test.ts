@@ -33,7 +33,7 @@ describe("pooled worker protocol identity", () => {
     const deadlineA = new FabricDeadline(100, 4_000, () => 0);
     const pendingA = a.host("fabric.call", {}, signalA.signal, deadlineA);
     const idA = (messages().find(message => message.type === "hostCall") as Extract<SandboxWorkerMessage, { type: "hostCall" }>).id;
-    send({ type: "hostResult", executionId: "A", id: idA, ok: true, value: "A" });
+    send({ type: "hostResult", executionId: "A", id: idA, ok: true, value: JSON.stringify("A") });
     await expect(pendingA).resolves.toBe("A");
     const spanA = a.options.tracer!.span("bridge", "late span");
     a.finish(result); await flush();
@@ -47,7 +47,7 @@ describe("pooled worker protocol identity", () => {
     const callB = [...messages()].reverse().find(message => message.type === "hostCall") as Extract<SandboxWorkerMessage, { type: "hostCall" }>;
     expect(callB.executionId).toBe("B");
     for (const request of [
-      { type: "hostResult", id: callB.id, ok: true, value: "stale" },
+      { type: "hostResult", id: callB.id, ok: true, value: JSON.stringify("stale") },
       { type: "hostResult", id: callB.id, ok: false, error: "stale rejection" },
       { type: "extend", id: callB.id, floorMs: 4_000 },
       { type: "extend", floorMs: 4_000 },
@@ -62,13 +62,15 @@ describe("pooled worker protocol identity", () => {
     // Late callbacks must retain A's identity and deadline, not read `active` B.
     const before = messages().length;
     signalA.abort(new Error("late A"));
+    expect(messages()).toHaveLength(before);
     a.options.onPrepareHostCall!("fabric.call", {}, deadlineA);
     spanA.end();
-    expect(messages().slice(before).map(message => message.executionId)).toEqual(["A", "A", "A"]);
+    expect(messages().slice(before)).toMatchObject([{ type: "prepare", executionId: "A" }, { type: "spanEnd", executionId: "A" }]);
+    expect(b.options.signal!.aborted).toBe(false);
     send({ type: "extend", executionId: "B", floorMs: 500 });
     expect(deadlineB.effectiveTimeoutMs).toBe(500);
     expect(deadlineA.effectiveTimeoutMs).toBe(100);
-    send({ type: "hostResult", executionId: "B", id: callB.id, ok: true, value: "B" });
+    send({ type: "hostResult", executionId: "B", id: callB.id, ok: true, value: JSON.stringify("B") });
     await expect(pendingB).resolves.toBe("B");
     b.finish(result); await flush();
     expect(messages().filter(message => message.type === "result").map(message => message.executionId)).toEqual(["A", "B"]);

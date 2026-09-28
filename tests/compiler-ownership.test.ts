@@ -18,6 +18,7 @@ vi.mock("node:worker_threads", async () => {
     terminationGate?: Promise<void>;
     request: { id: number } | undefined;
     constructor() { super(); workers.push(this); }
+    ref() {}
     unref() {}
     postMessage(request: { id: number }) { this.request = request; }
     reply() { this.emit("message", { id: this.request!.id, ok: true, result: { errors: [{ line: 1, column: 1, message: "fixture diagnostic" }] } }); }

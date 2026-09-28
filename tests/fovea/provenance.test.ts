@@ -49,7 +49,9 @@ function fixture() {
 }
 function sourceTransport() {
   const engines = new Map<FoveaEngineProcess, FoveaEngine>();
-  cleanup.push(async () => { for (const e of engines.values()) await e.close(); });
+  vi.spyOn(FoveaEngineProcess.prototype, 'close').mockImplementation(async function (this: FoveaEngineProcess) {
+    await engines.get(this)?.close();
+  });
   return vi.spyOn(FoveaEngineProcess.prototype, 'query').mockImplementation(function (this: FoveaEngineProcess, request, signal) {
     // Exercise real transport size/schema and real src engine without requiring
     // a build; this is not evidence for process/native-client lifecycle gates.
