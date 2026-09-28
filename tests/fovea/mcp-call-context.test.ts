@@ -5,28 +5,24 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { beforeAll, describe, expect, it } from "vitest";
-import { validateActiveCompleteBundle } from "../../scripts/build-complete-bundle.mjs";
-import { resolveManagedFoveaParser, type ManagedFoveaParser } from "../../src/kiro/managed-generation.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createInstalledParser, type InstalledParser } from "./installed-parser.js";
 
 const distIndex = path.resolve("dist/index.js");
 const distEngine = path.resolve("dist/fovea/engine-entry.js");
-let parser: ManagedFoveaParser | undefined;
-let nodePath: string | undefined;
+let parser: InstalledParser | undefined;
+let dispose: (() => void) | undefined;
+const nodePath = process.execPath;
 
-beforeAll(async () => {
-  const verified = await validateActiveCompleteBundle(path.resolve(".tmp"));
-  if (!verified) return;
-  nodePath = path.join(verified.root, "tools/node");
-  parser = await resolveManagedFoveaParser({
-    bundleRoot: verified.root,
-    expectedNode: nodePath,
-    rg: path.join(verified.root, "tools/rg"),
-  });
+beforeAll(() => {
+  const installed = createInstalledParser();
+  parser = installed?.parser;
+  dispose = installed?.dispose;
 });
+afterAll(() => dispose?.());
 
 const portable = process.platform === "darwin" || process.platform === "linux";
-const ready = () => portable && !!parser && !!nodePath && fs.existsSync(distIndex) && fs.existsSync(distEngine) && fs.existsSync(parser!.path) && fs.existsSync(nodePath!);
+const ready = () => portable && !!parser && fs.existsSync(distIndex) && fs.existsSync(distEngine) && fs.existsSync(parser!.path);
 
 async function withServer(
   options: { enabled: boolean; approvals?: { read: "allow" | "ask" | "deny"; write: "allow" } },
@@ -86,14 +82,14 @@ process.stdin.once("end", () => { void server.close().then(() => process.exit(0)
 // Built stdio MCP same-call suffix. Not native Kiro lifecycle qualification.
 describe.skipIf(!portable)("built MCP same-call Fovea context", () => {
   it.each([false, true])("appends a disposable suffix after discarded local.read only when enabled=%s", async enabled => {
-    expect(ready(), "Stage dist and a validated complete-bundle parser before built tests").toBe(true);
+    expect(ready(), "Build dist and install the pinned ast-grep platform package before built tests").toBe(true);
     await withServer({ enabled }, async (call, { root }) => {
       const source = path.join(root, "math.ts");
       fs.writeFileSync(source, "export function calculateTotal() { return 1; }\n");
       const first = await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};');
       expect(first.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       if (enabled) {
-        expect(first).toContain("Fovea advisory (untrusted");
+        expect(first).toContain("Navigator advisory (untrusted");
         expect(first).toContain("math.ts");
       } else expect(first).toBe('{"taskValue":"unchanged"}');
       const status = JSON.parse(await call("return await repo.status();"));
@@ -105,20 +101,20 @@ describe.skipIf(!portable)("built MCP same-call Fovea context", () => {
       const refreshed = await call('await local.read({path:"math.ts"}); return {taskValue:"unchanged"};');
       expect(refreshed.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       if (enabled) {
-        expect(refreshed).toContain("Fovea advisory (untrusted");
+        expect(refreshed).toContain("Navigator advisory (untrusted");
         expect(refreshed).toContain("math.ts");
       } else expect(refreshed).toBe('{"taskValue":"unchanged"}');
     });
   }, 60_000);
 
   it.each(["allow", "ask", "deny"] as const)("respects approvals.read=%s after an independently allowed write", async read => {
-    expect(ready(), "Stage dist and a validated complete-bundle parser before built tests").toBe(true);
+    expect(ready(), "Build dist and install the pinned ast-grep platform package before built tests").toBe(true);
     await withServer({ enabled: true, approvals: { read, write: "allow" } }, async (call, { root, data }) => {
       const output = await call('await local.write({path:"new.ts",content:"export const n = 1;\\n"}); return {taskValue:"unchanged"};');
       expect(output.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       expect(fs.readFileSync(path.join(root, "new.ts"), "utf8")).toBe("export const n = 1;\n");
       if (read === "allow") {
-        expect(output).toContain("Fovea advisory (untrusted");
+        expect(output).toContain("Navigator advisory (untrusted");
         expect(output).toContain("new.ts");
       } else {
         expect(output).toBe('{"taskValue":"unchanged"}');

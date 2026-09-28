@@ -5,8 +5,9 @@ import os from "node:os";
 import path from "node:path";
 import { coreContext, type CoreContext } from "../../src/fovea/core/context.js";
 import { outlineStructured, type OutlineFile } from "../../src/fovea/core/astgrep.js";
+import { pinnedParser } from "./installed-parser.js";
 
-const realParser = path.resolve(".tmp/fovea-parser/ast-grep");
+const realParser = pinnedParser().path;
 
 function contextFor(parser: string, root: string): CoreContext {
   return { store: new Map(), sessionStore: new Map(), parserPath: parser, storageRoot: root,

@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile, readFile, symlink, chmod, utimes, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { FoveaEngine, type EngineRequest, type EngineResult } from '../../src/fovea/engine.js';
 import { sha256, resolveParserDescriptor } from '../../src/fovea/parser-executable.js';
 import { SourceAccess } from '../../src/fovea/source-access.js';
 import { sourcePlatform } from '../../src/fovea/source-platform.js';
+import { pinnedParser } from "./installed-parser.js";
 
 // NavigationResult is module-private in src/fovea/engine.ts; recover the exact
 // structural type from the public EngineResult union without re-exporting it.
@@ -17,7 +18,7 @@ type NavigationResult = Extract<EngineResult, { status: 'ok' | 'no-match' }>;
 // through the public SourceAccess method on a fresh platform.
 const captureAccess = (): SourceAccess => new SourceAccess(sourcePlatform());
 
-const parser = { path: resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+const parser = pinnedParser();
 const dirs: string[] = [];
 const engines: FoveaEngine[] = [];
 afterEach(async () => { await Promise.all(engines.splice(0).map(e => e.close())); await Promise.all(dirs.splice(0).map(p => rm(p, { recursive: true, force: true }))); });

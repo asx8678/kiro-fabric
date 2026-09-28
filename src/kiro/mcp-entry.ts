@@ -2,12 +2,11 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { acquireInstallationExclusion } from "../installation/installer-lock.mjs";
-import { managedInstallationBase, validateManagedAdmission, validateManagedGeneration, resolveManagedFoveaParser } from "./managed-generation.js";
 import { fileURLToPath } from "node:url";
 import { resolveKiroAgentLaunchContext } from "./power/agent-launch-context.js";
 
 const PROCESS_SHUTDOWN_TIMEOUT_MS = 8_000;
+const AST_GREP_VERSION = "0.45.3";
 const PARENT_LIVENESS_INTERVAL_MS = 1_000;
 
 let processServerTask: Promise<{ close(): Promise<void> }> | undefined;
@@ -22,22 +21,18 @@ const boundedError = (error: unknown): string =>
 export const startKiroMcpServer = (): Promise<{ close(): Promise<void> }> =>
   processServerTask ??= (async () => {
     const launch = resolveKiroAgentLaunchContext();
-    const base = launch.managedGeneration ? managedInstallationBase(launch.managedGeneration.bundleRoot) : undefined;
-    // Backend admission shares the fixed-order exclusion, so startup cannot
-    // enter durable-data preparation while a legacy gate is held.
-    const release = base ? acquireInstallationExclusion(base, { recover: false }) : undefined;
     let server: { close(): Promise<void> } | undefined;
     try {
-      try {
-        const managedSearch = launch.managedGeneration ? await validateManagedGeneration(launch.managedGeneration, launch.dataRoot) : undefined;
-        if (launch.managedGeneration && base) {
-          const manifestHash = createHash("sha256").update(readFileSync(path.join(launch.managedGeneration.bundleRoot, "bundle-manifest.json"))).digest("hex");
-          validateManagedAdmission(launch.managedGeneration.bundleRoot, launch.dataRoot, manifestHash);
-        }
-        const managedParser = launch.managedGeneration ? await resolveManagedFoveaParser(launch.managedGeneration) : undefined;
-        const { createKiroMcpServer } = await import("./mcp-server.js");
-        server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedSearch ? { managedSearch } : {}), ...(managedParser ? { managedParser } : {}), ...(launch.foveaCallContext === true && managedParser ? { foveaCallContext: true as const } : {}) });
-      } finally { release?.(); }
+      // The parser identity is pinned at startup; the Navigator engine re-verifies
+      // these exact bytes and its version before executing them.
+      const managedParser = launch.astGrep ? {
+        path: launch.astGrep,
+        sha256: createHash("sha256").update(readFileSync(launch.astGrep)).digest("hex"),
+        version: AST_GREP_VERSION,
+        generationRoot: path.dirname(path.dirname(launch.astGrep)),
+      } : undefined;
+      const { createKiroMcpServer } = await import("./mcp-server.js");
+      server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...(launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}), ...(managedParser ? { managedParser } : {}), ...(launch.foveaCallContext === true && managedParser ? { foveaCallContext: true as const } : {}) });
       return server;
     } catch (error) {
       processServerTask = undefined;

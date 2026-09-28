@@ -108,7 +108,7 @@ export class LocalCodingProvider implements FabricProvider {
 
   constructor(options: LocalProviderOptions) {
     this.#paths = new LocalPaths(options.root);
-    this.#searchExecutable = resolveSearchExecutable(options.managedSearch);
+    this.#searchExecutable = resolveSearchExecutable();
     this.#budget = Math.min(20000, options.maxResultChars ?? 20000);
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (options.maxReadManyChars !== undefined && (!Number.isSafeInteger(options.maxReadManyChars) || options.maxReadManyChars < 256)) throw new Error("local maxReadManyChars must be an integer >=256");

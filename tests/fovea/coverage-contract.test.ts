@@ -13,6 +13,7 @@ import { REPO_ACTION_DESCRIPTORS, REPO_GUEST_DECLARATIONS, REPO_NAVIGATION_SCHEM
 import { validateSchemaValue } from '../../src/schema-validation.js';
 import { typeCheckFabricCode } from '../../src/runtime/type-checker.js';
 import { fabricGuestDeclarations } from '../../src/runtime/guest-types.js';
+import { pinnedParser } from "./installed-parser.js";
 
 // NavigationResult is module-private in src/fovea/engine.ts; recover the exact
 // structural type from the public EngineResult union without re-exporting it.
@@ -20,13 +21,13 @@ type NavigationResult = Extract<EngineResult, { status: 'ok' | 'no-match' }>;
 
 // REPO_COVERAGE_SCHEMA is now module-private; the public REPO_NAVIGATION_SCHEMA
 // embeds the identical schema via structuredClone(REPO_COVERAGE_SCHEMA).
-const REPO_COVERAGE_SCHEMA = REPO_NAVIGATION_SCHEMA.coverage as Record<string, unknown>;
+const REPO_COVERAGE_SCHEMA = (REPO_NAVIGATION_SCHEMA.properties as Record<string, unknown>).coverage as Record<string, unknown>;
 
 // The standalone captureSourceSnapshot wrapper was removed; every call goes
 // through the public SourceAccess method on a fresh platform.
 const captureAccess = (): SourceAccess => new SourceAccess(sourcePlatform());
 
-const parser = { path: resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+const parser = pinnedParser();
 const directories: string[] = [];
 const engines: FoveaEngine[] = [];
 afterEach(async () => {

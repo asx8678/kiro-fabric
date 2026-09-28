@@ -9,10 +9,11 @@ import { diffHunks, prFiles, uncommittedFiles } from '../../src/fovea/core/git.j
 import { impact } from '../../src/fovea/core/ops.js';
 import { resolveFoveaGit } from '../../src/fovea/git-executable.js';
 import { FoveaProvider } from '../../src/providers/repo-provider.js';
+import { pinnedParser } from "./installed-parser.js";
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) removeFixtureSync(root, { recursive: true, force: true }); });
-const parser = path.resolve('.tmp/fovea-parser/ast-grep');
+const parser = pinnedParser().path;
 const git = resolveFoveaGit();
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-git-boundary-'))); roots.push(base);

@@ -80,38 +80,37 @@ Graph results guide inspection. Read the source and check coverage before drawin
 
 ## Install
 
-Requires Bash, Git, Node >=24, pnpm **11.20.0**, tar/gzip and Kiro CLI >=2.21.1 with v3 support. See [platform prerequisites](docs/installer.md#linux-and-macos-source-prerequisites).
+Requires macOS or glibc Linux, Node >=24, pnpm **11.20.0**, ripgrep (`rg`) and Kiro CLI >=2.21.1 with v3 support.
 
-From the Kiro Fabric checkout:
+From the Kiro Fabric checkout (not with `sudo`):
 
 ```sh
-bash ./install.sh --source --kiro-home "${KIRO_HOME:-$HOME/.kiro}" --no-shell-integration
+bash ./install.sh
 ```
 
-The installer builds Fabric with Navigator and backs up existing configuration. This command leaves shell startup files untouched. Do not use `sudo`.
+The installer builds Fabric, copies it to `~/.kiro/kiro-fabric`, and writes the `kiro-fabric` agent profile. Your data directory is preserved across updates.
 
 Then, from the project you want Kiro to work on:
 
 ```sh
-"${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/bin/kiro-fabric" start
+~/.kiro/kiro-fabric/bin/kiro-fabric
 ```
 
-The launcher binds the workspace and selected Kiro home. Restart existing sessions after updates. See [installation, troubleshooting and recovery](docs/installer.md).
+Restart existing sessions after updates. See [installation and troubleshooting](docs/installer.md).
 
 ## Current limitations
 
 As of Kiro CLI 2.24.0 (2026-09-25), reads work but approval-dependent edits fail: the client reports `No handler registered for method: _kiro/mcp/elicitation`, so `ask` policies cannot be approved and fail closed. Complete model-visible tool filtering is also unverified.
 
-Explicit Navigator analysis is implemented; automatic native prompt/turn delivery, session isolation and restoration remain unqualified. Same-call hints do not establish those guarantees. Public release qualification is also incomplete.
+Explicit Navigator analysis is implemented; automatic native prompt/turn delivery, session isolation and restoration remain unqualified. Same-call hints do not establish those guarantees.
 
 ## Development
 
 | Command | Scope |
 | --- | --- |
-| `pnpm run check:local` | Guidance consistency, typecheck, build and dead-code lint. |
-| `pnpm run verify:references` | Read-only project-reference audit. |
+| `pnpm run check` | Guidance consistency, typecheck, build, dead-code lint and the test suite. |
+| `pnpm test` | Vitest suite (serial by design). |
 | `pnpm run build` | Fresh runtime output; Kiro loads `dist/`, so finish changes with this. |
-
-The full behavioral suites are currently unavailable. `pnpm test` and the release gate in `pnpm run check` deliberately fail; a build or local check does not certify release readiness.
+| `pnpm run agent:dev` | Run the built MCP server against `.tmp/agent-dev-data`. |
 
 [Detailed architecture](docs/architecture.md) | [Runtime diagrams](docs/diagram-descriptions.md) | [Configuration](docs/configuration.md)

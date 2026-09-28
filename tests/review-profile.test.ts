@@ -92,16 +92,14 @@ describe("explicit profile guidance modes", () => {
     expect(profile.prompt).not.toMatch(/review|finding|coverage ledger|fabric\.help|bootstrap.*help/i);
     expect(profile.prompt).not.toMatch(/task contract|acceptance ledger|plan privately|simplest credible method|next unresolved check|stop and deliver/i);
     expect(JSON.stringify(profile)).not.toMatch(/first-prompt-hook|skill:\/\/|file:\/\//);
-    const bundleRoot = path.resolve("/generation");
-    const bundled = {
-      ...options, bundleRoot, nodePath: path.join(bundleRoot, "tools", "node"),
-      rgPath: path.join(bundleRoot, "tools", "rg"), runtimeRoot: path.join(bundleRoot, "app"),
-      skillPath: path.join(bundleRoot, "resources", "skills", "fabric-exec", "SKILL.md"),
-      steeringPath: path.join(bundleRoot, "resources", "steering", "fabric.md"),
+    const installRoot = path.resolve("/install/kiro-fabric");
+    const installed = {
+      ...options, runtimeRoot: path.join(installRoot, "app"), astGrepPath: path.join(installRoot, "tools", "ast-grep"),
+      skillPath: path.join(installRoot, "resources", "skills", "fabric-exec", "SKILL.md"),
+      steeringPath: path.join(installRoot, "resources", "steering", "fabric.md"),
       guidanceMode: "minimal" as const,
     };
-    expect(generateAgentProfile(bundled)).toMatchObject({ resources: [], hooks: [] });
-    expect(() => generateAgentProfile({ ...bundled, rgPath: "/other/rg" })).toThrow(/complete generation/);
+    expect(generateAgentProfile(installed)).toMatchObject({ resources: [], hooks: [] });
     const { steeringPath: _steering, ...withoutSteering } = options;
     expect(generateAgentProfile({ ...withoutSteering, guidanceMode: "minimal" }).hooks).toEqual([]);
   });

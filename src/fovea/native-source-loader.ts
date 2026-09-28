@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
-import { lstat, realpath, writeFile, chmod } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { lstat, open, realpath, writeFile, chmod } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { readRegular, validateBundle } from '../installation/bundle-contract.mjs';
 import { captureDirectoryAncestry } from '../installation/filesystem-boundary.mjs';
 import { createNativeSourcePlatform, type PosixSourceBinding } from './source-platform-native.js';
 import type { ParserDescriptor } from './parser-executable.js';
@@ -11,11 +11,9 @@ import { SourcePlatformUnavailableError, type SourcePlatform } from './source-pl
 const hash = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 const BINARY = 'app/fovea/source-platform.node';
 const METADATA = 'app/fovea/source-platform.json';
+const CLOSURE = 'app/closure-manifest.json';
 
-/** Validate target and exact bytes BEFORE native code execution. Metadata itself
- * is authenticated by the same complete-generation inventory as JS and parser. */
-/** @internal Qualification-only: pre-dlopen artifact identity gate asserted
- * directly by native-source-loader tests. Not a runtime/package API. */
+/** @internal Pre-dlopen artifact identity gate asserted directly by tests. */
 export function validateNativeSourceArtifact(metadata: unknown, bytes: Buffer, sourceSha256: string): void {
   const m = metadata as Record<string, unknown> | null;
   if (!m || typeof m !== 'object' || Array.isArray(m) ||
@@ -30,32 +28,36 @@ export function validateNativeSourceArtifact(metadata: unknown, bytes: Buffer, s
       bytes.readUInt32LE(4) !== cpu || bytes.readUInt32LE(12) !== 8) throw new Error('Native source Mach-O architecture/type mismatch');
 }
 
-/** Only an admitted complete generation can supply native code. No env, PATH,
- * workspace-local addon, cwd inference, unverified dlopen or runtime compilation.
- * Capture verified bytes into the engine's newly created private directory so
- * replacing the generation pathname after capture cannot select different code. */
+const readOwnedRegular = async (file: string, limit: number): Promise<Buffer> => {
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile() || stat.nlink !== 1 || stat.size > limit || (stat.mode & 0o022) || stat.uid !== process.getuid?.()) {
+      throw new Error('Native source artifact must be an owned, unaliased regular file');
+    }
+    const bytes = await handle.readFile();
+    if (bytes.length !== stat.size) throw new Error('Native source artifact changed during read');
+    return bytes;
+  } finally { await handle.close(); }
+};
+
+/** Only the installation that supplied the verified parser can supply native
+ * code: `<root>/app/...` beside `<root>/tools/ast-grep`. No env, PATH,
+ * workspace-local addon, unverified dlopen or runtime compilation. Verified
+ * bytes are captured into the engine's private directory before loading so a
+ * later pathname replacement cannot select different code. */
 export async function loadManagedSourcePlatform(parser: ParserDescriptor, storage: string): Promise<SourcePlatform> {
   if (process.platform !== 'darwin' || !parser.generationRoot) {
-    throw new SourcePlatformUnavailableError(process.platform, 'missing trusted generation-local native source binding');
+    throw new SourcePlatformUnavailableError(process.platform, 'missing trusted installation-local native source binding');
   }
-  const bundle = await validateBundle(parser.generationRoot);
-  if (bundle.root !== parser.generationRoot || ![2, 3].includes(bundle.manifest.schema) ||
-      bundle.manifest.target !== `darwin-${process.arch}` ||
-      await realpath(process.execPath) !== join(bundle.root, 'tools/node') ||
-      parser.path !== join(bundle.root, 'tools/ast-grep') ||
-      bundle.inventory.find((entry: { path: string }) => entry.path === 'tools/ast-grep')?.sha256 !== parser.sha256) {
-    throw new Error('Native source generation containment mismatch');
+  const root = await realpath(parser.generationRoot);
+  if (root !== parser.generationRoot || parser.path !== join(root, 'tools/ast-grep')) {
+    throw new Error('Native source installation containment mismatch');
   }
-  const guard = captureDirectoryAncestry(bundle.root, { label: 'Native source generation changed' });
-  const captured: Buffer[] = [];
-  for (const [name, limit] of [[METADATA, 4096], [BINARY, 2 * 1024 * 1024], ['app/closure-manifest.json', 2 * 1024 * 1024]] as const) {
-    const entry = bundle.inventory.find((entry: { path: string }) => entry.path === name);
-    if (!entry) throw new Error('Native source artifact missing from generation');
-    const bytes = await readRegular(join(bundle.root, name), limit, { mode: 0o600 });
-    if (bytes.length !== entry.size || hash(bytes) !== entry.sha256) throw new Error('Native source artifact checksum mismatch');
-    captured.push(bytes);
-  }
-  const [metadata, binary, closure] = captured as [Buffer, Buffer, Buffer];
+  const guard = captureDirectoryAncestry(root, { label: 'Native source installation changed' });
+  const metadata = await readOwnedRegular(join(root, METADATA), 4096);
+  const binary = await readOwnedRegular(join(root, BINARY), 2 * 1024 * 1024);
+  const closure = await readOwnedRegular(join(root, CLOSURE), 2 * 1024 * 1024);
   const source = JSON.parse(closure.toString()).buildInputs?.files?.find((entry: { path: string }) => entry.path === 'src/fovea/source-platform-native.c');
   validateNativeSourceArtifact(JSON.parse(metadata.toString()), binary, source?.sha256 ?? '');
   guard.check();

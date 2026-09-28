@@ -31,9 +31,9 @@ function inventory(root, directory) {
 // are not inputs. Follow packaging imports so profile and hook implementation
 // changes are covered without pulling unrelated metrics/report scripts in.
 export function captureBuildInputs(root) {
-  const names = new Set(["package.json", "pnpm-lock.yaml", "agent-product.json", "build-toolchain.json", "tsconfig.json", "tsconfig.build.json"]);
+  const names = new Set(["package.json", "pnpm-lock.yaml", "agent-product.json", "tsconfig.json", "tsconfig.build.json"]);
   for (const directory of ["src", "skills", "resources"]) for (const name of inventory(root, directory)) names.add(name);
-  const queue = ["build.mjs", "build-kiro-closure.mjs", "build-inputs.mjs", "normalize-artifact-modes.mjs", "assert-build-artifacts.mjs", "build-agent-dev.mjs", "build-complete-bundle.mjs", "generate-agent-sbom.mjs", "generate-bundle-sbom.mjs", "generate-agent-guidance.mjs", "agent-profile.mjs", "install-agent-user.mjs", "validate-agent-package.mjs", "install-manager.mjs"].map(name => `scripts/${name}`);
+  const queue = ["build.mjs", "build-kiro-closure.mjs", "build-inputs.mjs", "normalize-artifact-modes.mjs", "assert-build-artifacts.mjs", "generate-agent-guidance.mjs", "agent-profile.mjs", "install.mjs"].map(name => `scripts/${name}`);
   while (queue.length) {
     const name = queue.pop();
     if (names.has(name)) continue;
@@ -80,22 +80,4 @@ export function verifyBuildClosure(root, closure = path.join(root, "dist/kiro-ag
   const manifest = verifyClosureIntegrity(closure);
   assertBuildInputs(root, manifest.buildInputs);
   return manifest;
-}
-// Verify the captured resource bytes too, not only the checkout after copying.
-// This prevents a changed-then-restored resource from mixing generations.
-export function verifyCapturedInputs(staging, initial, mappings) {
-  for (const [source, target] of mappings) {
-    const expected = initial.buildInputs.files.filter(entry => entry.path === source || entry.path.startsWith(`${source}/`));
-    if (!expected.length) throw new Error(`Unrecorded capture source: ${source}`);
-    const stat = fs.lstatSync(path.join(staging, target));
-    const actual = stat.isDirectory() ? inventory(staging, target) : [target];
-    const wanted = expected.map(entry => target + entry.path.slice(source.length)).sort();
-    if (JSON.stringify(actual) !== JSON.stringify(wanted)) throw new Error(`Captured input inventory mismatch: ${source}`);
-    for (const entry of expected) if (hash(bytes(staging, target + entry.path.slice(source.length))) !== entry.sha256) throw new Error(`Captured input checksum mismatch: ${entry.path}`);
-  }
-}
-export function verifyBuildCapture(root, closure, initial) {
-  const captured = verifyBuildClosure(root, closure);
-  if (captured.contentDigest !== initial.contentDigest || captured.buildInputs.digest !== initial.buildInputs.digest) throw new Error("Build changed during capture");
-  return captured;
 }

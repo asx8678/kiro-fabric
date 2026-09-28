@@ -1,12 +1,12 @@
 import fs from "node:fs";
-import { inferManagedGeneration, type ManagedGenerationContext } from "../managed-generation.js";
 import path from "node:path";
 import { canonicalPathContains, inspectCanonicalPath } from "../canonical-path.js";
 
 export interface KiroAgentLaunchContext {
   runtimeRoot: string;
   dataRoot: string;
-  managedGeneration?: ManagedGenerationContext;
+  /** Installer-placed Navigator parser at `<install root>/tools/ast-grep`. */
+  astGrep?: string;
   launchWorkspaceRoot?: string;
   /** Profile-declared same-call Fovea suffix. Not native session routing or hook registration. */
   foveaCallContext?: true;
@@ -43,7 +43,15 @@ export const resolveKiroAgentLaunchContext = (
   if (canonicalPathContains(runtimeRoot, dataRoot) || canonicalPathContains(dataRoot, runtimeRoot)) {
     throw new Error("runtime and data roots must not contain one another");
   }
-  const managedGeneration = inferManagedGeneration(runtimeRoot, env);
+  let astGrep: string | undefined;
+  if (env.KIRO_FABRIC_AST_GREP !== undefined && env.KIRO_FABRIC_AST_GREP !== "${KIRO_FABRIC_AST_GREP}") {
+    astGrep = env.KIRO_FABRIC_AST_GREP;
+    const installRoot = path.dirname(path.dirname(astGrep));
+    if (!path.isAbsolute(astGrep) || fs.realpathSync(astGrep) !== astGrep || path.basename(astGrep) !== "ast-grep" ||
+        path.basename(path.dirname(astGrep)) !== "tools" || runtimeRoot !== path.join(installRoot, "app")) {
+      throw new Error("KIRO_FABRIC_AST_GREP must be the canonical tools/ast-grep beside the installed app");
+    }
+  }
   const source = env.KIRO_FABRIC_WORKSPACE_SOURCE;
   if (source !== undefined && source !== "launch-cwd") {
     throw new Error("KIRO_FABRIC_WORKSPACE_SOURCE must be launch-cwd when set");
@@ -63,5 +71,5 @@ export const resolveKiroAgentLaunchContext = (
   if (callContext !== undefined && callContext !== "0" && callContext !== "1" && callContext !== "${KIRO_FABRIC_FOVEA_CALL_CONTEXT}") {
     throw new Error("KIRO_FABRIC_FOVEA_CALL_CONTEXT must be 0 or 1 when set");
   }
-  return { runtimeRoot, dataRoot, ...(managedGeneration ? { managedGeneration } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}), ...(callContext === "1" ? { foveaCallContext: true as const } : {}) };
+  return { runtimeRoot, dataRoot, ...(astGrep ? { astGrep } : {}), ...(launchWorkspaceRoot ? { launchWorkspaceRoot } : {}), ...(callContext === "1" ? { foveaCallContext: true as const } : {}) };
 };

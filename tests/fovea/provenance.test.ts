@@ -14,12 +14,13 @@ import { FoveaProvenanceJournal, PROVENANCE_MAX_RECORDS } from '../../src/fovea/
 import { FoveaEngine, type EngineRequest } from '../../src/fovea/engine.js';
 import { FoveaEngineProcess } from '../../src/fovea/engine-process.js';
 import { decodeRequest, encodeFrame } from '../../src/fovea/protocol.js';
+import { pinnedParser } from "./installed-parser.js";
 
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const f of cleanup.splice(0).reverse()) await f(); vi.restoreAllMocks(); });
 const sha = (s: string) => createHash('sha256').update(s).digest('hex');
 // Explicit fixture selector only; never a production executable override.
-const parserPath = path.resolve(process.env.FOVEA_PROVENANCE_TEST_PARSER ?? '.tmp/fovea-parser/ast-grep');
+const parserPath = process.env.FOVEA_PROVENANCE_TEST_PARSER ? path.resolve(process.env.FOVEA_PROVENANCE_TEST_PARSER) : pinnedParser().path;
 const parser = { path: parserPath, sha256: fs.existsSync(parserPath) ? createHash('sha256').update(fs.readFileSync(parserPath)).digest('hex') : '0'.repeat(64), version: '0.45.3' };
 let nativePlatform: SourcePlatform | undefined, nativeBuild = '';
 beforeAll(() => {
@@ -38,7 +39,8 @@ beforeEach(() => {
 afterAll(() => { if (nativeBuild) removeFixtureSync(nativeBuild, { recursive: true, force: true }); });
 function fixture() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-provenance-'))); fs.chmodSync(base, 0o700);
-  cleanup.push(() => removeFixtureSync(base, { recursive: true, force: true }));
+  // Engines and hosts write scratch under base: remove it after every other cleanup.
+  cleanup.unshift(() => removeFixtureSync(base, { recursive: true, force: true }));
   const root = path.join(base, 'root'); fs.mkdirSync(root, { mode: 0o700 });
   const stat = fs.statSync(root, { bigint: true });
   const authority = { canonicalPath: root, deviceId: String(stat.dev), fileId: String(stat.ino), conversationId: 'private_conversation', conversationEpoch: 1, authorizationEpoch: 1 };

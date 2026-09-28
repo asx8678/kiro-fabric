@@ -169,7 +169,7 @@ describe('MCP trusted host session routing (not native Kiro qualification)', () 
   it('binds observations and semantic visible delivery to the exact captured turn', async () => {
     const f = await fixture(true);
     const output = await f.call(f.at, 'await local.read({path:"math.ts"}); return {outcome:"unchanged"};');
-    expect(JSON.parse(output.content[0].text.split('\n\nFovea advisory')[0])).toEqual({ outcome: 'unchanged' });
+    expect(JSON.parse(output.content[0].text.split('\n\nNavigator advisory')[0])).toEqual({ outcome: 'unchanged' });
     const marker = '):\n';
     const notices = JSON.parse(output.content[0].text.slice(output.content[0].text.indexOf(marker) + marker.length));
     const noticeId = notices[0].noticeId;
@@ -185,11 +185,11 @@ describe('MCP trusted host session routing (not native Kiro qualification)', () 
   it('strips only the stale advisory after retirement between handler and transport', async () => {
     const f = await fixture(true);
     const message = await f.request(f.at, 'fabric_exec', { code: 'await local.read({path:"math.ts"}); return {committed:true};', resultFormat: 'json' }, false);
-    expect(message.result.content[0].text).toContain('Fovea advisory');
+    expect(message.result.content[0].text).toContain('Navigator advisory');
     await f.hostSessions.retireSession(f.a);
     await wire.transport.send(message);
     const sent = wire.sent.get(message.id).result;
-    expect(sent.content[0].text).toBe(message.result.content[0].text.split('\n\nFovea advisory')[0]);
+    expect(sent.content[0].text).toBe(message.result.content[0].text.split('\n\nNavigator advisory')[0]);
     expect(JSON.parse(sent.content[0].text)).toEqual({ committed: true });
     expect(sent.structuredContent).toEqual(message.result.structuredContent);
     expect(f.queries.some(q => q.args.commitPreparationId)).toBe(false);

@@ -71,7 +71,6 @@ describe("Kiro Agent profile generation", () => {
             KIRO_FABRIC_FOVEA_CALL_CONTEXT: "1",
             KIRO_FABRIC_RUNTIME_ROOT: options.runtimeRoot,
             KIRO_FABRIC_DATA_ROOT: options.dataRoot,
-            KIRO_FABRIC_EXPECTED_NODE: options.nodePath,
           },
           waitForReady: true,
           requestTimeout: FABRIC_MCP_REQUEST_TIMEOUT_MS,
@@ -106,34 +105,24 @@ describe("Kiro Agent profile generation", () => {
     ]);
   });
 
-  it("binds executable, runtime and unchanged resource URIs to one complete generation", () => {
-    const bundleRoot = path.resolve("/install/generations/fixture");
-    const complete = {
-      ...options, bundleRoot,
-      nodePath: path.join(bundleRoot, "tools", "node"),
-      rgPath: path.join(bundleRoot, "tools", "rg"),
-      runtimeRoot: path.join(bundleRoot, "app"),
-      skillPath: path.join(bundleRoot, "resources", "skills", "fabric-exec", "SKILL.md"),
-      steeringPath: path.join(bundleRoot, "resources", "steering", "fabric.md"),
+  it("binds the installed parser beside the app and an absolute search path", () => {
+    const installRoot = path.resolve("/install/kiro-fabric");
+    const installed = {
+      ...options,
+      runtimeRoot: path.join(installRoot, "app"),
+      astGrepPath: path.join(installRoot, "tools", "ast-grep"),
+      searchPath: ["/opt/bin", "/usr/bin", "/bin"].join(path.delimiter),
     };
-    const profile = generateAgentProfile(complete);
-    expect(profile.resources).toEqual([`skill://${complete.skillPath}`, `file://${complete.steeringPath}`]);
-    // The first headless prompt must wait for the sole tool, including in complete bundles.
+    const profile = generateAgentProfile(installed);
+    // The first headless prompt must wait for the sole tool.
     expect(profile.mcpServers.fabric.waitForReady).toBe(true);
     expect(profile.mcpServers.fabric.env).toMatchObject({
-      KIRO_FABRIC_BUNDLE_ROOT: bundleRoot,
-      KIRO_FABRIC_RG: complete.rgPath,
-      KIRO_FABRIC_EXPECTED_NODE: complete.nodePath,
-      KIRO_FABRIC_RUNTIME_ROOT: complete.runtimeRoot,
+      KIRO_FABRIC_RUNTIME_ROOT: installed.runtimeRoot,
+      KIRO_FABRIC_AST_GREP: installed.astGrepPath,
+      PATH: installed.searchPath,
     });
-    for (const key of ["nodePath", "rgPath", "runtimeRoot", "skillPath", "steeringPath", "bundleRoot"] as const) {
-      expect(() => generateAgentProfile({ ...complete, [key]: path.resolve("/other-generation") })).toThrow(/complete generation/);
-    }
-    for (const key of ["steeringPath", "rgPath", "bundleRoot"] as const) {
-      const incomplete: Parameters<typeof generateAgentProfile>[0] = { ...complete };
-      delete incomplete[key];
-      expect(() => generateAgentProfile(incomplete)).toThrow(/complete generation/);
-    }
+    expect(() => generateAgentProfile({ ...installed, astGrepPath: path.resolve("/elsewhere/tools/ast-grep") })).toThrow(/beside the installed app/);
+    expect(() => generateAgentProfile({ ...installed, searchPath: `relative${path.delimiter}/bin` })).toThrow(/absolute directories/);
   });
 
   it("rejects relative executable and resource paths", () => {

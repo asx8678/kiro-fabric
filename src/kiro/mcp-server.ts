@@ -34,7 +34,6 @@ export interface KiroMcpServerOptions {
   kiroHome?: string;
   /** Explicit user-selected project supplied by the installed start launcher; never MCP cwd. */
   launchWorkspaceRoot?: string;
-  managedSearch?: KiroRuntimeOptions["managedSearch"];
   managedParser?: FoveaParserDescriptor;
   /** Trusted embedder qualification only. Managed/native profiles leave this absent
    * until real-client delivery and analysis-scope gates pass; minimal stays off. */
@@ -56,9 +55,8 @@ const installedKiroHomeFor = (runtimeRoot: string, dataRoot: string): string | u
   const data = inspectCanonicalPath(dataRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
   const installRoot = path.dirname(data);
   if (path.basename(data) !== "data" || path.basename(installRoot) !== "kiro-fabric") return undefined;
-  const generation = path.basename(runtime) === "app" ? path.dirname(runtime) : runtime;
-  if (!/^[a-f0-9]{64}$/u.test(path.basename(generation)) || path.dirname(generation) !== path.join(installRoot, "runtime")) {
-    throw new Error("installed Agent data root does not match its digest-named runtime layout");
+  if (runtime !== path.join(installRoot, "app")) {
+    throw new Error("installed Agent data root does not match its app layout");
   }
   return inspectCanonicalPath(path.dirname(installRoot), {
     kind: "directory",
@@ -138,11 +136,9 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   }
   const kiroHome = explicitKiroHome ?? inferredKiroHome;
   const version = options.version ?? String((JSON.parse(readFileSync(path.join(options.runtimeRoot, "package.json"), "utf8")) as { version: unknown }).version);
-  const generationName = path.basename(path.dirname(options.runtimeRoot));
   const runProvenance = buildRunProvenance({
     configured: options.runProvenance?.configured ?? parseRunProvenanceDeclaration(process.env.KIRO_FABRIC_RUN_DECLARATION) ?? {},
-    observed: { ...options.runProvenance?.observed, runtimeVersion: version,
-      runtimeBundle: path.basename(options.runtimeRoot) === "app" && /^[a-f0-9]{64}$/u.test(generationName) ? generationName : undefined },
+    observed: { ...options.runProvenance?.observed, runtimeVersion: version },
   });
   const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
   const data = prepareKiroPowerDataPaths(options.dataRoot);

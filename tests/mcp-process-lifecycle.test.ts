@@ -20,7 +20,7 @@ const temporary = (): string => {
 };
 
 const stagedRuntime = (): string =>
-  fs.realpathSync(path.resolve(".tmp/kiro-fabric-agent/runtime"));
+  fs.realpathSync(path.resolve("dist/kiro-agent-closure"));
 
 const environment = (dataRoot: string, runtimeRoot = stagedRuntime()): NodeJS.ProcessEnv => ({
   PATH: process.env.PATH,

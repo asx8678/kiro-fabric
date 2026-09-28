@@ -7,6 +7,7 @@ import { FoveaEngineProcess } from '../../src/fovea/engine-process.js';
 import { FoveaHost } from '../../src/fovea/host.js';
 import { FoveaProvider } from '../../src/providers/repo-provider.js';
 import type { FoveaQuery } from '../../src/fovea/protocol.js';
+import { pinnedParser } from "./installed-parser.js";
 
 const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => { for (const close of cleanups.splice(0).reverse()) await close(); });
@@ -14,7 +15,7 @@ function temporary() {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-process-'))); fs.chmodSync(base, 0o700);
   cleanups.push(() => removeFixtureSync(base, { recursive: true, force: true })); return base;
 }
-const parser = { path: path.resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+const parser = pinnedParser();
 const query = (root: string, operation = 'status', args = {}): FoveaQuery => ({ root, operation, args, rootId: 'root', conversationId: 'conversation', conversationEpoch: 1, authorizationEpoch: 1 });
 function fake(mode: string) {
   const base = temporary(), entrypoint = path.join(base, 'fault.mjs'), pidFile = path.join(base, 'pid'), ready = path.join(base, 'ready');

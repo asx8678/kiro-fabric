@@ -6,8 +6,9 @@ import { pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { describe, expect, it } from 'vitest';
+import { pinnedParser } from "./installed-parser.js";
 
-const parser = { path: path.resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+const parser = pinnedParser();
 // Component MCP stdio proof, NOT native Kiro lifecycle qualification. The
 // capability below is supplied only by this synthetic trusted test embedder.
 describe.skipIf(process.platform !== 'linux')('built MCP context collection', () => {
@@ -43,7 +44,7 @@ process.stdin.once('end', () => { void server.close().then(() => process.exit(0)
       const output = await call('return {taskValue:"unchanged"};');
       expect(output.startsWith('{"taskValue":"unchanged"}')).toBe(true);
       if (enabled) {
-        expect(output).toContain('Fovea advisory (untrusted');
+        expect(output).toContain('Navigator advisory (untrusted');
         expect(output).toContain('math.ts');
       } else expect(output).toBe('{"taskValue":"unchanged"}');
       const status = JSON.parse(await call('return await repo.status();'));

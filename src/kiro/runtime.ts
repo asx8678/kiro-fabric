@@ -3,7 +3,6 @@ import { FoveaProvider } from "../providers/repo-provider.js";
 import type { FoveaBoundClient } from "../fovea/host.js";
 import { ReviewProvider } from "../providers/review-provider.js";
 import { ProbeProvider } from "../providers/probe-provider.js";
-import type { ManagedSearchExecutable } from "../providers/local-executable.js";
 import { ActionRegistry } from "../core/action-registry.js";
 import {
   DEFAULT_FABRIC_CONFIG,
@@ -33,7 +32,6 @@ export interface KiroRuntimeOptions {
   localLockRoot?: string;
   /** Explicit retained probe storage outside source; defaults beside local locks. */
   probesRoot?: string;
-  managedSearch?: ManagedSearchExecutable;
   /** Borrowed host-owned analysis lease; provider disposal never closes its engine. */
   foveaClient?: FoveaBoundClient;
   memoryRoot?: string;
@@ -71,7 +69,6 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
       // Leave visible headroom for formatting/metadata without raising shell or search caps.
       // Composing several results or logs can still overflow; the projection retains that evidence.
       maxReadManyChars: Math.floor(config.executor.maxOutputChars * 0.8),
-      ...(options.managedSearch ? { managedSearch: options.managedSearch } : {}),
     }));
     registry.register(new ReviewProvider({ root: options.workspaceRoot, maxResultChars: config.executor.maxNestedResultChars }));
     registry.register(new ProbeProvider({ root: options.workspaceRoot, probesRoot: options.probesRoot ?? path.join(path.dirname(options.localLockRoot), "probes"), maxResultChars: config.executor.maxNestedResultChars }));

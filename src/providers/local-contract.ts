@@ -1,4 +1,3 @@
-import type { ManagedSearchExecutable } from "./local-executable.js";
 import type { FabricDeadline } from "../runtime/deadline.js";
 
 export interface LocalProviderOptions {
@@ -7,7 +6,6 @@ export interface LocalProviderOptions {
   maxResultChars?: number;
   /** Optional visible-output allowance for source batches; other local limits stay unchanged. */
   maxReadManyChars?: number;
-  managedSearch?: ManagedSearchExecutable;
 }
 export interface LocalReadArguments { path: string; offset?: number; limit?: number }
 export interface LocalReadWindow extends LocalReadArguments { expectedSha256?: string }

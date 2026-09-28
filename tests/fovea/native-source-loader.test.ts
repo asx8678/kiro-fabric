@@ -4,13 +4,9 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { buildFoveaNative } from '../../scripts/build-fovea-native.mjs';
-import { validateBundle } from '../../src/installation/bundle-contract.mjs';
 import { loadManagedSourcePlatform, validateNativeSourceArtifact } from '../../src/fovea/native-source-loader.js';
 import { SourceAccess } from '../../src/fovea/source-access.js';
 
-vi.mock('../../src/installation/bundle-contract.mjs', async importOriginal => ({
-  ...await importOriginal<typeof import('../../src/installation/bundle-contract.mjs')>(), validateBundle: vi.fn(),
-}));
 const sha = (value: Buffer | string) => createHash('sha256').update(value).digest('hex');
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -57,19 +53,13 @@ describe.skipIf(process.platform !== 'darwin')('managed Darwin loader and actual
   afterEach(async () => { for (const root of scratch.splice(0)) await removeFixture(root, { recursive: true, force: true }); });
   afterAll(async () => { if (compiled) await removeFixture(compiled, { recursive: true, force: true }); });
   async function fixture() {
-    const root = await fs.mkdtemp(resolve('.tmp/native-loader-test-')); scratch.push(root);
+    const root = await fs.realpath(await fs.mkdtemp(resolve('.tmp/native-loader-test-'))); scratch.push(root);
     const storage = join(root, 'engine');
     for (const dir of ['app/fovea', 'tools', 'engine', 'workspace']) await fs.mkdir(join(root, dir), { recursive: true, mode: 0o700 });
     const closure = Buffer.from(JSON.stringify({ buildInputs: { files: [{ path: 'src/fovea/source-platform-native.c', sha256: JSON.parse(metadata.toString()).sourceSha256 }] } }));
-    const files: [string, Buffer][] = [['app/fovea/source-platform.node', binary], ['app/fovea/source-platform.json', metadata], ['app/closure-manifest.json', closure], ['tools/ast-grep', Buffer.from('parser')], ['tools/node', Buffer.from('node')]];
+    const files: [string, Buffer][] = [['app/fovea/source-platform.node', binary], ['app/fovea/source-platform.json', metadata], ['app/closure-manifest.json', closure], ['tools/ast-grep', Buffer.from('parser')]];
     for (const [file, content] of files) await fs.writeFile(join(root, file), content, { mode: 0o600 });
-    const inventory = files.map(([path, bytes]) => ({ path, size: bytes.length, sha256: sha(bytes) }));
-    const bundle = { root, manifest: { schema: 2, target: `darwin-${process.arch}` }, inventory };
-    // Admission is mocked only here; the loader still captures real private
-    // files and verifies hashes, modes, native identity and storage itself.
-    vi.mocked(validateBundle).mockResolvedValue(bundle as Awaited<ReturnType<typeof validateBundle>>);
-    vi.stubGlobal('process', Object.create(process, { execPath: { value: join(root, 'tools/node') } }));
-    return { root, storage, bundle, parser: { generationRoot: root, path: join(root, 'tools/ast-grep'), sha256: sha('parser'), version: '0.45.3' } };
+    return { root, storage, parser: { generationRoot: root, path: join(root, 'tools/ast-grep'), sha256: sha('parser'), version: '0.45.3' } };
   }
   it('loads verified copied bytes and captures exact source, ignoring environment selectors', async () => {
     const f = await fixture(); vi.stubEnv('FOVEA_NATIVE_PATH', '/attacker/source.node'); vi.stubEnv('NODE_PATH', '/attacker');
@@ -79,28 +69,19 @@ describe.skipIf(process.platform !== 'darwin')('managed Darwin loader and actual
     expect(shot.hashes.get('a.ts')).toBe(sha('export const a = 1;'));
     expect(await fs.readFile(join(f.storage, 'source-platform.node'))).toEqual(binary);
     expect((await fs.stat(join(f.storage, 'source-platform.node'))).mode & 0o777).toBe(0o500);
-    expect(validateBundle).toHaveBeenCalledWith(f.root);
   });
-  it('requires admitted generation and refuses foreign parser, node and target', async () => {
+  it('requires an installation root and a parser beside its app', async () => {
     const f = await fixture();
-    await expect(loadManagedSourcePlatform({ ...f.parser, generationRoot: undefined }, f.storage)).rejects.toThrow('generation-local');
+    await expect(loadManagedSourcePlatform({ ...f.parser, generationRoot: undefined }, f.storage)).rejects.toThrow('installation-local');
     await expect(loadManagedSourcePlatform({ ...f.parser, path: '/other/parser' }, f.storage)).rejects.toThrow('containment');
-    await expect(loadManagedSourcePlatform({ ...f.parser, sha256: sha('other') }, f.storage)).rejects.toThrow('containment');
-    f.bundle.manifest.target = 'linux-x64';
-    await expect(loadManagedSourcePlatform(f.parser, f.storage)).rejects.toThrow('containment');
-    f.bundle.manifest.target = `darwin-${process.arch}`;
-    vi.stubGlobal('process', Object.create(process, { execPath: { value: '/usr/bin/true' } }));
-    await expect(loadManagedSourcePlatform(f.parser, f.storage)).rejects.toThrow('containment');
-  });
-  it('propagates generation admission failure before native code is loaded', async () => {
-    const f = await fixture(); vi.mocked(validateBundle).mockRejectedValueOnce(new Error('inventory drift'));
-    await expect(loadManagedSourcePlatform(f.parser, f.storage)).rejects.toThrow('inventory drift');
+    await expect(loadManagedSourcePlatform({ ...f.parser, generationRoot: join(f.root, 'app') }, f.storage)).rejects.toThrow('containment');
     expect(await fs.readdir(f.storage)).toEqual([]);
   });
-  it.each(['changed', 'missing-inventory', 'symlink', 'hardlink', 'writable', 'unsafe-storage', 'occupied-storage'] as const)('rejects %s before native execution', async kind => {
+  it.each(['changed', 'metadata', 'source', 'symlink', 'hardlink', 'writable', 'unsafe-storage', 'occupied-storage'] as const)('rejects %s before native execution', async kind => {
     const f = await fixture(), file = join(f.root, 'app/fovea/source-platform.node');
     if (kind === 'changed') await fs.appendFile(file, 'x');
-    if (kind === 'missing-inventory') f.bundle.inventory.splice(0, 1);
+    if (kind === 'metadata') await fs.writeFile(join(f.root, 'app/fovea/source-platform.json'), JSON.stringify({ ...JSON.parse(metadata.toString()), sha256: '0'.repeat(64) }));
+    if (kind === 'source') await fs.writeFile(join(f.root, 'app/closure-manifest.json'), JSON.stringify({ buildInputs: { files: [] } }));
     if (kind === 'symlink') { await fs.rename(file, file + '.saved'); await fs.symlink(file + '.saved', file); }
     if (kind === 'hardlink') await fs.link(file, file + '.link');
     if (kind === 'writable') await fs.chmod(file, 0o666);

@@ -1,7 +1,5 @@
 import fs from 'node:fs';
 import childProcess from 'node:child_process';
-import { Readable, Transform } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 
 /** @typedef {{dev:string,ino:string,mode:number,uid:number,gid:number}} DirectoryIdentity */
 /** @typedef {DirectoryIdentity & {nlink:string,size:string,mtimeNs:string,ctimeNs:string}} EntryIdentity */
@@ -262,41 +260,3 @@ export function runPinnedDirectoryOperation(options) {
   verify(); return postcondition(options, result);
 }
 
-/** Streaming exclusive writer: the verified child owns the output descriptor.
- * Source bytes travel only over bounded stdin; no temporary source file or argv.
- * A failed source/child closes resources and preserves partial output evidence.
- * @param {ParentOptions & {name:string,mode?:number,maxBytes:number}} options
- * @param {AsyncIterable<Uint8Array>} source @returns {Promise<EntryIdentity>} */
-export async function writePinnedDirectoryStream(options, source) {
-  const operation = { ...options, operation: /** @type {const} */ ('writeExclusive') };
-  const { header, verify } = prepare(operation, null);
-  const child = childProcess.spawn(process.execPath, ['--input-type=commonjs', '-e', childSource], spawnOptions(options));
-  let stdout = '', outputBytes = 0, fault;
-  const closed = new Promise(resolve => {
-    child.on('error', error => { fault = error; });
-    for (const pipe of [child.stdout, child.stderr]) pipe.on('data', bytes => {
-      outputBytes += bytes.length;
-      if (outputBytes > 4096) { fault = Error('Pinned directory response bound'); child.kill('SIGKILL'); }
-      else if (pipe === child.stdout) stdout += bytes.toString('utf8');
-    });
-    child.on('close', (code, signal) => resolve({ code, signal }));
-  });
-  const complete = closed.then(({ code, signal }) => {
-    verify();
-    if (fault || code !== 0 || signal) throw Error('Pinned directory child unavailable; preserve evidence');
-    return postcondition(operation, response(stdout));
-  });
-  const input = Readable.from(source); let count = 0;
-  const bound = new Transform({ transform(chunk, _encoding, callback) {
-    count += chunk.length;
-    if (count > options.maxBytes) callback(Error('Pinned directory input bound')); else callback(null, chunk);
-  } });
-  child.stdin.write(header);
-  try {
-    const [, result] = await Promise.all([pipeline(input, bound, child.stdin), complete]);
-    return result;
-  } catch (error) {
-    input.destroy(); bound.destroy(); child.stdin.destroy(); child.kill('SIGKILL');
-    await closed; throw error;
-  }
-}

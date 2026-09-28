@@ -180,7 +180,7 @@ describe("canonical workspace binding", () => {
     const kiroHome = path.join(elsewhere, ".kiro-custom");
     const installRoot = path.join(kiroHome, "kiro-fabric");
     const installedData = path.join(installRoot, "data");
-    const installedRuntime = path.join(installRoot, "runtime", "a".repeat(64));
+    const installedRuntime = path.join(installRoot, "app");
     const agents = path.join(kiroHome, "agents");
     const workspace = path.join(root, "workspace");
     const unrelatedRuntime = path.join(root, "unrelated-runtime");
@@ -190,14 +190,14 @@ describe("canonical workspace binding", () => {
     }
     try {
       // A mismatched runtime for the same installed data root fails closed on the
-      // digest-named layout before any server, storage, or trace effect.
+      // installed app layout before any server, storage, or trace effect.
       const serversBefore = wire.servers.length;
       await expect(createKiroMcpServer({
         runtimeRoot: unrelatedRuntime,
         dataRoot: installedData,
         version: "fixture",
         prepareRuntime: async () => { throw new Error("workspace-binding fixture must not create a runtime"); },
-      })).rejects.toThrow("digest-named runtime layout");
+      })).rejects.toThrow("does not match its app layout");
       expect(wire.servers.length).toBe(serversBefore);
       expect(fs.existsSync(path.join(installedData, "fabric"))).toBe(false);
 

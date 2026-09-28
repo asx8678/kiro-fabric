@@ -3,45 +3,29 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { validateActiveCompleteBundle } from '../../scripts/build-complete-bundle.mjs';
-import { resolveManagedFoveaParser, type ManagedFoveaParser } from '../../src/kiro/managed-generation.js';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { createInstalledParser, type InstalledParser } from './installed-parser.js';
 import type { FoveaBoundClient } from '../../dist/index.js';
 import type { WorkspaceContextProvider } from '../../src/kiro/power/workspace-context.js';
 
-let parser: ManagedFoveaParser | undefined;
-let nodePath: string | undefined;
+let parser: InstalledParser | undefined;
+let dispose: (() => void) | undefined;
+const nodePath = process.execPath;
 let api: typeof import('../../dist/index.js');
 beforeAll(async () => {
-  const bundle = await validateActiveCompleteBundle(path.resolve('.tmp'));
-  if (bundle) {
-    nodePath = path.join(bundle.root, 'tools/node');
-    parser = await resolveManagedFoveaParser({ bundleRoot: bundle.root, expectedNode: nodePath, rg: path.join(bundle.root, 'tools/rg') });
-  }
+  const installed = createInstalledParser();
+  parser = installed?.parser;
+  dispose = installed?.dispose;
   api = await import('../../dist/index.js');
 });
+afterAll(() => dispose?.());
 const cleanup: Array<() => void | Promise<void>> = [];
 afterEach(async () => { for (const close of cleanup.splice(0).reverse()) await close(); });
-// Native admission also binds Node to the parser generation. The normal test
-// runner may use another trusted generation; execute the exact test (unchanged
-// assertions) under this bundle's Node instead of weakening production admission.
-function underAdmittedRuntime(name: string): boolean {
-  expect(nodePath, 'A validated complete generation is required').toBeDefined();
-  if (fs.realpathSync(process.execPath) === fs.realpathSync(nodePath!)) return false;
-  const run = spawnSync(nodePath!, [path.resolve('node_modules/vitest/vitest.mjs'), 'run', 'tests/fovea/session-retirement-built.test.ts', '-t', name], {
-    cwd: process.cwd(), env: process.env, encoding: 'utf8', timeout: 120_000, maxBuffer: 1024 * 1024,
-  });
-  expect(run.error, run.stderr + run.stdout).toBeUndefined();
-  expect(run.status, run.stderr + run.stdout).toBe(0);
-  expect(run.stdout).toMatch(/1 passed/);
-  return true;
-}
 function fixture() {
-  if (!parser) throw new Error('A validated complete bundle/parser is required; never substitute a PATH parser');
+  if (!parser) throw new Error('Build output and the pinned ast-grep platform package are required');
   expect(api.KiroHostSessionAdapter).toBeTypeOf('function');
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-built-retirement-'))); fs.chmodSync(base, 0o700);
   cleanup.push(() => removeFixtureSync(base, { recursive: true, force: true }));
@@ -69,7 +53,6 @@ function fixture() {
 // This is local component evidence, not native Kiro session or UI qualification.
 describe.skipIf(!['darwin', 'linux'].includes(process.platform))('built selective conversation retirement', () => {
   it('forgets focus/results/settings/rule trust across roots while preserving another conversation', async () => {
-    if (underAdmittedRuntime('forgets focus/results/settings/rule trust across roots')) return;
     const f = fixture(), aOwner = f.open('a'); f.open('b');
     const a = f.bind('a'), b = f.bind('b'), roaming = f.bind('a', 1, f.roots[1]!);
     const rules = '{"rules":[]}';
@@ -103,7 +86,6 @@ describe.skipIf(!['darwin', 'linux'].includes(process.platform))('built selectiv
     expect((await f.call(fresh, 'focus', { query: 'calculateTotal' })).coverage).toMatchObject({ source: { projectRules: 'untrusted-skipped' } });
   }, 90_000);
   it('reclaims real engine conversation capacity for more than 128 retired owners without restarting', async () => {
-    if (underAdmittedRuntime('reclaims real engine conversation capacity')) return;
     const f = fixture();
     for (let i = 0; i < 132; i++) {
       const id = `owner_${i}`, owner = f.open(id), client = f.bind(id);
@@ -114,7 +96,7 @@ describe.skipIf(!['darwin', 'linux'].includes(process.platform))('built selectiv
     expect(await f.call(f.bind('last'), 'status')).toMatchObject({ engineStarts: 1 });
   }, 120_000);
   it('routes actual built stdio MCP calls and retires a session through a synthetic trusted bridge', async () => {
-    expect(parser).toBeDefined(); expect(nodePath).toBeDefined();
+    expect(parser).toBeDefined();
     const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'fovea-built-session-mcp-'))); fs.chmodSync(base, 0o700);
     cleanup.push(() => removeFixtureSync(base, { recursive: true, force: true }));
     const root = path.join(base, 'workspace'), dataRoot = path.join(base, 'data');
@@ -144,7 +126,7 @@ process.once('SIGUSR1', () => { void (async () => {
 process.stdin.once('end', () => { void server.close().then(() => process.exit(0)); });
 `, { mode: 0o600 });
     const client = new Client({ name: 'synthetic-session-bridge', version: '1' });
-    const transport = new StdioClientTransport({ command: nodePath!, args: [driver], cwd: root, env: { HOME: base, PATH: process.env.PATH ?? '/usr/bin:/bin' }, stderr: 'pipe' });
+    const transport = new StdioClientTransport({ command: nodePath, args: [driver], cwd: root, env: { HOME: base, PATH: process.env.PATH ?? '/usr/bin:/bin' }, stderr: 'pipe' });
     let stderr = '';
     try {
       await client.connect(transport);

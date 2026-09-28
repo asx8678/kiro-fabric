@@ -5,13 +5,14 @@ import { afterEach, expect, it } from 'vitest';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { FoveaEngine, type EngineResult } from '../../src/fovea/engine.js';
+import { pinnedParser } from "./installed-parser.js";
 
 // NavigationResult is module-private in src/fovea/engine.ts; recover the exact
 // structural type from the public EngineResult union without re-exporting it.
 type NavigationResult = Extract<EngineResult, { status: 'ok' | 'no-match' }>;
-const parser = { path: resolve('.tmp/fovea-parser/ast-grep'), sha256: '7a5ab30160186184c0bf8bffc87da4af25123c183964cd98c11b0b354137db0a', version: '0.45.3' };
+const parser = pinnedParser();
 const SOURCES: Record<string, string> = {
   "app/(shop)/reports/page.tsx": "export default function ReportsPage() {\n  return null;\n}\n",
   "app/api/orders/route.ts": "export async function GET() {\n  return Response.json([]);\n}\n\nexport async function POST(req: Request) {\n  return Response.json({ ok: true });\n}\n",

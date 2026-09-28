@@ -42,8 +42,6 @@ export { ContinuityConversationArchive } from "./continuity/conversation-archive
 export type { ContinuityArchiveEvent, ContinuityArchiveEventInput, ContinuityArchiveEventKind, ContinuityArchiveHead, ContinuityArchiveAppendResult, ContinuityArchivePage, ContinuityArchiveOptions } from "./continuity/conversation-archive.js";
 export { ContinuityRotationJournal } from "./continuity/rotation-journal.js";
 export type { ContinuityRotationRecord, ContinuityRotationPhase, ContinuityRotationDecision, ContinuityRotationStatus, ContinuityRotationBeginInput } from "./continuity/rotation-journal.js";
-export { runAcpCapabilityProbe } from "./kiro/acp-capability-probe.js";
-export type { AcpProbeTransport, AcpProbeFrame, AcpCapabilityProbeOptions, AcpCapabilityReport, AcpCapabilityGates, AcpSubmissionEvidence, AcpSubmissionState, AcpCleanupState } from "./kiro/acp-capability-probe.js";
 export { buildRunProvenance, parseRunProvenanceDeclaration } from "./kiro/run-provenance.js";
 export type { RunProvenanceInput, RunProvenanceConfiguredInput, RunProvenanceObservedInput, RunProvenanceManifest } from "./kiro/run-provenance.js";
 export { ProbeProvider, ProbeRunExitError } from "./providers/probe-provider.js";

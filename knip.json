@@ -7,36 +7,16 @@
     "src/kiro/fovea-hook.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/sandbox-worker-entry.ts",
-    "scripts/analyze-trace.mjs",
-    "scripts/run-agent-dev.mjs",
-    "scripts/install-tui.mjs",
-    "scripts/source-install.mjs",
-    "scripts/verification/baseline-cases.mjs",
-    "scripts/verification/non-browser-cases.mjs",
-    "scripts/verification/quality-cases.mjs",
-    "scripts/verification/lifecycle-cases.mjs",
-    "scripts/verification/installer-cases.mjs",
-    "scripts/verification/w5-locking-cases.mjs",
-    "scripts/verification/w5-hardening-model.mjs",
-    "scripts/verification/w5-callers-historical-child.mjs",
-    "scripts/verification/w6-safety-cases.mjs",
-    "scripts/verification/w7-contract-cases.mjs",
-    "scripts/verification/n0-audit.mjs",
-    "scripts/test-installer.mjs",
-    "scripts/verification/activation-cases.mjs",
-    "scripts/verification/activation-admission-probe.mjs",
-    "scripts/verification/activation-install-child.mjs",
-    "scripts/verification/activation-legacy-gate-child.mjs",
-    "scripts/verification/activation-paused-legacy-writer-child.mjs",
-    "scripts/verification/activation-smoke-nested-regression.mjs",
-    "scripts/verification/semantic-baseline-cases.mjs",
-    "scripts/verification/semantic-admission-probe.mjs",
-    "scripts/verification/qualification-safety-cases.mjs",
-    "scripts/verification/qualification-smoke-child.mjs",
-    "scripts/verification/staging-preservation-probe.mjs",
-    "scripts/verification/staging-boundary-probe.mjs"
+    "scripts/analyze-trace.mjs"
   ],
-  "project": ["src/**/*.{ts,mjs}", "scripts/**/*.mjs"],
-  "exclude": ["duplicates"],
-  "ignoreBinaries": ["kiro-cli", "mkfifo"]
+  "project": [
+    "src/**/*.{ts,mjs}",
+    "scripts/**/*.mjs"
+  ],
+  "exclude": [
+    "duplicates"
+  ],
+  "ignoreBinaries": [
+    "mkfifo"
+  ]
 }
