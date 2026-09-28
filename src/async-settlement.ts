@@ -4,7 +4,7 @@ const abortError = (signal: AbortSignal): Error => {
   return new Error(typeof reason === "string" && reason ? reason : "Operation aborted");
 };
 
-export const throwIfAborted = (signal: AbortSignal | undefined): void => {
+const throwIfAborted = (signal: AbortSignal | undefined): void => {
   if (signal?.aborted) throw abortError(signal);
 };
 

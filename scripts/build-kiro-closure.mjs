@@ -155,8 +155,6 @@ fs.writeFileSync(path.join(outdir, "THIRD_PARTY_NOTICES.txt"), noticeParts.join(
 const kiroProviderFiles = new Set([
   "src/kiro/artifacts.ts",
   "src/kiro/mcp-provider.ts",
-  "src/kiro/memory-provider.ts",
-  "src/kiro/memory.ts",
   "src/kiro/storage-identity.ts",
   "src/kiro/power/artifacts-provider.ts",
 ]);

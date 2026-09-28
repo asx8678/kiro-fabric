@@ -1,6 +1,6 @@
 ---
 name: fabric-exec
-description: Strict always-on Code Mode for local coding, bounded provider composition, durable memory/state, artifacts and explicitly configured MCP federation. No native tool fallback.
+description: Strict always-on Code Mode for local coding, bounded provider composition, durable state, artifacts and explicitly configured MCP federation. No native tool fallback.
 license: MIT
 compatibility: Kiro CLI v3 with the Kiro Fabric Agent enabled
 ---
@@ -11,7 +11,7 @@ The standing prompt owns scope, planning, acceptance and output. This skill supp
 
 Use `@fabric/fabric_exec` with a checked TypeScript function body and named string `payloads`. Await calls and return needed evidence. QuickJS has no imports, process, filesystem, timers or direct networking; mounted namespaces provide approved capabilities. Compiler failures execute no calls. Discover as needed with `tools.providers()`, `tools.search` and `tools.describe`; never invent APIs or native fallbacks.
 
-Capabilities: `repo`=Navigator; `local`=files/search/shell; `mcp`=configured tools; `memory/state`=durable data; `artifacts`=large outputs.
+Capabilities: `repo`=Navigator; `local`=files/search/shell; `mcp`=configured tools; `state`=durable data; `artifacts`=large outputs.
 
 ## Navigator-first code navigation
 
@@ -52,7 +52,7 @@ MCP/LSP/delegation require explicitly configured available capabilities. Describ
 
 ## Storage and further help
 
-Memory/state are workspace-shared: use explicit session/task IDs and revision checks, never global scratch keys or another chat's ledger. Save chosen non-secret facts/progress. Artifacts are ephemeral. Kiro owns compaction/resume; continue through Fabric.
+State is workspace-shared: use explicit session/task IDs and revision checks, never global scratch keys or another chat's ledger. Save chosen non-secret facts/progress. Artifacts are ephemeral. Kiro owns compaction/resume; continue through Fabric.
 
 Load `fabric.help({topic,offset?,limit?})` only for missing details. Topics are immutable, paged by zero-based UTF-16 characters; follow nextOffset on relevant truncated content. Return requested help text, not a loaded flag. Help/examples grant no approval.
 

@@ -368,14 +368,10 @@ export const GUEST_SETUP = `
     sync: (args = {}) => call('repo.sync', args), focusRead,
   });
   globalThis.artifacts = objectFreeze({ read: (args) => call("artifacts.read", args), checkpoint: (args) => call("artifacts.checkpoint", args) });
-  globalThis.memory = objectFreeze({
-    get: (args) => call("memory.get", args), set: (args) => call("memory.set", args),
-    delete: (args) => call("memory.delete", args), search: (args) => call("memory.search", args),
-    index: (args = {}) => call("memory.index", args),
-  });
   globalThis.state = objectFreeze({
     get: (args) => call("state.get", args), set: (args) => call("state.set", args),
-    list: (args = {}) => call("state.list", args), delete: (args) => call("state.delete", args),
+    list: (args = {}) => call("state.list", args), search: (args) => call("state.search", args),
+    delete: (args) => call("state.delete", args),
   });
   globalThis.mcp = objectFreeze({
     servers: (args = {}) => call("mcp.$servers", args),

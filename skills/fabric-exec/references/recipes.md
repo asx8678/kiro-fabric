@@ -207,4 +207,4 @@ return {ok:r.ok, exitCode:r.exitCode,
 
 Use outer timeoutMs:180000; denial, timeout, cancellation and uncertain cleanup still fail. Do not use `print` to leak the omitted logs back into context.
 
-Return requested output or compact evidence, not raw records to copy into another execution. Do not use persistent memory/state as scratch storage. parallel preserves input order and bounds concurrency; overlapping writes and commands are not independent fan-out.
+Return requested output or compact evidence, not raw records to copy into another execution. Do not use persistent state as scratch storage. parallel preserves input order and bounds concurrency; overlapping writes and commands are not independent fan-out.

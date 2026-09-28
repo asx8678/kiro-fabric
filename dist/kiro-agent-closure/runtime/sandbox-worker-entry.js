@@ -9,7 +9,7 @@ import {
   FABRIC_COMMIT_ACKNOWLEDGEMENT,
   LocalShellExitError,
   runQuickJsSandbox
-} from "../chunks/chunk-WEALNPBH.js";
+} from "../chunks/chunk-TV4LKLCM.js";
 import "../chunks/chunk-XJTFSUKV.js";
 import {
   FabricRepairError

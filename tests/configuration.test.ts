@@ -116,14 +116,16 @@ describe("Agent-only configuration", () => {
     } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
-  it("caps configurable memory limits at the enforced storage bounds", () => {
-    expect(normalizeFabricConfig({
-      memory: { enabled: true, maxEntries: 10_000, maxValueChars: 2_000_000 },
-    }).memory).toEqual({
-      enabled: true,
-      maxEntries: 128,
-      maxValueChars: 16_000,
-    });
+  it("loads files that still contain retired memory and continuity sections", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "fabric-retired-sections-"));
+    const file = path.join(root, "config.json");
+    try {
+      fs.writeFileSync(file, JSON.stringify({ schemaVersion: 1, memory: { enabled: true, maxEntries: 10 }, continuity: { enabled: true }, approvals: { write: "deny" } }), { mode: 0o600 });
+      const loaded = loadFabricConfig(file);
+      expect(loaded.approvals.write).toBe("deny");
+      expect(loaded).not.toHaveProperty("memory");
+      expect(loaded).not.toHaveProperty("continuity");
+    } finally { removeFixtureSync(root, { recursive: true, force: true }); }
   });
 
   it("bounds and privatizes the configured-MCP file under Fabric data", () => {

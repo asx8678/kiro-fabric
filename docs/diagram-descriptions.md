@@ -24,7 +24,6 @@ The full provider inventory includes supporting namespaces omitted from the sche
 | `fabric` | Bootstrap, help and workspace selection |
 | `local` | Workspace file operations and host shell execution |
 | `repo` | Advisory repository navigation through Navigator |
-| `memory` | Intentional durable workspace facts |
 | `state` | Revisioned durable workspace progress |
 | `artifacts` | Temporary retained output and checkpoint access |
 | `mcp` | Explicitly configured external MCP capabilities |
@@ -115,7 +114,7 @@ Source: [local preparation and publication](../src/providers/local-provider.ts),
 2. **Bind and admit.** Fabric verifies the workspace root. By default, a service admits up to four executions across compilation, approval waits, and execution; excess requests are rejected. A single verified root binds automatically. Multiple roots need explicit selection in a separate execution.
 3. **Check TypeScript.** A worker compiles against Fabric's guest declarations with restricted compiler file access. Invalid types or an invalid wrapper stop the program before guest execution or provider actions.
 4. **Run fresh QuickJS.** Every call receives a new guest context. It has no direct filesystem, shell, or network access. Host calls cross a bounded JSON bridge and shared host-call queue. The default guest heap limit is 64 MiB. The base timeout is 120 seconds and the configured maximum is 900 seconds; the effective deadline also depends on action policy.
-5. **Gate every action.** Fabric prepares canonical arguments, validates schemas, reserves effects, and applies approval policy before invoking local coding, memory/state, or configured MCP tools. Bounded JSON results return to the guest. Outer execution allowance does not approve inner effects.
+5. **Gate every action.** Fabric prepares canonical arguments, validates schemas, reserves effects, and applies approval policy before invoking local coding, state, or configured MCP tools. Bounded JSON results return to the guest. Outer execution allowance does not approve inner effects.
 6. **Return evidence.** Guest code filters and combines results. Logs count as visible output too. Fabric returns a bounded response, with a default 50,000-character budget and an overflow artifact when retention succeeds; Kiro uses it to answer or continue. A later failure may leave earlier effects committed.
 
 Source: [execution service](../src/execution-service.ts), [compiler](../src/runtime/type-checker.ts), and [QuickJS runtime](../src/runtime/quickjs-runtime.ts).
@@ -182,7 +181,7 @@ Source: [result projection](../src/kiro/projection.ts) and [artifact storage](..
 - **Kiro conversation:** Kiro owns saved history, summaries, context compaction, and chat resume.
 - **Fabric runtime:** cached for the verified workspace, with a bounded compiler pool. A workspace change can replace the runtime without changing the backend PID. `fabric.info()` reports PID, `mcpInstanceId`, and runtime generation for inspection.
 - **One execution:** each call gets a new QuickJS context. Local variables end with that call.
-- **Durable memory and state:** intentional facts and revisioned task progress survive process restart. They are shared by chats bound to the same verified workspace. `expectedRevision` detects stale state updates. Durable storage is under `${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/data/fabric/`.
+- **Durable state:** intentional facts and revisioned task progress survive process restart. They are shared by chats bound to the same verified workspace. `expectedRevision` detects stale state updates. Durable storage is under `${KIRO_HOME:-$HOME/.kiro}/kiro-fabric/data/fabric/`.
 - **Temporary artifacts:** process-owned overflow data has a default one-hour idle expiry. Reads refresh its last-read time; quotas and eviction also apply. Do not rely on artifact IDs after restart.
 
 Same-process compaction and new-process resume remain authenticated real-client qualification gates. Restart Kiro after installing an updated agent.

@@ -4,7 +4,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { openKiroMemory } from "../src/kiro/memory.js";
 import {
   prepareKiroPowerDataPaths,
   prepareKiroPowerProjectPaths,
@@ -103,7 +102,7 @@ describe("retained Power data migration", () => {
     }
   });
 
-  it("maps identity-verified v2 memory into the v3 runtime layout with final ownership markers", async () => {
+  it("migrates a verified v2 identity into the v3 layout and quarantines legacy data unchanged", () => {
     const pluginData = temporary();
     const data = prepareKiroPowerDataPaths(pluginData);
     const workspace = temporary();
@@ -118,17 +117,9 @@ describe("retained Power data migration", () => {
     const migrated = prepareKiroPowerProjectPaths(data.projects, identity);
     expect(path.basename(migrated.root)).toBe(workspaceId(identity, 3));
     expect(fs.existsSync(path.join(migrated.state, "preserved.fixture"))).toBe(false);
-    const runtimeMemory = openKiroMemory<{ retained: boolean }>(migrated.memoryNamespace, migrated.memory);
-    expect(await runtimeMemory.get("fixture")).toMatchObject({
-      namespace, key: "fixture", value: { retained: true },
-    });
-    expect((await runtimeMemory.list()).map(entry => entry.key)).toEqual(["fixture"]);
-
-    const physicalMemory = path.join(migrated.memory, "memory");
-    const rootMarker = JSON.parse(fs.readFileSync(path.join(physicalMemory, ".kiro-fabric-owner"), "utf8"));
-    const namespaceMarker = JSON.parse(fs.readFileSync(path.join(physicalMemory, memoryNamespaceDirectory(namespace), ".kiro-fabric-owner"), "utf8"));
-    expect(rootMarker.root).toBe(migrated.memory);
-    expect(namespaceMarker).toMatchObject({ root: migrated.memory, namespace });
+    expect(fs.existsSync(path.join(migrated.root, "memory"))).toBe(false);
+    expect(JSON.parse(fs.readFileSync(path.join(migrated.root, "migration-report.json"), "utf8")))
+      .toMatchObject({ migrated: ["immutable workspace identity"], complete: true });
 
     expect(fs.existsSync(legacy)).toBe(false);
     const quarantined = path.join(data.projects, ".quarantine", `workspace-v2-${workspaceId(identity, 2)}`);
@@ -138,7 +129,7 @@ describe("retained Power data migration", () => {
     expect(prepareKiroPowerProjectPaths(data.projects, identity).root).toBe(migrated.root);
   });
 
-  it("keeps existing v3 memory when a verified v2 generation is quarantined", async () => {
+  it("keeps existing v3 data when a verified v2 generation is quarantined", () => {
     const data = prepareKiroPowerDataPaths(temporary());
     const workspace = temporary();
     const identity = verifiedIdentity(workspace);
@@ -146,14 +137,13 @@ describe("retained Power data migration", () => {
     const current = path.join(data.projects, workspaceId(identity, 3));
     const legacy = path.join(data.projects, workspaceId(identity, 2));
     seedIdentity(current, identity);
-    seedMemory(path.join(current, "memory"), namespace, "current", { generation: 3 });
+    fs.mkdirSync(path.join(current, "state"), { mode: 0o700 });
+    fs.writeFileSync(path.join(current, "state", "current.fixture"), "generation 3", { mode: 0o600 });
     seedIdentity(legacy, identity);
     seedMemory(legacy, namespace, "legacy", { generation: 2 });
 
     const prepared = prepareKiroPowerProjectPaths(data.projects, identity);
-    const runtimeMemory = openKiroMemory<{ generation: number }>(prepared.memoryNamespace, prepared.memory);
-    expect(await runtimeMemory.get("current")).toMatchObject({ value: { generation: 3 } });
-    expect(await runtimeMemory.get("legacy")).toBeNull();
+    expect(fs.readFileSync(path.join(prepared.state, "current.fixture"), "utf8")).toBe("generation 3");
     const quarantined = path.join(data.projects, ".quarantine", `workspace-v2-${workspaceId(identity, 2)}`);
     expect(JSON.parse(fs.readFileSync(path.join(quarantined, "memory", memoryNamespaceDirectory(namespace), "legacy.json"), "utf8")))
       .toMatchObject({ value: { generation: 2 } });

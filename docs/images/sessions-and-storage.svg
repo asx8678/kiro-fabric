@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="1186" viewBox="0 0 640 1186" role="img" aria-labelledby="title desc">
 <title id="title">Processes, guests, and durable data</title>
-<desc id="desc">Kiro owns conversation saving, compaction, and resume. The private Fabric MCP backend caches the verified workspace runtime; workspace changes can replace the runtime without changing PID. fabric.info exposes process and runtime identity. Each execution has a fresh QuickJS context. Durable workspace memory and revisioned state are shared across chats bound to that workspace; expectedRevision detects stale state updates. Overflow artifacts are process-owned and temporary. Same-process compaction and new-process resume require real-client qualification. See docs/diagram-descriptions.md, Lifetimes.</desc>
+<desc id="desc">Kiro owns conversation saving, compaction, and resume. The private Fabric MCP backend caches the verified workspace runtime; workspace changes can replace the runtime without changing PID. fabric.info exposes process and runtime identity. Each execution has a fresh QuickJS context. Durable revisioned workspace state is shared across chats bound to that workspace; expectedRevision detects stale state updates. Overflow artifacts are process-owned and temporary. Same-process compaction and new-process resume require real-client qualification. See docs/diagram-descriptions.md, Lifetimes.</desc>
 <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#334155"/></marker></defs>
 <style>
 text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
@@ -19,7 +19,7 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 <text x="44" y="159" class="label">Kiro CLI process · conversation owner</text>
 <text x="44" y="199" class="body">Kiro saves history and compacted summaries.</text>
 <text x="44" y="229" class="body">Kiro controls compaction and chat resume.</text>
-<text x="44" y="259" class="body">Fabric memory does not mirror the conversation.</text>
+<text x="44" y="259" class="body">Fabric state does not mirror the conversation.</text>
 </g>
 <g data-card="true"><rect x="24" y="300" width="592" height="154" rx="10" fill="#ffffff" stroke="#334155" stroke-width="2"/>
 <text x="44" y="337" class="label">Fabric backend · workspace runtime</text>
@@ -34,7 +34,7 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 <text x="44" y="615" class="body">Every new program is checked again.</text>
 </g>
 <g data-card="true"><rect x="24" y="656" width="592" height="184" rx="10" fill="#f0fdf4" stroke="#334155" stroke-width="2"/>
-<text x="44" y="693" class="label">Across restarts · memory and state</text>
+<text x="44" y="693" class="label">Across restarts · workspace state</text>
 <text x="44" y="733" class="body">Intentional facts + revisioned task progress.</text>
 <text x="44" y="763" class="body">Chats in the same verified workspace share data.</text>
 <text x="44" y="793" class="body">expectedRevision detects stale state updates.</text>

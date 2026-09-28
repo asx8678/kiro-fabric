@@ -53,9 +53,9 @@ Kiro <---------- bounded results <------------+
 
 Kiro owns the conversation and reasoning. A private MCP backend runs Fabric: it checks the program's types, executes it in a fresh QuickJS context, and routes tool calls through an action registry. Each action still receives argument validation, workspace checks where required, approval policy and execution limits.
 
-Programs can use local file/search/edit/shell tools, Navigator, workspace memory and state, review evidence, retained probes, and explicitly configured MCP servers. `tools.providers()`, `tools.search()` and `tools.describe()` expose availability and schemas as needed.
+Programs can use local file/search/edit/shell tools, Navigator, durable workspace state, and explicitly configured MCP servers. `tools.providers()`, `tools.search()` and `tools.describe()` expose availability and schemas as needed.
 
-Only returned values and printed logs become ordinary program output; Fabric also reports failures and output overflow. Guest variables end with each execution. Workspace memory/state persist separately, and optional [task recovery](docs/configuration.md#deterministic-task-recovery-opt-in) stores declared checkpoints.
+Only returned values and printed logs become ordinary program output; Fabric also reports failures and output overflow. Guest variables end with each execution. Workspace state persists separately.
 
 Direct file writes default to asking for approval. Shell execution defaults to allowed and runs with host OS authority: QuickJS isolation and separate file/network policies do not confine shell effects. Completed effects are not rolled back if a later step fails. See [configuration and boundaries](docs/configuration.md).
 

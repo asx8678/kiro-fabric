@@ -95,15 +95,10 @@ mcp.describePage(input: {server:string;tool:string;maxBytes?:number} | {cursor:s
 artifacts.read(args: { id: string; offset?: number; limit?: number }): Promise<KiroArtifactReadResult>
 artifacts.checkpoint(args: { value: JsonValue; label?: string }): Promise<KiroArtifactCheckpointResult>
 
-memory.get(args: { key: string }): Promise<JsonValue>
-memory.set(args: { key: string; value: JsonValue }): Promise<JsonValue>
-memory.search(args: { query: string; limit?: number }): Promise<JsonValue>
-memory.index(args?: Record<string, never>): Promise<JsonValue>
-memory.delete(args: { key: string }): Promise<JsonValue>
-
 state.get(args: { key: string }): Promise<JsonValue>
 state.set(args: { key: string; value: JsonValue; expectedRevision?: number }): Promise<JsonValue>
 state.list(args?: { limit?: number }): Promise<JsonValue>
+state.search(args: { query: string; limit?: number }): Promise<JsonValue>
 state.delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>
 
 mcp.servers(args?: Record<string, never>): Promise<JsonValue>

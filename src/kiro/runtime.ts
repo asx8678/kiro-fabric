@@ -14,7 +14,6 @@ import { LocalCodingProvider } from "../providers/local-provider.js";
 import { FabricBootstrapProvider } from "./bootstrap-provider.js";
 import { createKiroArtifactStore, type KiroArtifactStore } from "./artifacts.js";
 import { KiroMcpProvider } from "./mcp-provider.js";
-import { KiroMemoryProvider } from "./memory-provider.js";
 import { KiroPowerArtifactsProvider } from "./power/artifacts-provider.js";
 import { FABRIC_RUNTIME_PROVIDER_NAMES } from "./provider-inventory.js";
 
@@ -28,8 +27,6 @@ export interface KiroRuntimeOptions {
   localLockRoot?: string;
   /** Borrowed host-owned analysis lease; provider disposal never closes its engine. */
   foveaClient?: FoveaBoundClient;
-  memoryRoot?: string;
-  memoryNamespace?: string;
   stateRoot?: string;
   config?: FabricConfig;
   /** Host-issued client/workspace authorization; never accepted from guest arguments. */
@@ -68,16 +65,6 @@ export const createKiroRuntime = (options: KiroRuntimeOptions): KiroRuntime => {
   registry.register(new KiroPowerArtifactsProvider(artifacts, config.artifacts));
   if (config.mcp.enabled) registry.register(new KiroMcpProvider(options.cwd, config.mcp));
   else registry.markUnavailable("mcp", "disabled by configuration");
-  if (options.memoryRoot && config.memory.enabled) {
-    registry.register(new KiroMemoryProvider({
-      cwd: options.cwd,
-      root: options.memoryRoot,
-      ...(options.memoryNamespace ? { namespace: options.memoryNamespace } : {}),
-      maxEntries: config.memory.maxEntries,
-      maxValueChars: config.memory.maxValueChars,
-    }));
-  }
-  else registry.markUnavailable("memory", config.memory.enabled ? "workspace binding is required" : "disabled by configuration");
   if (options.stateRoot && config.state.enabled) registry.register(new StateProvider(options.stateRoot, config.state));
   else registry.markUnavailable("state", config.state.enabled ? "workspace binding is required" : "disabled by configuration");
   // Fail closed if the documented current inventory and the mounted registry

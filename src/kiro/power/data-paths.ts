@@ -26,8 +26,6 @@ const projectKiroPowerWorkspaceIdentity = (value: unknown): KiroPowerWorkspaceId
 };
 const sameIdentity = (left: KiroPowerWorkspaceIdentity, right: KiroPowerWorkspaceIdentity): boolean =>
   left.schemaVersion === right.schemaVersion && left.canonicalPath === right.canonicalPath && left.deviceId === right.deviceId && left.fileId === right.fileId;
-const kiroPowerMemoryNamespace = (identity: KiroPowerWorkspaceIdentity): string =>
-  `project:${createHash("sha256").update(identity.canonicalPath).digest("hex")}`;
 
 const assertCurrentUser = (stats: fs.Stats, target: string): void => {
   if (process.platform !== "win32" && typeof process.getuid === "function" && stats.uid !== process.getuid()) {
@@ -209,56 +207,6 @@ export const prepareKiroPowerDataPaths = (pluginData: string): KiroPowerDataPath
 const kiroPowerWorkspaceId = (identity: KiroPowerWorkspaceIdentity, generation: 2 | 3 = 3): string => createHash("sha256")
   .update(`kiro-fabric-power-workspace-v${generation}\0`).update(identity.canonicalPath).update("\0")
   .update(identity.deviceId).update("\0").update(identity.fileId).digest("hex");
-const encodeName = (value: string): string => encodeURIComponent(value).replace(/[!'()*]/gu, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
-const memoryNamespaceDirectory = (namespace: string): string => `${encodeName(namespace)}-${createHash("sha256").update(namespace).digest("hex").slice(0, 16)}`;
-
-const migrateCompatibleMemory = (sourceRoot: string, targetRoot: string, publishedMemoryRoot: string, namespace: string): boolean => {
-  if (!fs.existsSync(sourceRoot)) return false;
-  assertPrivateDirectory(sourceRoot);
-  const sourceMemory = path.join(sourceRoot, "memory");
-  if (!fs.existsSync(sourceMemory)) return false;
-  assertPrivateDirectory(sourceMemory);
-  const rootMarker = path.join(sourceMemory, ".kiro-fabric-owner");
-  privateFile(rootMarker, 8 * 1024);
-  const rootOwner = JSON.parse(fs.readFileSync(rootMarker, "utf8")) as JsonRecord;
-  if (rootOwner.format !== 1 || rootOwner.owner !== "kiro-fabric" || rootOwner.kind !== "memory-root" || rootOwner.root !== sourceRoot) {
-    throw new Error("Legacy memory root ownership is incompatible");
-  }
-  const namespaceName = memoryNamespaceDirectory(namespace);
-  const sourceNamespace = path.join(sourceMemory, namespaceName);
-  assertPrivateDirectory(sourceNamespace);
-  const namespaceMarker = path.join(sourceNamespace, ".kiro-fabric-owner");
-  privateFile(namespaceMarker, 8 * 1024);
-  const namespaceOwner = JSON.parse(fs.readFileSync(namespaceMarker, "utf8")) as JsonRecord;
-  if (namespaceOwner.format !== 1 || namespaceOwner.owner !== "kiro-fabric" || namespaceOwner.kind !== "memory-namespace" ||
-      namespaceOwner.root !== sourceRoot || namespaceOwner.namespace !== namespace) throw new Error("Legacy memory namespace ownership is incompatible");
-  const sourceEntries = fs.readdirSync(sourceNamespace, { withFileTypes: true });
-  if (sourceEntries.length > 130) throw new Error("Legacy memory entry limit exceeded");
-  // Mirror the runtime layout exactly: openKiroMemory(root) reads
-  // <root>/memory/<namespace>, and ownership markers must name the published
-  // memory root rather than the temporary staging directory they are written
-  // through (staging is renamed, so a staging named root would be invalid).
-  const targetMemory = privateDirectory(path.join(targetRoot, "memory"), targetRoot);
-  const targetScoped = privateDirectory(path.join(targetMemory, "memory"), targetMemory);
-  writeJsonAtomic(path.join(targetScoped, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-root", root: publishedMemoryRoot }, true);
-  const targetNamespace = privateDirectory(path.join(targetScoped, namespaceName), targetScoped);
-  writeJsonAtomic(path.join(targetNamespace, ".kiro-fabric-owner"), { format: 1, owner: "kiro-fabric", kind: "memory-namespace", root: publishedMemoryRoot, namespace }, true);
-  let totalBytes = 0;
-  for (const entry of sourceEntries) {
-    if (entry.name === ".kiro-fabric-owner") continue;
-    if (!entry.isFile() || !entry.name.endsWith(".json")) throw new Error("Legacy memory contains incompatible residue");
-    const source = path.join(sourceNamespace, entry.name);
-    const stats = privateFile(source, 16 * 1024);
-    totalBytes += stats.size;
-    if (totalBytes > 256 * 1024) throw new Error("Legacy memory namespace byte limit exceeded");
-    const value = JSON.parse(fs.readFileSync(source, "utf8")) as JsonRecord;
-    if (value.format !== 1 || value.owner !== "kiro-fabric" || value.kind !== "memory-entry" || value.namespace !== namespace ||
-        typeof value.key !== "string" || value.key.trim() !== value.key || !value.key || `${encodeName(value.key)}.json` !== entry.name ||
-        typeof value.updatedAt !== "string" || !("value" in value)) throw new Error("Legacy memory entry is incompatible");
-    copyFileAtomic(source, path.join(targetNamespace, entry.name));
-  }
-  return true;
-};
 
 const validateWorkspaceObject = (identity: KiroPowerWorkspaceIdentity): void => {
   const canonical = fs.realpathSync(identity.canonicalPath);
@@ -298,18 +246,15 @@ const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspa
 
   const staging = path.join(projects, `.workspace-v3-${kiroPowerWorkspaceId(identity).slice(0, 16)}-${process.pid}-${randomBytes(8).toString("hex")}.tmp`);
   fs.mkdirSync(staging, { mode: 0o700 });
-  let memoryMigrated = false;
   try {
     writeJsonAtomic(path.join(staging, "workspace-identity.json"), identity, true);
-    memoryMigrated = migrateCompatibleMemory(legacy, staging, path.join(current, "memory"), kiroPowerMemoryNamespace(identity));
-    privateDirectory(path.join(staging, "memory"), staging);
     privateDirectory(path.join(staging, "state"), staging);
     privateDirectory(path.join(staging, "artifacts"), staging);
     writeJsonAtomic(path.join(staging, "migration-report.json"), {
       schemaVersion: 2,
       sourceGeneration: 2,
       destinationGeneration: 3,
-      migrated: ["immutable workspace identity", ...(memoryMigrated ? ["compatible memory"] : [])],
+      migrated: ["immutable workspace identity"],
       quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
       complete: false,
     }, true);
@@ -326,7 +271,7 @@ const migrateWorkspaceGeneration = (projects: string, identity: KiroPowerWorkspa
     schemaVersion: 2,
     sourceGeneration: 2,
     destinationGeneration: 3,
-    migrated: ["immutable workspace identity", ...(memoryMigrated ? ["compatible memory"] : [])],
+    migrated: ["immutable workspace identity"],
     quarantined: ["legacy Mesh state", "runs", "logs", "artifacts", "unknown v2 residue"],
     complete: true,
   });
@@ -343,8 +288,6 @@ export const prepareKiroPowerProjectPaths = (projects: string, rawIdentity: Kiro
   return {
     root,
     identityFile,
-    memory: privateDirectory(path.join(root, "memory"), root),
-    memoryNamespace: kiroPowerMemoryNamespace(identity),
     state: privateDirectory(path.join(root, "state"), root),
     artifacts: privateDirectory(path.join(root, "artifacts"), root),
   };

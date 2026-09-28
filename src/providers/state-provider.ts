@@ -34,6 +34,7 @@ const descriptors: readonly FabricActionDescriptor[] = [
   { name: "get", description: "Read one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" } }, required: ["key"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "set", description: "Atomically set one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, value: {}, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key", "value"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
   { name: "list", description: "List bounded workspace state metadata", inputSchema: { type: "object", properties: { limit: { type: "integer", minimum: 1, maximum: 1000 } }, additionalProperties: false }, risk: "read", effect: { kind: "read" } },
+  { name: "search", description: "Search workspace state keys and JSON values; key matches rank first, then earlier matches and newer entries", inputSchema: { type: "object", properties: { query: { type: "string", minLength: 1, maxLength: KEY_MAX }, limit: { type: "integer", minimum: 1, maximum: 32 } }, required: ["query"], additionalProperties: false }, risk: "read", effect: { kind: "read" } },
   { name: "delete", description: "Atomically delete one workspace-bound state value", inputSchema: { type: "object", properties: { key: { type: "string", minLength: 1, maxLength: KEY_MAX, description: "1 to 512 UTF-16 code units" }, expectedRevision: { type: "integer", minimum: 0 } }, required: ["key"], additionalProperties: false }, risk: "write", effect: { kind: "write" } },
 ];
 
@@ -234,6 +235,25 @@ export class StateProvider implements FabricProvider {
           .slice(0, limit)
           .map(([key, entry]) => ({ key, revision: entry.revision, updatedAt: entry.updatedAt })),
       };
+    }
+    if (actionName === "search") {
+      const query = typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
+      if (!query || query.length > KEY_MAX) throw new Error("state search query is invalid");
+      const limit = args.limit === undefined ? 8 : args.limit;
+      if (typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > 32) {
+        throw new Error("state search limit is invalid");
+      }
+      const document = this.#read();
+      const matches: Array<{ key: string; entry: StateEntry; score: number }> = [];
+      for (const [key, entry] of Object.entries(document.entries)) {
+        const inKey = key.toLowerCase().indexOf(query);
+        const inValue = inKey >= 0 ? -1 : JSON.stringify(entry.value).toLowerCase().indexOf(query);
+        if (inKey < 0 && inValue < 0) continue;
+        matches.push({ key, entry, score: inKey >= 0 ? inKey : KEY_MAX + inValue });
+      }
+      matches.sort((left, right) => left.score - right.score || right.entry.updatedAt - left.entry.updatedAt ||
+        (left.key < right.key ? -1 : left.key > right.key ? 1 : 0));
+      return { revision: document.revision, entries: matches.slice(0, limit).map(({ key, entry }) => ({ key, ...entry })) };
     }
     if (actionName !== "set" && actionName !== "delete") {
       throw new Error(`Unknown state action: ${actionName}`);

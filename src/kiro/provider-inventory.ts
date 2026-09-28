@@ -25,14 +25,13 @@ const entry = (
 /**
  * The single current supported runtime provider inventory. `createKiroRuntime`
  * mounts a subset of these per configuration and marks the rest unavailable,
- * but the name set is fixed: fabric, local, repo, artifacts, mcp, memory and state.
+ * but the name set is fixed: fabric, local, repo, artifacts, mcp and state.
  */
 export const FABRIC_RUNTIME_PROVIDER_INVENTORY: readonly FabricProviderInventoryEntry[] = Object.freeze([
   entry("artifacts", "Retained in-memory artifacts with public checkpoint/read access", {}),
   entry("fabric", "Bootstrap help, info and workspace recovery", {}),
   entry("local", "Verified workspace local coding with bounded reads and exact approved effects", { verifiedWorkspace: true, settlement: true }),
   entry("mcp", "Approval-gated calls to explicitly configured MCP servers", { settlement: true }),
-  entry("memory", "Private workspace-scoped Fabric memory", { verifiedWorkspace: true }),
   entry("repo", "Native Navigator repository navigation (advisory, not correctness evidence)", { verifiedWorkspace: true, settlement: true }),
   entry("state", "Workspace-bound atomic durable state", { verifiedWorkspace: true }),
 ]);

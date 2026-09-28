@@ -233,7 +233,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       await legacy?.refresh();
       return { tools: [
         { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
-        { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable memory and state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
+        { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
         { name: "fabric_exec", description: EXEC_DESCRIPTION, inputSchema: fabricExecInputSchemaJson(), annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true } },
       ] };
     });

@@ -332,7 +332,7 @@ describe("Agent MCP process lifecycle", () => {
     };
     const writtenA = toolResponse(await call("fabric_exec", {
       code: `
-        await memory.set({ key: payloads.key, value: { nonce: payloads.memory } });
+        await state.set({ key: payloads.key + ":memory", value: { nonce: payloads.memory } });
         await state.set({ key: payloads.key, value: { nonce: payloads.state } });
         return { written: true };
       `,
@@ -388,12 +388,12 @@ describe("Agent MCP process lifecycle", () => {
       code: `
         const isRecord = (value: JsonValue): value is JsonObject =>
           typeof value === "object" && value !== null && !Array.isArray(value);
-        const oldMemory = await memory.get({ key: payloads.key });
+        const oldMemory = await state.get({ key: payloads.key + ":memory" });
         const oldState = await state.get({ key: payloads.key });
         if (!isRecord(oldMemory) || oldMemory.found !== false || !isRecord(oldState) || oldState.found !== false) {
           throw new Error("workspace durable namespace leaked across identity change");
         }
-        await memory.set({ key: payloads.key, value: { nonce: payloads.memory } });
+        await state.set({ key: payloads.key + ":memory", value: { nonce: payloads.memory } });
         await state.set({ key: payloads.key, value: { nonce: payloads.state } });
         return { isolated: true };
       `,
@@ -485,20 +485,6 @@ describe("Agent MCP process lifecycle", () => {
       stateA: `state-a-${token}`,
       stateB: `state-b-${token}`,
     };
-    const memoryWrites = await Promise.all([
-      call(firstClient, "fabric_exec", {
-        code: "return await memory.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
-        payloads: { key: shared.memoryKeyA, nonce: shared.memoryA },
-        resultFormat: "json",
-      }).then(toolResponse),
-      call(secondClient, "fabric_exec", {
-        code: "return await memory.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
-        payloads: { key: shared.memoryKeyB, nonce: shared.memoryB },
-        resultFormat: "json",
-      }).then(toolResponse),
-    ]);
-    for (const result of memoryWrites) expect(result.isError, JSON.stringify(result)).not.toBe(true);
-
     const initialState = toolResponse(await call(firstClient, "fabric_exec", {
       code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce }, expectedRevision: 0 })",
       payloads: { key: shared.stateKey, nonce: shared.initialState },
@@ -525,6 +511,20 @@ describe("Agent MCP process lifecycle", () => {
     const winningState = casAttempts[0]!.isError === true ? shared.stateB : shared.stateA;
     const losingState = winningState === shared.stateA ? shared.stateB : shared.stateA;
 
+    const memoryWrites = await Promise.all([
+      call(firstClient, "fabric_exec", {
+        code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
+        payloads: { key: shared.memoryKeyA, nonce: shared.memoryA },
+        resultFormat: "json",
+      }).then(toolResponse),
+      call(secondClient, "fabric_exec", {
+        code: "return await state.set({ key: payloads.key, value: { nonce: payloads.nonce } })",
+        payloads: { key: shared.memoryKeyB, nonce: shared.memoryB },
+        resultFormat: "json",
+      }).then(toolResponse),
+    ]);
+    for (const result of memoryWrites) expect(result.isError, JSON.stringify(result)).not.toBe(true);
+
     const verifyShared = `
       const record = (value: JsonValue): JsonObject | undefined =>
         typeof value === "object" && value !== null && !Array.isArray(value) ? value : undefined;
@@ -532,8 +532,8 @@ describe("Agent MCP process lifecycle", () => {
         const first = record(value)?.[outer];
         return first === undefined ? undefined : record(first)?.[inner];
       };
-      const memoryA = await memory.get({ key: payloads.memoryKeyA });
-      const memoryB = await memory.get({ key: payloads.memoryKeyB });
+      const memoryA = await state.get({ key: payloads.memoryKeyA });
+      const memoryB = await state.get({ key: payloads.memoryKeyB });
       const stateValue = await state.get({ key: payloads.stateKey });
       if (nested(memoryA, "value", "nonce") !== payloads.memoryA ||
           nested(memoryB, "value", "nonce") !== payloads.memoryB ||
@@ -610,8 +610,8 @@ describe("Agent MCP process lifecycle", () => {
     const firstInfo = toolJson<FabricInfo>(await firstCall("fabric_info", {}));
     const seeded = toolResponse(await firstCall("fabric_exec", {
       code: `
-        await memory.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
         await state.set({ key: payloads.stateKey, value: { nonce: payloads.state }, expectedRevision: 0 });
+        await state.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
         return { seeded: true };
       `,
       payloads: durable,
@@ -639,7 +639,7 @@ describe("Agent MCP process lifecycle", () => {
           const first = record(value)?.[outer];
           return first === undefined ? undefined : record(first)?.[inner];
         };
-        const memoryValue = await memory.get({ key: payloads.memoryKey });
+        const memoryValue = await state.get({ key: payloads.memoryKey });
         const stateValue = await state.get({ key: payloads.stateKey });
         if (nested(memoryValue, "value", "nonce") !== payloads.memory ||
             nested(stateValue, "value", "nonce") !== payloads.state ||
@@ -655,7 +655,7 @@ describe("Agent MCP process lifecycle", () => {
 
     const extended = toolResponse(await restartedCall("fabric_exec", {
       code: `
-        await memory.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
+        await state.set({ key: payloads.memoryKey, value: { nonce: payloads.memory } });
         await state.set({ key: payloads.stateKey, value: { nonce: payloads.state } });
         return { extended: true };
       `,

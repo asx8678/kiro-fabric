@@ -56,12 +56,12 @@ describe("fabric_exec contract", () => {
 
   it("strictly checks the documented guest API and declares no timer fallback", () => {
     const invalidCall = typeCheckFabricCode(
-      "return await memory.set({ key: 1, value: true });",
+      "return await state.set({ key: 1, value: true });",
       fabricGuestDeclarations,
     );
     expect(invalidCall.errors.some((error) => error.message.includes("not assignable"))).toBe(true);
     const invalidEmptyArgs = typeCheckFabricCode(
-      "return await memory.index(1);",
+      "return await mcp.servers(1);",
       fabricGuestDeclarations,
     );
     expect(invalidEmptyArgs.errors.some((error) => error.message.includes("not assignable"))).toBe(true);

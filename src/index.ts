@@ -61,7 +61,6 @@ export type {
   FabricArtifactsConfig,
   FabricExecutorConfig,
   FabricMcpConfig,
-  FabricMemoryConfig,
   FabricConfig,
   /** @deprecated Use FabricConfig. */
   FabricConfig as FabricPowerConfig,

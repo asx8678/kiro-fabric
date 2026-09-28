@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createKiroArtifactStore } from "../src/kiro/artifacts.js";
-import { openKiroMemory } from "../src/kiro/memory.js";
 import { KiroMcpProvider } from "../src/kiro/mcp-provider.js";
 import { fabricCommitAcknowledgement } from "../src/protocol.js";
 import { StateProvider } from "../src/providers/state-provider.js";
@@ -40,22 +39,10 @@ const inject = (method: "write" | "permissions" | "sync" | "close", matches: (fi
   return { targetCloses: () => targetCloses };
 };
 
-const temporaryWriter = async (kind: "memory" | "mcp") => {
+const temporaryWriter = async () => {
   const root = temporary();
-  const matches = (file: string) => kind === "memory"
-    ? path.basename(file).startsWith(".kiro-fabric-memory-") && file.endsWith(".tmp")
-    : path.basename(file).startsWith(".kiro-fabric-mcp-snapshot-");
+  const matches = (file: string) => path.basename(file).startsWith(".kiro-fabric-mcp-snapshot-");
   const remaining = () => fs.readdirSync(root, { recursive: true, encoding: "utf8" }).map((file) => path.join(root, file)).filter(matches);
-  if (kind === "memory") {
-    const memory = openKiroMemory("workspace", root);
-    await memory.set("fixture", "old");
-    return {
-      root, matches, remaining,
-      write: () => memory.set("fixture", "new"),
-      async verifyPreserved() { await expect(memory.get("fixture")).resolves.toMatchObject({ value: "old" }); },
-      async close() {},
-    };
-  }
   const configPath = path.join(root, "mcp.json");
   const config = JSON.stringify({ imports: [], mcpServers: {} });
   fs.writeFileSync(configPath, config, { mode: 0o600 });
@@ -120,9 +107,9 @@ const failTemporaryIdentity = (matches: (file: string) => boolean, persistent: b
   return { failure, retryFailure, attempts: () => attempts, closes: () => closes };
 };
 
-describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind) => {
+describe("mcp temporary write ownership", () => {
   it.each(["owned pathname", "foreign replacement"] as const)("recovers identity before closing after a transient metadata failure with %s", async (pathname) => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const foreign = path.join(fixture.root, "foreign");
     fs.writeFileSync(foreign, "foreign content", { mode: 0o600 });
     let replacement: string | undefined;
@@ -147,7 +134,7 @@ describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind)
   });
 
   it("bounds metadata recovery and reports unresolved identity without deleting an unverified file", async () => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const fault = failTemporaryIdentity(fixture.matches, true);
     try {
       await expect(fixture.write()).rejects.toMatchObject({ cause: fault.failure, errors: [fault.failure, fault.retryFailure] });
@@ -164,7 +151,7 @@ describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind)
   });
 
   it("preserves the close error, removes owned residue and permits a later write", async () => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const fault = failTemporaryClose(fixture.matches);
     try {
       await expect(fixture.write()).rejects.toBe(fault.failure);
@@ -178,7 +165,7 @@ describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind)
   });
 
   it("cleans the temporary file even when both writing and closing fail", async () => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const fault = failTemporaryClose(fixture.matches);
     const failure = new Error("primary temporary write failure"), write = fs.writeFileSync;
     vi.spyOn(fs, "writeFileSync").mockImplementation((file, data, options) => {
@@ -196,7 +183,7 @@ describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind)
   });
 
   it("retains both the primary close error and a failed temporary cleanup", async () => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const fault = failTemporaryClose(fixture.matches);
     const cleanup = new Error("temporary removal failed"), remove = fs.rmSync, unlink = fs.unlinkSync;
     vi.spyOn(fs, "rmSync").mockImplementation((file, options) => {
@@ -217,7 +204,7 @@ describe.each(["memory", "mcp"] as const)("%s temporary write ownership", (kind)
   });
 
   it("preserves a foreign replacement at the temporary pathname after close fails", async () => {
-    const fixture = await temporaryWriter(kind);
+    const fixture = await temporaryWriter();
     const foreign = path.join(fixture.root, "foreign");
     fs.writeFileSync(foreign, "foreign content", { mode: 0o600 });
     let replacement: string | undefined;

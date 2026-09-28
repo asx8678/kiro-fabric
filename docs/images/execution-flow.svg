@@ -48,7 +48,7 @@ text { font-family:Arial,Helvetica,sans-serif; fill:#111827; }
 <text x="44" y="901" class="label">5. Resolve and gate provider calls</text>
 <text x="44" y="941" class="body">Canonical args → schema → effect reservations.</text>
 <text x="44" y="971" class="body">Apply allow / ask / deny to each action.</text>
-<text x="44" y="1001" class="body">Local coding, memory/state, or configured MCP.</text>
+<text x="44" y="1001" class="body">Local coding, state, or configured MCP.</text>
 <text x="44" y="1031" class="body">Bounded JSON results return to the guest.</text>
 </g>
 <path d="M320 1052 V1068" class="arrow"/>

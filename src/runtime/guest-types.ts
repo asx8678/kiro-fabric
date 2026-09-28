@@ -75,17 +75,11 @@ declare const artifacts: Readonly<{
   /** Explicit chosen JSON evidence, in memory with TTL/quotas; normal write approval and at most 8 reservations per execution. */
   checkpoint(args: { value: JsonValue; label?: string }): Promise<KiroArtifactCheckpointResult>;
 }>;
-declare const memory: Readonly<{
-  get(args: { key: string }): Promise<JsonValue>;
-  set(args: { key: string; value: JsonValue }): Promise<JsonValue>;
-  delete(args: { key: string }): Promise<JsonValue>;
-  search(args: { query: string; limit?: number }): Promise<JsonValue>;
-  index(args?: EmptyArgs): Promise<JsonValue>;
-}>;
 declare const state: Readonly<{
   get(args: { key: string }): Promise<JsonValue>;
   set(args: { key: string; value: JsonValue; expectedRevision?: number }): Promise<JsonValue>;
   list(args?: { limit?: number }): Promise<JsonValue>;
+  search(args: { query: string; limit?: number }): Promise<JsonValue>;
   delete(args: { key: string; expectedRevision?: number }): Promise<JsonValue>;
 }>;
 type FabricMcpToolSummary = {

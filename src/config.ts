@@ -42,12 +42,6 @@ export interface FabricMcpConfig {
   callTimeoutMs: number;
 }
 
-export interface FabricMemoryConfig {
-  enabled: boolean;
-  maxEntries: number;
-  maxValueChars: number;
-}
-
 export interface FabricStateConfig {
   enabled: boolean;
   maxEntries: number;
@@ -76,7 +70,6 @@ export interface FabricConfig {
   executor: FabricExecutorConfig;
   approvals: FabricApprovalConfig;
   mcp: FabricMcpConfig;
-  memory: FabricMemoryConfig;
   state: FabricStateConfig;
   artifacts: FabricArtifactsConfig;
   tracing: FabricTracingConfig;
@@ -116,7 +109,6 @@ export const DEFAULT_FABRIC_CONFIG: FabricConfig = {
     disableOAuth: true,
     callTimeoutMs: 120_000,
   },
-  memory: { enabled: true, maxEntries: 128, maxValueChars: 16_000 },
   state: {
     enabled: true,
     maxEntries: 1_000,
@@ -161,7 +153,6 @@ const FILE_CONFIG_KEYS: Record<string, readonly string[]> = {
   executor: ["timeoutMs", "maxTimeoutMs", "memoryLimitBytes", "maxSourceBytes", "maxInputBytes", "maxOutputChars", "maxNestedResultChars", "maxProviderCalls", "maxConcurrentProviderCalls", "maxConcurrentExecutions", "maxApprovalRequests", "maxPendingApprovals", "maxAuditEntries", "maxAuditBytes", "resultFormat"],
   approvals: ["read", "write", "execute", "network"],
   mcp: ["enabled", "disableOAuth", "callTimeoutMs"],
-  memory: ["enabled", "maxEntries", "maxValueChars"],
   state: ["enabled", "maxEntries", "maxValueChars", "maxTotalChars"],
   artifacts: ["maxArtifacts", "maxArtifactChars", "maxTotalChars", "ttlMs"],
   tracing: ["enabled"],
@@ -175,7 +166,7 @@ const assertNoRemovedProviders = (root: Record<string, unknown>): void => {
   }
 };
 
-const RETIRED_CONFIG_SECTIONS = new Set(["continuity"]);
+const RETIRED_CONFIG_SECTIONS = new Set(["continuity", "memory"]);
 
 const assertFileConfigSections = (root: Record<string, unknown>): void => {
   assertNoRemovedProviders(root);
@@ -247,7 +238,6 @@ export const normalizeFabricConfig = (
   const executor = record(root.executor) ?? {};
   const approvals = record(root.approvals) ?? {};
   const mcp = record(root.mcp) ?? {};
-  const memory = record(root.memory) ?? {};
   const state = record(root.state) ?? {};
   const artifacts = record(root.artifacts) ?? {};
   const tracing = record(root.tracing) ?? {};
@@ -289,11 +279,6 @@ export const normalizeFabricConfig = (
       ...(typeof mcp.configPath === "string" && mcp.configPath ? { configPath: mcp.configPath } : defaults.mcp.configPath ? { configPath: defaults.mcp.configPath } : {}),
       disableOAuth: bool(mcp.disableOAuth, defaults.mcp.disableOAuth),
       callTimeoutMs: callTimeout(mcp.callTimeoutMs, defaults.mcp.callTimeoutMs, maxTimeoutMs),
-    },
-    memory: {
-      enabled: bool(memory.enabled, defaults.memory.enabled),
-      maxEntries: integer(memory.maxEntries, defaults.memory.maxEntries, 1, 128),
-      maxValueChars: integer(memory.maxValueChars, defaults.memory.maxValueChars, 1_000, 16_000),
     },
     state: {
       enabled: bool(state.enabled, defaults.state.enabled),

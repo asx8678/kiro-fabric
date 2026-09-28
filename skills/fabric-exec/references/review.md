@@ -8,7 +8,7 @@ Apply the standing review contract. For each requested core path and success/fai
 
 For real SDK/parser/runtime probes, inspect imports/effects and identify stubs: an imitation is not a real SDK execution. Missing executable, SDK/module or input is unavailable evidence, not a pass or finding. Use only available, authorized probes; network effects require explicit authorization.
 
-Keep unrequested ledgers in context. Persisted memory/state is workspace-shared; use session/task keys and revision checks, not global scratch keys. The optional review provider owns instance/session-local ephemeral tasks; never adopt another session's state.
+Keep unrequested ledgers in context. Persisted state is workspace-shared; use session/task keys and revision checks, not global scratch keys. The optional review provider owns instance/session-local ephemeral tasks; never adopt another session's state.
 
 The gate below operationalizes finding admission. At acceptance, report supported findings, checks run/unrun, material blockers and uninspected scope; repeat unchanged passing checks only for a concrete reason. Recipes remain optional mechanisms, not permission.
 

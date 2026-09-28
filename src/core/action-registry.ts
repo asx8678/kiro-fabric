@@ -396,11 +396,11 @@ export class ActionRegistry {
   requirements(ref: string): Readonly<FabricProviderRequirements> {
     const name = parseRemoteRef(ref) ? "mcp" : ref.slice(0, ref.indexOf("."));
     const provider = this.#providers.get(name);
-    if (!provider && !["local", "memory", "state", "mcp"].includes(name)) return {};
+    if (!provider && !["local", "state", "mcp"].includes(name)) return {};
     // Preserve policy even when an unbound workspace has not mounted the provider.
     // Preserve established built-in policy for providers predating explicit requirements.
     return {
-      verifiedWorkspace: ["local", "memory", "state"].includes(name) || provider?.requirements?.verifiedWorkspace === true,
+      verifiedWorkspace: ["local", "state"].includes(name) || provider?.requirements?.verifiedWorkspace === true,
       settlement: ["local", "mcp"].includes(name) || provider?.requirements?.settlement === true,
     };
   }

@@ -231,13 +231,13 @@ describe("fabric tracer", () => {
     const execId = tracer.newExecutionId();
     expect(execId).toMatch(/^exec_/u);
     const parent = tracer.span("eval", "execute", execId);
-    const span = tracer.span("bridge", "memory.get", execId, { key: "k" }, parent.id);
+    const span = tracer.span("bridge", "state.get", execId, { key: "k" }, parent.id);
     span.end({ ok: true });
     parent.end();
     tracer.event("eval", "marker", execId);
     const [spanEvent, parentEvent, marker] = lines.map((line) => JSON.parse(line) as TraceEvent);
     expect(spanEvent!.cat).toBe("bridge");
-    expect(spanEvent!.ev).toBe("memory.get");
+    expect(spanEvent!.ev).toBe("state.get");
     expect(spanEvent!.execId).toBe(execId);
     expect(spanEvent!.durUs).toBeGreaterThanOrEqual(0);
     expect(spanEvent!.data).toEqual({ key: "k", ok: true });
@@ -276,7 +276,7 @@ describe("QuickJS trace hooks", () => {
     const tracer = createFabricTracer({ file });
     const execId = tracer.newExecutionId();
     const result = await new QuickJsRuntime().execute(
-      "await memory.get({ key: 'k' }); return { ok: true }",
+      "await state.get({ key: 'k' }); return { ok: true }",
       async (ref) => ({ ref, found: false }),
       { ...defaults, tracer, execId },
     );

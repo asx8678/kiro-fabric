@@ -155,10 +155,9 @@ describe("private artifacts and state", () => {
     expect(fs.readdirSync(root).filter((name) => name.includes("reclaim-"))).toEqual([]);
   });
 
-  it("shares durable memory and state safely across independent runtimes for one workspace", async () => {
+  it("shares durable state safely across independent runtimes for one workspace", async () => {
     const root = temporary();
     const workspace = path.join(root, "workspace");
-    const memoryRoot = path.join(root, "memory");
     const stateRoot = path.join(root, "state");
     fs.mkdirSync(workspace, { mode: 0o700 });
     const config = {
@@ -171,8 +170,6 @@ describe("private artifacts and state", () => {
       configFile: path.join(root, "unused-config.json"),
       mcpConfigPath: path.join(root, "unused-mcp.json"),
       artifactsRoot: path.join(root, `artifacts-${name}`),
-      memoryRoot,
-      memoryNamespace: "project:shared-runtime-test",
       stateRoot,
       config,
     });
@@ -186,11 +183,6 @@ describe("private artifacts and state", () => {
         async approve() {},
       });
     try {
-      await invoke(first, "memory.set", { key: "shared", value: { nonce: "memory-visible" } });
-      await expect(invoke(second, "memory.get", { key: "shared" })).resolves.toMatchObject({ value: { nonce: "memory-visible" } });
-      await invoke(second, "memory.set", { key: "second", value: true });
-      await expect(invoke(first, "memory.get", { key: "second" })).resolves.toMatchObject({ value: true });
-
       await expect(invoke(first, "state.set", { key: "shared", value: "initial" })).resolves.toEqual({ key: "shared", revision: 1 });
       await expect(invoke(second, "state.get", { key: "shared" })).resolves.toMatchObject({ value: "initial", revision: 1 });
       const competing = await Promise.allSettled([
@@ -201,6 +193,11 @@ describe("private artifacts and state", () => {
       expect(competing.filter((result) => result.status === "rejected")).toHaveLength(1);
       await expect(invoke(first, "state.get", { key: "shared" })).resolves.toMatchObject({ revision: 2 });
       await expect(invoke(second, "state.get", { key: "shared" })).resolves.toMatchObject({ revision: 2 });
+      await invoke(first, "state.set", { key: "note:alpha", value: { text: "search-visible" } });
+      await invoke(second, "state.set", { key: "search-visible:key", value: true });
+      const found = await invoke(second, "state.search", { query: "SEARCH-VISIBLE" }) as { entries: Array<{ key: string }> };
+      expect(found.entries.map((entry) => entry.key)).toEqual(["search-visible:key", "note:alpha"]);
+      await expect(invoke(first, "state.search", { query: "absent" })).resolves.toMatchObject({ entries: [] });
     } finally {
       await Promise.all([first.close(), second.close()]);
     }
