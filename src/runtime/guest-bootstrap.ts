@@ -93,6 +93,7 @@ export const GUEST_SETUP = `
         if (!numberIsFinite(value)) throw new SafeTypeError('Result contains a non-finite number');
         return value;
       }
+      if (value === undefined) throw new SafeTypeError('Result contains undefined; use null or omit the field');
       if (typeof value !== 'object') throw new SafeTypeError('Result contains a non-JSON value');
       if (apply(weakHas, seen, [value])) throw new SafeTypeError('Result contains a cycle');
       const prototype = objectGetPrototypeOf(value);
