@@ -14,6 +14,7 @@ export const GUEST_SETUP = `
   const apply = Reflect.apply;
   const ownKeys = Reflect.ownKeys;
   const objectGetPrototypeOf = Object.getPrototypeOf;
+  const objectSetPrototypeOf = Object.setPrototypeOf;
   const objectPrototype = Object.prototype;
   const arrayPrototype = Array.prototype;
   const objectGetOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
@@ -105,7 +106,7 @@ export const GUEST_SETUP = `
       for (const key of ownKeys(descriptors)) if (typeof key === 'symbol') throw new SafeTypeError('Result contains a symbol key');
       let copy;
       if (arrayIsArray(value)) {
-        copy = [];
+        copy = objectSetPrototypeOf([], null);
         for (const key of objectKeys(descriptors)) {
           if (key !== 'length' && !arrayIndex(key)) throw new SafeTypeError('Result contains a non-index array property');
         }

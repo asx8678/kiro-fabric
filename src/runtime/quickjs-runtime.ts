@@ -1,4 +1,4 @@
-import { fabricFailureMetadata } from "../core/repair-error.js";
+import { FabricRepairError } from "../core/repair-error.js";
 import { FABRIC_COMMIT_ACKNOWLEDGEMENT, type FabricFailureMetadata } from "../protocol.js";
 import { performance } from "node:perf_hooks";
 import { Worker } from "node:worker_threads";
@@ -125,6 +125,12 @@ const formatGuestFailure = (value: unknown): string => {
   }
   return formatValue(value);
 };
+const hostErrorMessage = (error: unknown): string => {
+  try { return (error instanceof Error ? error.message : String(error)).slice(0, 4_096); }
+  catch { return "Provider failed"; }
+};
+const boundedHostFailureMetadata = (error: unknown): FabricFailureMetadata | undefined =>
+  error instanceof FabricRepairError ? JSON.parse(fabricJsonText(error.failure, 32_000)) as FabricFailureMetadata : undefined;
 const jsonHandle = (
   context: QuickJSContext,
   jsonObject: QuickJSHandle,
@@ -149,7 +155,7 @@ const QUICKJS_MAX_STACK_SIZE_BYTES = 256 * 1024;
 /** VM-side execution body. It runs inside a dedicated worker thread so a
  * CPU-bound guest cannot block the host event loop, and it reaches the host
  * only through the bridge, tracer and options it is injected with. */
-export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, options: FabricSandboxOptions, cancellationFlag?: Int32Array): Promise<FabricSandboxResult> => {
+export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, options: FabricSandboxOptions, cancellationFlag?: Int32Array, sharedDeadline?: BigInt64Array): Promise<FabricSandboxResult> => {
     // Host-owned shared state stays outside the guest heap. Polling must not
     // dispatch abort listeners reentrantly from the QuickJS interrupt hook.
     const isCancelled = (): boolean => options.signal?.aborted === true || (cancellationFlag !== undefined && Atomics.load(cancellationFlag, 0) !== 0);
@@ -197,7 +203,7 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
     runtime.setMemoryLimit(options.memoryLimitBytes);
     runtime.setMaxStackSize(QUICKJS_MAX_STACK_SIZE_BYTES);
 
-    const deadline = new FabricDeadline(requestedTimeoutMs, maximum);
+    const deadline = new FabricDeadline(requestedTimeoutMs, maximum, undefined, sharedDeadline);
     let interrupted = false;
     let timedOut = false;
     let closing = false;
@@ -292,23 +298,26 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
         );
         const rejectGuestPromise = (error: unknown): void => {
           if (closing || promise.alive === false) return;
-          const raw = error instanceof Error ? error.message : String(error);
-          const handle = context.newError(raw.slice(0, 4_096));
+          const handle = context.newError(hostErrorMessage(error));
           try {
             // Explicit trusted shell diagnostics only; never serialize arbitrary
             // error properties, approval data, causes, or cancellation reasons.
             if (error instanceof LocalShellExitError) {
-              const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
-              try { context.setProp(handle, "result", diagnostic); } finally { diagnostic.dispose(); }
+              try {
+                const diagnostic = jsonHandle(context, jsonObject, jsonParse, error.result, options.maxNestedResultChars);
+                try { context.setProp(handle, "result", diagnostic); } finally { diagnostic.dispose(); }
+              } catch {}
             }
-            const failure = fabricFailureMetadata(error);
-            if (failure) {
-              const text = JSON.stringify(failure);
-              if (issuedFailures.size >= 128) issuedFailures.delete(issuedFailures.keys().next().value!);
-              issuedFailures.set(text, failure);
-              const diagnostic = jsonHandle(context, jsonObject, jsonParse, failure, 32_000);
-              try { context.setProp(handle, "failure", diagnostic); } finally { diagnostic.dispose(); }
-            }
+            try {
+              const failure = boundedHostFailureMetadata(error);
+              if (failure) {
+                const text = fabricJsonText(failure, 32_000);
+                const diagnostic = jsonHandle(context, jsonObject, jsonParse, failure, 32_000);
+                try { context.setProp(handle, "failure", diagnostic); } finally { diagnostic.dispose(); }
+                if (issuedFailures.size >= 128) issuedFailures.delete(issuedFailures.keys().next().value!);
+                issuedFailures.set(text, failure);
+              }
+            } catch {}
             promise.reject(handle);
           } finally { handle.dispose(); }
         };
@@ -333,9 +342,10 @@ export const runQuickJsSandbox = async (code: string, hostCall: FabricHostCall, 
           }, rejectGuestPromise)
           .then(() => {
             if (!closing) runtime.executePendingJobs();
-          }, () => {
+          }, (error: unknown) => {
             // All provider and bridge failures must settle in the guest rather
             // than becoming process-level unhandled rejections.
+            rejectDeadline?.(new Error(hostErrorMessage(error)));
           });
         bridgeTasks.add(task);
         void task.then(
@@ -556,12 +566,12 @@ interface SandboxWorkerOptions {
 }
 
 export type SandboxWorkerRequest = { executionId: string } & (
-  | { type: "run"; code: string; options: SandboxWorkerOptions; cancellationBuffer: SharedArrayBuffer }
+  | { type: "run"; code: string; options: SandboxWorkerOptions; cancellationBuffer: SharedArrayBuffer; deadlineBuffer?: SharedArrayBuffer }
   | {
       type: "hostResult";
       id: number;
       ok: boolean;
-      value?: unknown;
+      value?: string;
       error?: string;
       failure?: FabricFailureMetadata;
       shellKind?: "shell";
@@ -611,21 +621,26 @@ interface SandboxWorkerSlot {
 
 /** Host-side failure transfer. Class identity cannot cross the boundary, so the
  * shape is rebuilt in the worker instead of being stringified away. */
-const transferredHostFailure = (error: unknown): Pick<Extract<SandboxWorkerRequest, { type: "hostResult" }>, "error" | "failure" | "shellKind" | "shellResult"> => {
-  const failure = fabricFailureMetadata(error);
-  const shellKind = error instanceof LocalShellExitError ? "shell" as const : undefined;
-  const acknowledgement = (error as { [FABRIC_COMMIT_ACKNOWLEDGEMENT]?: unknown } | null | undefined)?.[FABRIC_COMMIT_ACKNOWLEDGEMENT];
-  const committed = acknowledgement && typeof acknowledgement === "object" &&
-    (acknowledgement as { version?: unknown }).version === 1 && typeof (acknowledgement as { operation?: unknown }).operation === "string"
-    ? { version: 1 as const, operation: (acknowledgement as { operation: string }).operation }
-    : undefined;
-  return {
-    error: (error instanceof Error ? error.message : String(error)).slice(0, 4_096),
-    ...(failure ? { failure } : {}),
-    ...(shellKind ? { shellKind } : {}),
-    ...(shellKind ? { shellResult: (error as LocalShellExitError).result } : {}),
-    ...(committed ? { committed } : {}),
-  };
+const transferredHostFailure = (error: unknown, maxChars?: number): Pick<Extract<SandboxWorkerRequest, { type: "hostResult" }>, "error" | "failure" | "shellKind" | "shellResult" | "committed"> => {
+  const result: ReturnType<typeof transferredHostFailure> = { error: hostErrorMessage(error) };
+  try {
+    const failure = boundedHostFailureMetadata(error);
+    if (failure) result.failure = failure;
+  } catch {}
+  if (error instanceof LocalShellExitError) {
+    try {
+      result.shellResult = JSON.parse(fabricJsonText(error.result, maxChars));
+      result.shellKind = "shell";
+    } catch {}
+  }
+  try {
+    const acknowledgement = (error as { [FABRIC_COMMIT_ACKNOWLEDGEMENT]?: unknown } | null | undefined)?.[FABRIC_COMMIT_ACKNOWLEDGEMENT];
+    if (acknowledgement && typeof acknowledgement === "object" &&
+      (acknowledgement as { version?: unknown }).version === 1 && typeof (acknowledgement as { operation?: unknown }).operation === "string") {
+      result.committed = { version: 1, operation: (acknowledgement as { operation: string }).operation.slice(0, 4_096) };
+    }
+  } catch {}
+  return result;
 };
 
 const sandboxCancelledResult = (effectiveTimeoutMs: number): FabricSandboxResult => ({
@@ -646,8 +661,6 @@ export class QuickJsRuntime {
       resourceLimits: { maxOldGenerationSizeMb: SANDBOX_WORKER_MEMORY_MB, stackSizeMb: 4 },
     });
     const slot: SandboxWorkerSlot = { worker, busy: false, idleTimer: undefined, handler: undefined, fault: undefined };
-    // Never let a pooled sandbox thread keep the host process alive.
-    worker.unref();
     worker.on("message", (message: SandboxWorkerMessage) => slot.handler?.(message));
     worker.on("error", (error: unknown) => {
       this.#drop(slot);
@@ -682,6 +695,7 @@ export class QuickJsRuntime {
     if (idle && !idle.busy) {
       this.#idle = undefined;
       if (idle.idleTimer) { clearTimeout(idle.idleTimer); idle.idleTimer = undefined; }
+      idle.worker.ref();
       return idle;
     }
     return this.#spawn();
@@ -697,6 +711,8 @@ export class QuickJsRuntime {
     this.#idle = slot;
     slot.idleTimer = setTimeout(() => { void this.#terminate(slot); }, SANDBOX_WORKER_IDLE_MS);
     slot.idleTimer.unref();
+    // Never let a pooled sandbox thread keep the host process alive.
+    slot.worker.unref();
   }
 
   /** Containment boundary. A worker fault, a WebAssembly-level abort, or an
@@ -752,7 +768,8 @@ export class QuickJsRuntime {
     // authority on the deadline; this mirror only feeds provider checks and the
     // exact-action floors, so it must never expire ahead of the worker's own.
     let mirror: FabricDeadline | undefined;
-    const hostDeadline = (): FabricDeadline => mirror ??= new FabricDeadline(requestedTimeoutMs, maximum);
+    const sharedDeadline = new BigInt64Array(new SharedArrayBuffer(2 * BigInt64Array.BYTES_PER_ELEMENT));
+    const hostDeadline = (): FabricDeadline => mirror ??= new FabricDeadline(requestedTimeoutMs, maximum, undefined, sharedDeadline);
     const cleanupGraceMs = Math.max(0, options.cleanupGraceMs ?? 100);
     const spans = new Map<number, ReturnType<FabricTracer["span"]>>();
     let settled = false;
@@ -846,7 +863,7 @@ export class QuickJsRuntime {
                 throw error;
               }
               return hostCall(message.ref, message.args, controller.signal, deadline);
-            });
+            }).then(value => fabricJsonText(value, options.maxNestedResultChars));
             // A detached failure must not become an unhandled rejection; the
             // guest learns about it through this structured reply.
             hostCalls.add(call);
@@ -862,7 +879,7 @@ export class QuickJsRuntime {
                 // that rejection as the timeout the host saw, not as a plain
                 // provider failure, or the committed effect would be misreported.
                 if (hostDeadline().expired) slot.worker.postMessage({ type: "expire", executionId } satisfies SandboxWorkerRequest);
-                slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: false, ...transferredHostFailure(error) } satisfies SandboxWorkerRequest);
+                slot.worker.postMessage({ type: "hostResult", executionId, id: message.id, ok: false, ...transferredHostFailure(error, options.maxNestedResultChars) } satisfies SandboxWorkerRequest);
               },
             ).catch((error: unknown) => fault(error instanceof Error ? error.message : String(error)));
             return;
@@ -905,6 +922,7 @@ export class QuickJsRuntime {
           executionId,
           code,
           cancellationBuffer: cancellation.buffer as SharedArrayBuffer,
+          deadlineBuffer: sharedDeadline.buffer as SharedArrayBuffer,
           options: {
             timeoutMs: options.timeoutMs,
             maxTimeoutMs: options.maxTimeoutMs,

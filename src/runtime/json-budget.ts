@@ -32,25 +32,26 @@ const isArrayIndex = (key: string): boolean => {
  * allocate from an attacker-controlled graph. Exact escaped length is checked
  * after this bounded preflight.
  */
-const preflight = (root: unknown, maxChars: number): void => {
+const preflight = (root: unknown, maxChars: number): unknown => {
   const seen = new WeakSet<object>();
-  const stack: Array<{ value: unknown; depth: number; nested: boolean }> = [
-    { value: root, depth: 0, nested: false },
+  const snapshot: Record<string, unknown> = Object.create(null);
+  const stack: Array<{ value: unknown; depth: number; nested: boolean; parent: Record<string, unknown>; key: string }> = [
+    { value: root, depth: 0, nested: false, parent: snapshot, key: "value" },
   ];
-  let nodes = 0;
+  let nodes = 1;
   let rawChars = 0;
   while (stack.length > 0) {
-    const { value, depth, nested } = stack.pop()!;
-    nodes += 1;
-    if (nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
-    if (value === null || typeof value === "boolean") continue;
+    const { value, depth, nested, parent, key } = stack.pop()!;
+    if (value === null || typeof value === "boolean") { parent[key] = value; continue; }
     if (typeof value === "string") {
       rawChars += value.length;
       if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
+      parent[key] = value;
       continue;
     }
     if (typeof value === "number") {
       if (!Number.isFinite(value)) throw budgetError("non-finite number");
+      parent[key] = value;
       continue;
     }
     if (value === undefined && !nested) continue;
@@ -61,13 +62,16 @@ const preflight = (root: unknown, maxChars: number): void => {
     seen.add(value);
 
     if (Array.isArray(value)) {
-      if (value.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
+      nodes += value.length;
+      if (nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
+      const copy: Record<string, unknown> = Object.setPrototypeOf([], null);
+      parent[key] = copy;
       const descriptors = Object.getOwnPropertyDescriptors(value);
       if (Object.getOwnPropertySymbols(value).length || Object.keys(descriptors).some(key => key !== "length" && !isArrayIndex(key))) throw budgetError("non-index array property");
       for (let index = value.length - 1; index >= 0; index--) {
         const descriptor = descriptors[String(index)];
         if (!descriptor || !("value" in descriptor)) throw budgetError("accessor or sparse array");
-        stack.push({ value: descriptor.value, depth: depth + 1, nested: true });
+        stack.push({ value: descriptor.value, depth: depth + 1, nested: true, parent: copy, key: String(index) });
       }
       continue;
     }
@@ -80,16 +84,20 @@ const preflight = (root: unknown, maxChars: number): void => {
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const keys = Object.keys(descriptors);
     if (keys.length + nodes > MAX_FABRIC_JSON_NODES) throw budgetError("node limit exceeded");
+    const copy: Record<string, unknown> = Object.create(null);
+    parent[key] = copy;
     for (let index = keys.length - 1; index >= 0; index--) {
       const key = keys[index]!;
       const descriptor = descriptors[key]!;
       if (!("value" in descriptor)) throw budgetError("accessor property");
       if (!descriptor.enumerable) continue;
+      nodes += 1;
       rawChars += key.length;
       if (rawChars > maxChars) throw budgetError(`more than ${maxChars} raw characters`);
-      stack.push({ value: descriptor.value, depth: depth + 1, nested: true });
+      stack.push({ value: descriptor.value, depth: depth + 1, nested: true, parent: copy, key });
     }
   }
+  return snapshot.value;
 };
 
 /** Largest Unicode-safe prefix whose JSON-string content fits the budget.
@@ -116,9 +124,9 @@ export const fabricJsonText = (
   maxChars = DEFAULT_FABRIC_JSON_CHARS,
 ): string => {
   const limit = normalizedLimit(maxChars);
-  preflight(value, limit);
+  const snapshot = preflight(value, limit);
   if (value === undefined) return "null";
-  const serialized = JSON.stringify(value);
+  const serialized = JSON.stringify(snapshot);
   if (serialized === undefined) throw budgetError("value is not serializable");
   if (serialized.length > limit) throw budgetError(`more than ${limit} serialized characters`);
   return serialized;

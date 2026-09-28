@@ -127,6 +127,7 @@ export class FabricCompilerPool {
     if (workerUrl === undefined && this.#idle) {
       const state = this.#idle;
       this.#detachIdle(state);
+      state.worker.ref();
       return state;
     }
     if (this.#workers.size >= this.maxWorkers) throw new Error("Fabric compiler concurrency limit reached");
@@ -135,7 +136,6 @@ export class FabricCompilerPool {
       uses: 0, poolable: workerUrl === undefined, idleTimer: undefined, pending: undefined,
     };
     this.#workers.add(state);
-    state.worker.unref();
     state.worker.on("message", (response: FabricCompilerWorkerResponse) => {
       const pending = state.pending;
       if (!pending || pending.id !== response.id) return;
@@ -195,6 +195,7 @@ export class FabricCompilerPool {
           this.#idle = state;
           state.idleTimer = setTimeout(() => { void this.#terminate(state); }, COMPILER_WORKER_IDLE_MS);
           state.idleTimer.unref();
+          state.worker.unref();
           complete();
         } else { void this.#terminate(state).then(complete); }
       };

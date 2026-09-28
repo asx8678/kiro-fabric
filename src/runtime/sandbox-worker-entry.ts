@@ -66,18 +66,26 @@ if (port) {
     // Capture identity in every asynchronous callback, never read a later run's
     // identity from `active` when forwarding a late abort/span/result.
     const post = (message: MessagePayload): void => { port.postMessage({ ...message, executionId: state.executionId } satisfies SandboxWorkerMessage); };
+    let hostSignal: AbortSignal | undefined;
+    const onHostAbort = (): void => {
+      const reason = hostSignal?.reason instanceof Error ? hostSignal.reason : new Error("Execution cancelled");
+      for (const call of pending.values()) call.reject(reason);
+      pending.clear();
+      // The host owns provider dispatch, so it must cancel its own side too.
+      post({ type: "hostAbort", message: reason.message.slice(0, 4_096) });
+    };
 
     const hostCall: FabricHostCall = (ref, args, signal, deadline) => new Promise<unknown>((resolve, reject) => {
       state.deadline = deadline;
+      if (signal.aborted) { reject(signal.reason); return; }
+      if (!hostSignal) {
+        hostSignal = signal;
+        signal.addEventListener("abort", onHostAbort, { once: true });
+      }
       const id = ++nextCallId;
       pending.set(id, { resolve, reject, deadline });
-      signal.addEventListener("abort", () => {
-        const reason = signal.reason instanceof Error ? signal.reason : new Error("Execution cancelled");
-        if (pending.delete(id)) reject(reason);
-        // The host owns provider dispatch, so it must cancel its own side too.
-        post({ type: "hostAbort", message: reason.message.slice(0, 4_096) });
-      }, { once: true });
-      post({ type: "hostCall", id, ref, args });
+      try { post({ type: "hostCall", id, ref, args }); }
+      catch (error) { pending.delete(id); reject(error); }
     });
 
     // Span identity and the trace file belong to the host, so the proxy only
@@ -116,11 +124,13 @@ if (port) {
       },
     };
     try {
-      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options, new Int32Array(request.cancellationBuffer)) });
+      post({ type: "result", result: await runQuickJsSandbox(request.code, hostCall, options, new Int32Array(request.cancellationBuffer), request.deadlineBuffer === undefined ? undefined : new BigInt64Array(request.deadlineBuffer)) });
     } catch (error) {
       post({ type: "fatal", message: (error instanceof Error ? error.message : String(error)).slice(0, 4_096) });
     } finally {
       if (active === state) active = undefined;
+      hostSignal?.removeEventListener("abort", onHostAbort);
+      for (const call of pending.values()) call.reject(new Error("Execution request ended"));
       pending.clear();
       tracer.flush();
     }
@@ -155,7 +165,9 @@ if (port) {
     const call = state.pending.get(message.id);
     if (!call) return;
     state.pending.delete(message.id);
-    if (message.ok) { call.resolve(message.value); return; }
-    call.reject(rebuildHostError(message));
+    try {
+      if (message.ok) { call.resolve(JSON.parse(message.value!)); return; }
+      call.reject(rebuildHostError(message));
+    } catch { call.reject(new Error(message.error ?? "Invalid provider reply")); }
   });
 }
