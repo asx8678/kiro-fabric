@@ -36,8 +36,7 @@
       "required": [
         "compilerWorker",
         "sandboxWorker",
-        "foveaEngine",
-        "foveaHook"
+        "foveaEngine"
       ],
       "properties": {
         "compilerWorker": {
@@ -48,9 +47,6 @@
         },
         "foveaEngine": {
           "const": "src/fovea/engine-entry.ts"
-        },
-        "foveaHook": {
-          "const": "src/kiro/fovea-hook.ts"
         }
       }
     },

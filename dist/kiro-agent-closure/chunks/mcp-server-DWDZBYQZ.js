@@ -55,7 +55,6 @@ import {
   throwIfAbortedOrExpired,
   traceFailureMetadata
 } from "./chunk-TV4LKLCM.js";
-import "./chunk-XJTFSUKV.js";
 import {
   FabricCompilerTimeoutError,
   FabricRepairError,
@@ -82,10 +81,8 @@ import {
   fabricJsonText,
   jsonStringPrefix
 } from "./chunk-WZ4PGM3F.js";
-import {
-  foveaHookCapability
-} from "./chunk-7LWVZOGJ.js";
 import "./chunk-G3LABT6U.js";
+import "./chunk-XJTFSUKV.js";
 import "./chunk-NWYPLJ5N.js";
 import {
   __commonJS,
@@ -22556,7 +22553,6 @@ var FabricExecutionService = class {
 
 // src/kiro/power/approver.ts
 var APPROVAL_FAILURE_GUIDANCE = {
-  unassociated_session: "Approval form routing is not bound to the intended host session. A supported session-bound approval bridge is required; do not weaken approval policy.",
   unsupported: "This client has not advertised MCP form elicitation. Use a compatible client; do not weaken approval policy.",
   missing_handler: "This client reported no handler for _kiro/mcp/elicitation. Use a client with working approval forms; do not weaken approval policy.",
   request_failed: "The approval request failed; no explicit approval was obtained.",
@@ -22611,7 +22607,6 @@ var KiroPowerApprover = class {
     try {
       if (request.signal?.aborted) return { approved: false, reason: "cancelled" };
       if (!this.adapter.supported()) return { approved: false, reason: "unsupported" };
-      if (this.adapter.sessionAssociated?.() === false) return { approved: false, reason: "unassociated_session" };
       const header = `Risk: ${bounded(request.risk, 64)}
 Action: ${bounded(`${request.provider}.${request.action}`, 256)}
 `;
@@ -27793,7 +27788,7 @@ Output could not be retained; execution: ${options.result.status}; delivery: una
 };
 
 // src/kiro/mcp-execution.ts
-var callMcpExecution = async (context, request, extra, turn) => {
+var callMcpExecution = async (context, request, extra) => {
   const {
     options,
     data,
@@ -27944,22 +27939,15 @@ var callMcpExecution = async (context, request, extra, turn) => {
         return id;
       }
     });
-    if (contextClient && workspaceVerified && !pendingMutation && current.service.config.approvals.read === "allow" && (options.foveaCallContext === true || options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true)) {
-      const remaining = Math.min(options.foveaCallContext === true ? FOVEA_CALL_COLLECTION_MS : 2e3, Math.max(0, outerStarted + outerDeadline - performance.now()));
-      if (remaining >= (options.foveaCallContext === true ? FOVEA_CALL_WARM_MS + FOVEA_CALL_RESERVE_MS : 1) && !controller.signal.aborted) {
+    if (contextClient && callObservations && !pendingMutation && current.service.config.approvals.read === "allow") {
+      const remaining = Math.min(FOVEA_CALL_COLLECTION_MS, Math.max(0, outerStarted + outerDeadline - performance.now()));
+      if (remaining >= FOVEA_CALL_WARM_MS + FOVEA_CALL_RESERVE_MS && !controller.signal.aborted) {
         const automatic = new AbortController();
         const timer2 = setTimeout(() => automatic.abort(new Error("Navigator context budget elapsed")), remaining);
         try {
           const invocation = { cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]), deadline: new FabricDeadline(remaining, remaining) };
-          const context2 = options.foveaCallContext === true && callObservations ? await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars) : await collectFoveaContext(contextClient, projection, invocation, current.service.config.executor.maxOutputChars);
-          let delivery = context2.delivery;
-          if (delivery && turn && options.hostSessions && options.foveaCallContext !== true) {
-            delivery = options.hostSessions.bindDelivery(turn, delivery, async (noticeId) => {
-              const deadline = new FabricDeadline(2e3, 2e3);
-              await contextClient.acknowledgeDelivery(noticeId, { cwd: current.service.cwd, signal: turn.signal, deadline });
-            });
-          }
-          if (!context2.delivery || delivery && foveaDelivery.track(extra.requestId, delivery, extra.signal, projection.text)) projection = context2.projection;
+          const context2 = await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars);
+          if (!context2.delivery || foveaDelivery.track(extra.requestId, context2.delivery, extra.signal, projection.text)) projection = context2.projection;
         } finally {
           clearTimeout(timer2);
         }
@@ -28018,7 +28006,7 @@ var callMcpExecution = async (context, request, extra, turn) => {
 };
 
 // src/kiro/mcp-session.ts
-var createMcpSession = (context, owner) => {
+var createMcpSession = (context) => {
   const {
     options,
     server,
@@ -28031,18 +28019,17 @@ var createMcpSession = (context, owner) => {
     foveaClients,
     foveaDelivery,
     fabricApprover,
-    ownedRuntimes,
     serverClosing,
     identity
   } = context;
-  const foveaConversation = owner?.conversationId ?? `host_${randomBytes11(24).toString("hex")}`;
+  const foveaConversation = `host_${randomBytes11(24).toString("hex")}`;
   const binding = new KiroPowerWorkspaceBinding({
     pluginRoot: options.runtimeRoot,
     pluginData: options.dataRoot,
     ...kiroHome === void 0 ? {} : { kiroHome },
     elicitor: { approveWorkspace: (canonicalPath, signal) => fabricApprover.approveOnce({ risk: "write", provider: "fabric_workspace", action: "attach", summary: `Canonical workspace: ${canonicalPath}`, ...signal ? { signal } : {} }) }
   });
-  const workspaceContext = owner?.workspaceContext ?? options.workspaceContext ?? new CachedWorkspaceContextProvider({
+  const workspaceContext = options.workspaceContext ?? new CachedWorkspaceContextProvider({
     supported: () => server.getClientCapabilities()?.roots !== void 0,
     load: async () => (await server.listRoots(void 0, { timeout: 2e3 })).roots
   });
@@ -28064,7 +28051,7 @@ var createMcpSession = (context, owner) => {
     }
   });
   const sessionLifecycle = createMcpSessionLifecycle({
-    retiring: () => serverClosing() || owner?.signal.aborted === true,
+    retiring: () => serverClosing(),
     currentRuntime: () => runtime,
     runtimeClosed: (current) => {
       if (runtime === current) {
@@ -28074,7 +28061,7 @@ var createMcpSession = (context, owner) => {
       }
     },
     closeClient: (current) => foveaClients.get(current)?.close(),
-    retireConversation: () => fovea.retireConversation(foveaConversation, owner?.conversationEpoch ?? 0),
+    retireConversation: () => fovea.retireConversation(foveaConversation, 0),
     revokeArtifacts: () => artifacts.revoke(),
     closeArtifacts: () => artifacts.close()
   });
@@ -28091,7 +28078,7 @@ var createMcpSession = (context, owner) => {
       const before = binding.bindingIdentity();
       if (snapshot.status !== "temporarily-unavailable") {
         if (snapshot.roots.length > 0) clientRootsObserved = true;
-        const roots = !owner && !clientRootsObserved && snapshot.status === "explicitly-empty" && options.launchWorkspaceRoot ? [{ uri: pathToFileURL(options.launchWorkspaceRoot).href }] : snapshot.roots;
+        const roots = !clientRootsObserved && snapshot.status === "explicitly-empty" && options.launchWorkspaceRoot ? [{ uri: pathToFileURL(options.launchWorkspaceRoot).href }] : snapshot.roots;
         binding.updateClientRoots(roots);
       }
       const observation = binding.workspaceObservation();
@@ -28111,7 +28098,7 @@ var createMcpSession = (context, owner) => {
       deviceId: workspace.deviceId,
       fileId: workspace.fileId,
       conversationId: foveaConversation,
-      conversationEpoch: owner?.conversationEpoch ?? 0,
+      conversationEpoch: 0,
       authorizationEpoch: runtimeGeneration + 1
     }) : void 0;
     let created;
@@ -28124,7 +28111,6 @@ var createMcpSession = (context, owner) => {
         ...client ? { foveaClient: client } : {},
         ...project && workspace ? { stateRoot: project.state, workspaceRoot: workspace.canonicalPath, localLockRoot: path14.join(path14.dirname(project.state), "local-locks") } : {}
       });
-      if (owner && ownedRuntimes.has(created)) throw new Error("Host sessions require distinct runtime instances");
       if (sessionLifecycle.isRetired(created)) throw new Error("Runtime factory returned an already retired MCP runtime");
     } catch (error) {
       const failures = [];
@@ -28136,7 +28122,6 @@ var createMcpSession = (context, owner) => {
       }
       throw error;
     }
-    if (owner) ownedRuntimes.add(created);
     if (client) foveaClients.set(created, client);
     if (sessionLifecycle.retiring()) return discardUnpublished(created, new Error("Host session retired during runtime creation"));
     return created;
@@ -28238,7 +28223,7 @@ var createMcpSession = (context, owner) => {
       executor: "quickjs",
       runProvenance,
       artifactRetention: {
-        owner: owner ? "host-session-epoch" : "mcp-instance",
+        owner: "mcp-instance",
         workspaceIndependent: true,
         durability: "ephemeral",
         expiry: "idle TTL or quota eviction",
@@ -28255,18 +28240,16 @@ var createMcpSession = (context, owner) => {
       catalog: actionCatalog.catalog,
       nativeKiroTools: { owner: "kiro", availability: "not-exposed", scope: "fabric-local", modelInventoryVerified: false },
       fovea: {
-        nativeHooks: foveaHookCapability(),
-        postToolContext: options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true ? "trusted-embedder-visible" : "disabled",
         callContext: options.foveaCallContext === true ? "invocation-local-visible" : "disabled",
-        nativeSessionAssociation: owner ? "trusted-embedder; native-unqualified" : "unavailable",
+        nativeSessionAssociation: "unavailable",
         modelInputAcknowledged: false,
-        modelInputReceipts: owner ? "host-only exact-turn receipts; not native qualification" : "unavailable",
+        modelInputReceipts: "unavailable",
         sessionBoundElicitation: false,
         sessionIsolation: {
-          supported: !!owner,
-          stateOwner: owner ? "host-session-epoch" : "mcp-instance",
+          supported: false,
+          stateOwner: "mcp-instance",
           nativeClearResetGuaranteed: false,
-          warning: owner ? "Embedding bridge owns authenticated routing and retirement; managed Kiro lifecycle remains unqualified. Unassociated approval forms are disabled." : "A reused MCP instance can retain focus, results, session settings and rule trust across native chats. Native /clear is not a Fabric state boundary."
+          warning: "A reused MCP instance can retain focus, results, session settings and rule trust across native chats. Native /clear is not a Fabric state boundary."
         },
         automaticQualification: { ready: false, requiredNativeGates: ["H01", "H02", "H03", "H04", "H05", "H06", "H07", "H08", "H09", "H10", "H11", "H12"], qualifiedNativeGates: [] }
       }
@@ -28313,7 +28296,7 @@ var createMcpSession = (context, owner) => {
     infoValue,
     workspaceValue
   };
-  const call = (request, extra, turn) => {
+  const call = (request, extra) => {
     const args = request.params.arguments ?? {};
     switch (request.params.name) {
       case "fabric_info":
@@ -28321,7 +28304,7 @@ var createMcpSession = (context, owner) => {
       case "fabric_workspace":
         return callWorkspace(transitions, args, extra.signal);
       case "fabric_exec":
-        return callMcpExecution(executionContext, request, extra, turn);
+        return callMcpExecution(executionContext, request, extra);
       default:
         return toolError("unknown_tool", `Unknown tool: ${String(request.params.name)}`);
     }
@@ -28406,7 +28389,6 @@ var createAgentTracer = (data, version) => {
   }
 };
 var createKiroMcpServer = async (options) => {
-  if (options.hostSessions && options.runtime) throw new Error("A shared injected runtime cannot be used with host sessions; use prepareRuntime");
   if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
   const inferredKiroHome = installedKiroHomeFor(options.runtimeRoot, options.dataRoot);
   const explicitKiroHome = options.kiroHome === void 0 ? void 0 : inspectCanonicalPath(options.kiroHome, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
@@ -28431,10 +28413,7 @@ var createKiroMcpServer = async (options) => {
   const foveaClients = /* @__PURE__ */ new WeakMap();
   const foveaDelivery = new FoveaResponseDelivery();
   const fabricApprover = new KiroPowerApprover({
-    // Native multi-session forms require a separately qualified intended-chat
-    // association. Do not route an unassociated approval to whichever chat is active.
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
-    sessionAssociated: () => !options.hostSessions,
     request: async ({ title: _title, message, signal, timeoutMs }) => {
       const elicitationId = `form_${randomBytes12(8).toString("hex")}`;
       if (tracer.enabled) {
@@ -28462,9 +28441,8 @@ var createKiroMcpServer = async (options) => {
       }
     }
   });
-  const ownedRuntimes = /* @__PURE__ */ new WeakSet();
   let serverClosing = false;
-  const createSession = (owner) => createMcpSession({
+  const session = createMcpSession({
     options,
     server,
     data,
@@ -28476,13 +28454,9 @@ var createKiroMcpServer = async (options) => {
     foveaClients,
     foveaDelivery,
     fabricApprover,
-    ownedRuntimes,
     serverClosing: () => serverClosing,
     identity: { id: MCP_INSTANCE_ID, parentPid: MCP_PARENT_PID, startedAt: MCP_STARTED_AT }
-  }, owner);
-  let legacy;
-  const sessions = /* @__PURE__ */ new Map();
-  let hostAttached = false;
+  });
   let closeTask;
   const close = () => {
     if (closeTask) return closeTask;
@@ -28495,9 +28469,7 @@ var createKiroMcpServer = async (options) => {
     });
     void (async () => {
       const failures = [];
-      const retirement = attemptCleanup(failures, () => hostAttached ? options.hostSessions.close() : legacy?.close());
-      const ownedSessions = [...sessions.values()].map((session) => attemptCleanup(failures, () => session.close()));
-      await Promise.all([retirement, ...ownedSessions]);
+      await attemptCleanup(failures, () => session.close());
       await attemptCleanup(failures, () => foveaDelivery.close());
       await attemptCleanup(failures, () => fovea.close());
       await attemptCleanup(failures, () => server.close());
@@ -28507,22 +28479,13 @@ var createKiroMcpServer = async (options) => {
     return closeTask;
   };
   try {
-    legacy = options.hostSessions ? void 0 : createSession();
-    options.hostSessions?.attach((owner) => {
-      const session = sessions.get(owner);
-      const task = session?.close() ?? Promise.resolve();
-      return task.then(() => {
-        sessions.delete(owner);
-      });
-    });
-    hostAttached = options.hostSessions !== void 0;
     server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
       if (serverClosing) throw new Error("Agent MCP server is shutting down");
-      await Promise.all([...legacy ? [legacy.refresh(true)] : [], ...[...sessions.values()].map((session) => session.refresh(true))]);
+      await session.refresh(true);
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       if (serverClosing) throw new Error("Agent MCP server is shutting down");
-      await legacy?.refresh();
+      await session.refresh();
       return { tools: [
         { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
         { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
@@ -28531,22 +28494,10 @@ var createKiroMcpServer = async (options) => {
     });
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       if (serverClosing) return toolError("server_unavailable", "Agent MCP server is shutting down");
-      if (!options.hostSessions) return legacy.call(request, extra);
-      let turn;
-      try {
-        turn = options.hostSessions.takeRequest(extra.requestId);
-      } catch (error) {
-        return toolError("host_session_unavailable", error);
-      }
-      let session = sessions.get(turn.session);
-      if (!session) {
-        session = createSession(turn.session);
-        sessions.set(turn.session, session);
-      }
-      return session.call(request, { ...extra, signal: AbortSignal.any([extra.signal, turn.signal]) }, turn);
+      return session.call(request, extra);
     });
     const transport = new StdioServerTransport();
-    if (options.foveaCallContext === true || options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true) {
+    if (options.foveaCallContext === true) {
       const send = transport.send.bind(transport);
       transport.send = (message) => foveaDelivery.send(message, send);
     }

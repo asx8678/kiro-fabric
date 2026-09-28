@@ -10,7 +10,7 @@ prepareGeneratedOutput(process.cwd(), "dist");
 execFileSync("pnpm", ["exec", "tsc", "-p", "tsconfig.build.json", "--emitDeclarationOnly"], { stdio: "inherit" });
 await build({
   ...sharedEsbuildOptions,
-  entryPoints: ["src/index.ts", "src/runtime/compiler-worker-entry.ts", "src/runtime/sandbox-worker-entry.ts", "src/fovea/engine-entry.ts", "src/kiro/fovea-hook.ts"],
+  entryPoints: ["src/index.ts", "src/runtime/compiler-worker-entry.ts", "src/runtime/sandbox-worker-entry.ts", "src/fovea/engine-entry.ts"],
   outdir: "dist",
   packages: "external",
   logLevel: "info",

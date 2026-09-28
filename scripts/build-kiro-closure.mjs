@@ -227,7 +227,6 @@ const manifest = {
   compilerWorker: "runtime/compiler-worker-entry.js",
   sandboxWorker: "runtime/sandbox-worker-entry.js",
   foveaEngine: "fovea/engine-entry.js",
-  foveaHook: "kiro/fovea-hook.js",
   executor: "quickjs",
   sourceInputs,
   packageInputs,

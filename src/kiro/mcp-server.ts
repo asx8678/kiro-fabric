@@ -9,8 +9,7 @@ import { fabricExecInputSchemaJson } from "../kernel/fabric-exec-contract.js";
 import { FoveaHost, type FoveaBoundClient } from "../fovea/host.js";
 import type { FoveaParserDescriptor } from "../fovea/protocol.js";
 import { DISABLED_TRACER, createFabricTracer, resolveTraceEnabled, type FabricTracer } from "../trace/tracer.js";
-import { KiroHostSessionAdapter, type KiroHostSession, type KiroHostTurn } from "./host-session-adapter.js";
-import { FoveaResponseDelivery, type FoveaPostToolCapability } from "./fovea-context.js";
+import { FoveaResponseDelivery } from "./fovea-context.js";
 import { inspectCanonicalPath } from "./canonical-path.js";
 import { KiroPowerApprover, kiroElicitationFailureReason } from "./power/approver.js";
 import { prepareKiroPowerDataPaths } from "./power/data-paths.js";
@@ -35,9 +34,6 @@ export interface KiroMcpServerOptions {
   /** Explicit user-selected project supplied by the installed start launcher; never MCP cwd. */
   launchWorkspaceRoot?: string;
   managedParser?: FoveaParserDescriptor;
-  /** Trusted embedder qualification only. Managed/native profiles leave this absent
-   * until real-client delivery and analysis-scope gates pass; minimal stays off. */
-  foveaPostToolContext?: FoveaPostToolCapability;
   /** Same-call visible Navigator suffix from this invocation's observed files. Not native session routing. */
   foveaCallContext?: true;
   version?: string;
@@ -46,9 +42,6 @@ export interface KiroMcpServerOptions {
   runtime?: KiroRuntime;
   prepareRuntime?: (options: KiroRuntimeOptions) => KiroRuntime | Promise<KiroRuntime>;
   workspaceContext?: WorkspaceContextProvider;
-  /** Trusted in-process bridge only. Managed Kiro leaves this absent until a
-   * supported native ownership contract exists. Never populated from _meta/args. */
-  hostSessions?: KiroHostSessionAdapter;
 }
 const installedKiroHomeFor = (runtimeRoot: string, dataRoot: string): string | undefined => {
   const runtime = inspectCanonicalPath(runtimeRoot, { kind: "directory", rejectFinalSymlink: true }).canonicalPath;
@@ -125,7 +118,6 @@ const createAgentTracer = (data: { root: string; configFile: string }, version: 
 };
 
 export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promise<{ close(): Promise<void> }> => {
-  if (options.hostSessions && options.runtime) throw new Error("A shared injected runtime cannot be used with host sessions; use prepareRuntime");
   if (!options.runtimeRoot || !options.dataRoot) throw new Error("Agent MCP launch requires KIRO_FABRIC_RUNTIME_ROOT and KIRO_FABRIC_DATA_ROOT");
   const inferredKiroHome = installedKiroHomeFor(options.runtimeRoot, options.dataRoot);
   const explicitKiroHome = options.kiroHome === undefined
@@ -151,10 +143,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
   const foveaClients = new WeakMap<KiroRuntime, FoveaBoundClient>();
   const foveaDelivery = new FoveaResponseDelivery();
   const fabricApprover = new KiroPowerApprover({
-    // Native multi-session forms require a separately qualified intended-chat
-    // association. Do not route an unassociated approval to whichever chat is active.
     supported: () => supportsKiroElicitation(server.getClientCapabilities()),
-    sessionAssociated: () => !options.hostSessions,
     request: async ({ title: _title, message, signal, timeoutMs }) => {
       const elicitationId = `form_${randomBytes(8).toString("hex")}`;
       if (tracer.enabled) {
@@ -182,16 +171,12 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
       }
     },
   });
-  const ownedRuntimes = new WeakSet<KiroRuntime>();
   let serverClosing = false;
-  const createSession = (owner?: KiroHostSession) => createMcpSession({
+  const session = createMcpSession({
     options, server, data, kiroHome, version, runProvenance, tracer, fovea, foveaClients,
-    foveaDelivery, fabricApprover, ownedRuntimes, serverClosing: () => serverClosing,
+    foveaDelivery, fabricApprover, serverClosing: () => serverClosing,
     identity: { id: MCP_INSTANCE_ID, parentPid: MCP_PARENT_PID, startedAt: MCP_STARTED_AT },
-  }, owner);
-  let legacy: ReturnType<typeof createSession> | undefined;
-  const sessions = new Map<KiroHostSession, ReturnType<typeof createSession>>();
-  let hostAttached = false;
+  });
   let closeTask: Promise<void> | undefined;
   const close = (): Promise<void> => {
     if (closeTask) return closeTask;
@@ -201,11 +186,7 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     closeTask = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
     void (async () => {
       const failures: unknown[] = [];
-      // An adapter whose attach failed belongs to its prior server, not us.
-      const retirement = attemptCleanup(failures, () => hostAttached ? options.hostSessions!.close() : legacy?.close());
-      // Retain direct ownership even if an embedder's adapter close itself fails.
-      const ownedSessions = [...sessions.values()].map(session => attemptCleanup(failures, () => session.close()));
-      await Promise.all([retirement, ...ownedSessions]);
+      await attemptCleanup(failures, () => session.close());
       await attemptCleanup(failures, () => foveaDelivery.close());
       await attemptCleanup(failures, () => fovea.close());
       await attemptCleanup(failures, () => server.close());
@@ -215,22 +196,13 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     return closeTask;
   };
   try {
-    legacy = options.hostSessions ? undefined : createSession();
-    options.hostSessions?.attach(owner => {
-      const session = sessions.get(owner);
-      const task = session?.close() ?? Promise.resolve();
-      return task.then(() => { sessions.delete(owner); });
-    });
-    hostAttached = options.hostSessions !== undefined;
     server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
       if (serverClosing) throw new Error("Agent MCP server is shutting down");
-      // Each native scope obtains its OWN authenticated roots, never the global
-      // client's roots or launch directory as a session identity substitute.
-      await Promise.all([...(legacy ? [legacy.refresh(true)] : []), ...[...sessions.values()].map(session => session.refresh(true))]);
+      await session.refresh(true);
     });
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       if (serverClosing) throw new Error("Agent MCP server is shutting down");
-      await legacy?.refresh();
+      await session.refresh();
       return { tools: [
         { name: "fabric_info", description: "Report bounded Kiro Fabric Agent health and provider status without secrets.", inputSchema: { type: "object", properties: {}, additionalProperties: false }, annotations: { readOnlyHint: true } },
         { name: "fabric_workspace", description: "Inspect or explicitly bind the canonical workspace used for durable state. Actions: status and list take no other fields; select requires rootId from list; attach requires an absolute path; detach takes no other fields.", inputSchema: kiroWorkspaceToolInputSchema, annotations: { readOnlyHint: false } },
@@ -239,17 +211,11 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     });
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       if (serverClosing) return toolError("server_unavailable", "Agent MCP server is shutting down");
-      if (!options.hostSessions) return legacy!.call(request, extra);
-      let turn: KiroHostTurn;
-      try { turn = options.hostSessions.takeRequest(extra.requestId); }
-      catch (error) { return toolError("host_session_unavailable", error); }
-      let session = sessions.get(turn.session);
-      if (!session) { session = createSession(turn.session); sessions.set(turn.session, session); }
-      return session.call(request, { ...extra, signal: AbortSignal.any([extra.signal, turn.signal]) }, turn);
+      return session.call(request, extra);
     });
 
     const transport = new StdioServerTransport();
-    if (options.foveaCallContext === true || (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true)) {
+    if (options.foveaCallContext === true) {
       const send = transport.send.bind(transport);
       transport.send = message => foveaDelivery.send(message, send);
     }

@@ -7,8 +7,7 @@
   "runtimeAssets": {
     "compilerWorker": "src/runtime/compiler-worker-entry.ts",
     "sandboxWorker": "src/runtime/sandbox-worker-entry.ts",
-    "foveaEngine": "src/fovea/engine-entry.ts",
-    "foveaHook": "src/kiro/fovea-hook.ts"
+    "foveaEngine": "src/fovea/engine-entry.ts"
   },
   "tools": [
     "fabric_info",

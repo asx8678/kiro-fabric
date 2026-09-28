@@ -4,7 +4,6 @@
     "src/index.ts",
     "src/kiro/mcp-entry.ts",
     "src/fovea/engine-entry.ts",
-    "src/kiro/fovea-hook.ts",
     "src/runtime/compiler-worker-entry.ts",
     "src/runtime/sandbox-worker-entry.ts",
     "scripts/analyze-trace.mjs"

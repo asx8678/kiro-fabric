@@ -5,7 +5,7 @@
     "files": [
       {
         "path": "agent-product.json",
-        "sha256": "5348ad0d78710880d1b40646cf9ffd740c2ddc91ca2aba6b01abf0d02ed5af86"
+        "sha256": "0f6a7186ac985718b85ff1ec1424aaf03bbd77c9fcf7b7b3f1e99c9d15d39450"
       },
       {
         "path": "package.json",
@@ -25,7 +25,7 @@
       },
       {
         "path": "scripts/assert-build-artifacts.mjs",
-        "sha256": "25f127864ab1281258e969c3a389e4132ccd9c399566eb5227545d39ddce5338"
+        "sha256": "7abd841775be943d580e1bb0a7e8292dd06e5b9c08faf5cf81b0bf104c126cb8"
       },
       {
         "path": "scripts/build-fovea-native.mjs",
@@ -37,11 +37,11 @@
       },
       {
         "path": "scripts/build-kiro-closure.mjs",
-        "sha256": "735b6a17fa0e5c6f6e39149758cd4f229706cd8a9926e0b256a7dc47c41dbac7"
+        "sha256": "88911ca04cec809df03b2f681fb27b52883693841e624a967be724bf9a6e4ae1"
       },
       {
         "path": "scripts/build.mjs",
-        "sha256": "b174ea88c1f1dfdb7bf85f51bc240b6390c2969e54bcd5bb46cc0806c2609d29"
+        "sha256": "cfc4e230bbdb5d6538412dc22f620da62c9157798beb630b0f97d347cb003212"
       },
       {
         "path": "scripts/esbuild-common.mjs",
@@ -357,7 +357,7 @@
       },
       {
         "path": "src/index.ts",
-        "sha256": "e798c3fa3f82e54e90461f525330ed2ad07d6f94951e8c9509ca3d85732c0a32"
+        "sha256": "1155c61eeb6de9ae5c3ce6352fa86b62f32ff4df496601d65a9f568dea7debf0"
       },
       {
         "path": "src/installation/filesystem-boundary.mjs",
@@ -413,23 +413,11 @@
       },
       {
         "path": "src/kiro/fovea-context.ts",
-        "sha256": "b29b24bb9788ade6aeb0e2857101ec3adb7e5f25ae77ca097bed02f295b9ddb8"
-      },
-      {
-        "path": "src/kiro/fovea-hook.ts",
-        "sha256": "86eefb4800fa17c2a84aad76c7372186f393be22e4719fc3a55cb1e7fff50af6"
-      },
-      {
-        "path": "src/kiro/fovea-native.ts",
-        "sha256": "3f136aca5de0c2146fb9c217298231412e26057e625d8357fa215e685ec907f6"
+        "sha256": "7c87cb2e295584085458f051494305eecf508665f01c4894f8ed60964c1f7b51"
       },
       {
         "path": "src/kiro/generated-guidance.ts",
         "sha256": "1db49d9a0dbbce19dd758643d73f26bd69026b82dbc307cde2412c11c4e5bc5a"
-      },
-      {
-        "path": "src/kiro/host-session-adapter.ts",
-        "sha256": "bb15a69521c48ed78326d67edede437cc2f6b05d4c983882e9bafcb1581087ea"
       },
       {
         "path": "src/kiro/info-catalog.ts",
@@ -441,7 +429,7 @@
       },
       {
         "path": "src/kiro/mcp-execution.ts",
-        "sha256": "359fa1e7f8d84506bc2f3411f136c5d058fc335921e9a2acc97996894aab7c4d"
+        "sha256": "4825d5be23c1eec2709a0f11d18a2463b059be6771a647ba06c9cffcdb464099"
       },
       {
         "path": "src/kiro/mcp-provider.ts",
@@ -453,7 +441,7 @@
       },
       {
         "path": "src/kiro/mcp-server.ts",
-        "sha256": "1d8727b0f89efd10f1bfc8ce0169e47b983683c2df2f3e7d802b97fc4b5eb34f"
+        "sha256": "ad7f2405dec25d5ecaceba5782547e5d632638b8a968b242a9d9520438209ba1"
       },
       {
         "path": "src/kiro/mcp-session-lifecycle.ts",
@@ -461,7 +449,7 @@
       },
       {
         "path": "src/kiro/mcp-session.ts",
-        "sha256": "a59eb72d418ffe4942e58f7de3370d2b7ad45033b3f81f7ee45ea4a71cd7edb6"
+        "sha256": "81112d21d5bee22bba269ef733e69a9259adc60cdf64197dd24698ee03c3fc33"
       },
       {
         "path": "src/kiro/mcp-workspace.ts",
@@ -473,7 +461,7 @@
       },
       {
         "path": "src/kiro/power/approver.ts",
-        "sha256": "f5fd0a83351c9489afde468628fcc587eabdc26ebf13986ebd19ed9eba07ac6b"
+        "sha256": "205a92361899fea7435c0dc3bd0b643429a790c8764b99a6dbd065d9d0b8325a"
       },
       {
         "path": "src/kiro/power/artifacts-provider.ts",
@@ -636,14 +624,13 @@
         "sha256": "0def6047b055927781b1c98c0fe11b6a2438728cb3c7c226d3faf676f4d9101a"
       }
     ],
-    "digest": "1fc66ac4dda7205a3bb7b0f1453700beeda0b1feb9be414eb4dd3ff343866a06"
+    "digest": "a81eae1b7dd829947db7da4a4978ce1718f9b9ba4b02dd169d59aaab8c238d58"
   },
   "product": "kiro-fabric-agent",
   "entrypoint": "kiro/mcp-entry.js",
   "compilerWorker": "runtime/compiler-worker-entry.js",
   "sandboxWorker": "runtime/sandbox-worker-entry.js",
   "foveaEngine": "fovea/engine-entry.js",
-  "foveaHook": "kiro/fovea-hook.js",
   "executor": "quickjs",
   "sourceInputs": [
     "src/async-settlement.ts",
@@ -715,10 +702,7 @@
     "src/kiro/first-prompt-hook.ts",
     "src/kiro/fovea-call-context.ts",
     "src/kiro/fovea-context.ts",
-    "src/kiro/fovea-hook.ts",
-    "src/kiro/fovea-native.ts",
     "src/kiro/generated-guidance.ts",
-    "src/kiro/host-session-adapter.ts",
     "src/kiro/info-catalog.ts",
     "src/kiro/mcp-entry.ts",
     "src/kiro/mcp-execution.ts",
@@ -948,11 +932,6 @@
       "path": "chunks/chunk-4T36ZZ2V.js",
       "bytes": 35077,
       "sha256": "c6c8b4ae71a16ce6c910af32a849af643bbe06e0703d1fbaa23759481183606d"
-    },
-    {
-      "path": "chunks/chunk-7LWVZOGJ.js",
-      "bytes": 615,
-      "sha256": "adfa6bd0db9294c0bbcfa803c2a54b6d16a3840be9b3281306a0f4b8ac689a01"
     },
     {
       "path": "chunks/chunk-AE4E2KSU.js",
@@ -1320,9 +1299,9 @@
       "sha256": "bcd24271a113971ba9eb71ff8cb01bc6b0f872a85c23fdbe5d93065b375933cd"
     },
     {
-      "path": "chunks/mcp-server-EVBU342J.js",
-      "bytes": 1379765,
-      "sha256": "a1bbc3be034fe35d2f30e6cb861c24caca4cf2636a489e2e4dc5242f086d004b"
+      "path": "chunks/mcp-server-DWDZBYQZ.js",
+      "bytes": 1375759,
+      "sha256": "c24e3b27442190f23c81d108a8b67b3811aa61876d517d66a648b2337f9dc4e9"
     },
     {
       "path": "chunks/module-ES6BEMUI-NDJYL2FJ.js",
@@ -1380,14 +1359,9 @@
       "sha256": "c8e6755f66bbb6d3a33b2b8b2c1da0019efeb40e93b1b45b37b03f4f41e2cf67"
     },
     {
-      "path": "kiro/fovea-hook.js",
-      "bytes": 1090,
-      "sha256": "410f2ed4570c10ea92d33562c4a0893dca27e3e52a3a56477d4fe2477f82cc95"
-    },
-    {
       "path": "kiro/mcp-entry.js",
       "bytes": 8206,
-      "sha256": "f0eda1e6c313cc20b4a25e3f126227b362f0209383595929a51790747f7ed04d"
+      "sha256": "89748a36ab7dcfa21127655de50843cb31c727b24ce2b5a8057c0d5c973ead1d"
     },
     {
       "path": "package.json",
@@ -1402,8 +1376,8 @@
     {
       "path": "runtime/sandbox-worker-entry.js",
       "bytes": 4895,
-      "sha256": "d7432071c419b4fd3bfc277a053221ab2452f32bfef394bab2a4bfb7fbe4167c"
+      "sha256": "86b2a491f160b99740797cb518d0922f61670fbfbc780b7a67f936eb80cc863d"
     }
   ],
-  "contentDigest": "3e1507345bf8b4429f7aa09e7bf2cffeae6cc6da940c907beb96b007c918a7d1"
+  "contentDigest": "fb28434acd79c9be528f6fe6cb059933742e7414579d8a34bb9eeb7c81b93a24"
 }

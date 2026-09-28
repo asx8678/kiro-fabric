@@ -10,12 +10,11 @@ import { FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS } f
 import type { FoveaBoundClient } from "../fovea/host.js";
 import type { FabricArtifactAccess } from "../protocol.js";
 import type { FabricTracer } from "../trace/tracer.js";
-import { collectFoveaContext, type FoveaResponseDelivery } from "./fovea-context.js";
+import type { FoveaResponseDelivery } from "./fovea-context.js";
 import { collectFoveaCallContext, FoveaCallObservation } from "./fovea-call-context.js";
 import { kiroMcpOuterDeadlineMs } from "./deadlines.js";
 import { KiroPowerFabricApprover, type KiroPowerApprover } from "./power/approver.js";
 import type { KiroPowerWorkspaceBinding, KiroPowerWorkspaceMutation } from "./power/workspace-binding.js";
-import type { KiroHostTurn } from "./host-session-adapter.js";
 import type { KiroRuntime } from "./runtime.js";
 import type { KiroMcpServerOptions } from "./mcp-server.js";
 import type { createKiroArtifactOwner } from "./artifact-owner.js";
@@ -25,7 +24,7 @@ import { commitDeferredWorkspace, workspaceRequest, workspaceTransitionText, WOR
 import { projectFabricExecutionText } from "./projection.js";
 
 export interface McpExecutionContext {
-  options: Pick<KiroMcpServerOptions, "foveaCallContext" | "foveaPostToolContext" | "hostSessions">;
+  options: Pick<KiroMcpServerOptions, "foveaCallContext">;
   data: { configFile: string };
   tracer: FabricTracer;
   binding: KiroPowerWorkspaceBinding;
@@ -47,7 +46,7 @@ export interface McpExecutionContext {
  * are supplied capabilities; this handler never owns transport shutdown. */
 export const callMcpExecution = async (
   context: McpExecutionContext, request: CallToolRequest,
-  extra: RequestHandlerExtra<ServerRequest, ServerNotification>, turn?: KiroHostTurn,
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
 ) => {
   const { options, data, tracer, binding, fabricApprover, artifacts, artifactAccess,
     sessionLifecycle, transitions, foveaClients, foveaDelivery, syncWorkspace,
@@ -199,27 +198,17 @@ export const callMcpExecution = async (
     });
     // Optional analysis must not turn an approved write or one-time read
     // into an unapproved repository-wide read. Skip ask/deny without prompting.
-    if (contextClient && workspaceVerified && !pendingMutation && current.service.config.approvals.read === "allow" &&
-        (options.foveaCallContext === true || (options.foveaPostToolContext?.authorizedAnalysis === true && options.foveaPostToolContext.qualifiedVisibleDelivery === true))) {
+    if (contextClient && callObservations && !pendingMutation && current.service.config.approvals.read === "allow") {
       // No extension of the original outer deadline. Analysis has its own
       // bounded cleanup scope and never holds a source-effect reservation.
-      const remaining = Math.min(options.foveaCallContext === true ? FOVEA_CALL_COLLECTION_MS : 2_000, Math.max(0, outerStarted + outerDeadline - performance.now()));
-      if (remaining >= (options.foveaCallContext === true ? FOVEA_CALL_WARM_MS + FOVEA_CALL_RESERVE_MS : 1) && !controller.signal.aborted) {
+      const remaining = Math.min(FOVEA_CALL_COLLECTION_MS, Math.max(0, outerStarted + outerDeadline - performance.now()));
+      if (remaining >= FOVEA_CALL_WARM_MS + FOVEA_CALL_RESERVE_MS && !controller.signal.aborted) {
         const automatic = new AbortController();
         const timer = setTimeout(() => automatic.abort(new Error("Navigator context budget elapsed")), remaining);
         try {
           const invocation = { cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]), deadline: new FabricDeadline(remaining, remaining) };
-          const context = options.foveaCallContext === true && callObservations
-            ? await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars)
-            : await collectFoveaContext(contextClient, projection, invocation, current.service.config.executor.maxOutputChars);
-          let delivery = context.delivery;
-          if (delivery && turn && options.hostSessions && options.foveaCallContext !== true) {
-            delivery = options.hostSessions.bindDelivery(turn, delivery, async noticeId => {
-              const deadline = new FabricDeadline(2_000, 2_000);
-              await contextClient.acknowledgeDelivery(noticeId, { cwd: current.service.cwd, signal: turn.signal, deadline });
-            });
-          }
-          if (!context.delivery || delivery && foveaDelivery.track(extra.requestId, delivery, extra.signal, projection.text)) projection = context.projection;
+          const context = await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars);
+          if (!context.delivery || foveaDelivery.track(extra.requestId, context.delivery, extra.signal, projection.text)) projection = context.projection;
         } finally { clearTimeout(timer); }
       }
     }

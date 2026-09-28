@@ -66,11 +66,6 @@ The native conversation identity is currently MCP-host-local. Kiro session
 routing, restoration and compaction association are not qualified and must not
 be inferred from cwd, a guest string or a cached directory.
 
-The optional trusted host session adapter (`src/kiro/host-session-adapter.ts`) provides
-in-process request/turn routing, session retirement and exact-turn delivery
-receipts for embedders that already own a supported association. It does not
-supply that missing native Kiro contract or enable managed automatic hooks.
-
 The supervisor transfers remaining durations, bounds IPC frames and queues,
 propagates cancellation, reaps child process groups and limits crash recovery.
 Graph state stays in the child; strict JSON projection and complete packet
@@ -129,10 +124,8 @@ reconciliation, and suppresses late advisories on cancellation/revocation.
 Transport write completion means emitted, not acknowledged. Foreign-only notices
 wait for a prompt; hidden/disabled configuration never becomes visible output.
 
-Managed profiles **do not activate** this collector: only an explicit trusted
-embedder `foveaPostToolContext` capability can enable it after analysis-scope and
-visible-delivery qualification. Source/built MCP tests exercise the real path,
-not native Kiro qualification. The packaged hook is still status-only; authenticated
+Only the same-call context (`KIRO_FABRIC_FOVEA_CALL_CONTEXT=1`) is wired to
+visible output; there is no post-tool collector or native hook. Authenticated
 native rendezvous, model-only output, restoration and queue-safe continuation
 remain unfinished. The isolated native CLI probe is authentication-blocked; other
 unexercised gates are untested, not proven host limitations. No invented RPC,
