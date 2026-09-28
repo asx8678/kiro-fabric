@@ -567,9 +567,9 @@ describe("strict checked workspace bootstrap", () => {
     const response = await f.call('const before = await local.read({path:"fixture.txt"}); await local.edit({path:"fixture.txt",expectedSha256:before.sha256,oldText:"source",newText:"changed"}); await local.shell({command:"exit 7"}); return true;');
     expect(response.isError).toBe(true);
     expect(fs.readFileSync(path.join(f.projects[0]!, "fixture.txt"), "utf8")).toBe("changed:project-a\n");
-    expect(response.content[0].text).toContain('"ref":"local.edit","outcome":"succeeded"');
-    expect(response.content[0].text).toContain('"effectOutcome":"uncertain"');
-    expect(response.content[0].text).toContain("never automatically retry");
+    expect(response.content[0].text).toContain("local.edit succeeded");
+    expect(response.content[0].text).toContain("(effect uncertain)");
+    expect(response.content[0].text).toContain("Inspect current state before retrying");
     expect(wire.forms).toHaveLength(1);
   });
 

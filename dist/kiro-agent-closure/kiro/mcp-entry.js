@@ -86,7 +86,7 @@ var startKiroMcpServer = () => processServerTask ??= (async () => {
       version: AST_GREP_VERSION,
       generationRoot: path2.dirname(path2.dirname(launch.astGrep))
     } : void 0;
-    const { createKiroMcpServer } = await import("../chunks/mcp-server-VJTS5I5T.js");
+    const { createKiroMcpServer } = await import("../chunks/mcp-server-RKFDJL5L.js");
     server = await createKiroMcpServer({ runtimeRoot: launch.runtimeRoot, dataRoot: launch.dataRoot, ...launch.launchWorkspaceRoot ? { launchWorkspaceRoot: launch.launchWorkspaceRoot } : {}, ...managedParser ? { managedParser } : {}, ...launch.foveaCallContext === true && managedParser ? { foveaCallContext: true } : {} });
     return server;
   } catch (error) {

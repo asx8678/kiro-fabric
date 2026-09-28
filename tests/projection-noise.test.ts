@@ -72,7 +72,7 @@ describe("decision-focused compiler diagnostics", () => {
       checkpoints: [{ id, label: "private label" }],
       audits: [{ ref: "local.shell", nestedToolCallId: "private id", startedAt: 1, endedAt: 2, success: false, effectOutcome: "uncertain" }],
     });
-    for (const required of ["execution timed out", "required diagnostic", "local.shell", "effects are uncertain", "never automatically retry", id, '"effectOutcome":"uncertain"']) expect(result.text).toContain(required);
+    for (const required of ["execution timed out", "required diagnostic", "local.shell", "effects are uncertain", "Inspect current state before retrying", id, "(effect uncertain)"]) expect(result.text).toContain(required);
     expect(result.text).not.toContain("private label"); expect(result.text).not.toContain("private id");
     expect(result.isError).toBe(true);
   });

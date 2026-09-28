@@ -27640,33 +27640,42 @@ var compactTypeErrors = (errors) => {
 };
 var READ_ONLY_REF = /^(?:local\.(?:read|readMany|readEvidence|grep|find|list)|repo\.(?:status|sketch|focus|augment|grep|dwell|impact|result|searchResult|anchors|rules|settings)|state\.(?:get|list|search)|fabric\.(?:info|help)|tools\.[A-Za-z]+|artifacts\.read|mcp\.\$(?:servers|tools|describe))$/u;
 var mayHaveEffects = (result) => result.audits.some((audit) => !READ_ONLY_REF.test(audit.ref) || audit.effectOutcome !== void 0 || audit.commitAcknowledgement !== void 0);
+var compactShellFailure = (failure) => Object.fromEntries(Object.entries(failure).filter(([key, value]) => key !== "ok" && value !== null && value !== false && value !== ""));
 var failureProgress = (result) => {
   if (result.success || !mayHaveEffects(result)) return "";
   const completed = result.audits.filter(
     (audit) => audit.endedAt !== void 0 && typeof audit.success === "boolean"
   );
   if (completed.length === 0) return "";
+  const encode2 = (audits) => {
+    const labels = [];
+    let previous = "", repeats = 0;
+    const flush = () => {
+      if (previous) labels.push(repeats > 1 ? `${previous} \xD7${repeats}` : previous);
+    };
+    for (const audit of audits) {
+      const ref = audit.ref.length <= MAX_FAILURE_PROGRESS_REF_CHARS ? audit.ref : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}\u2026`;
+      const label = `${ref} ${audit.success ? "succeeded" : "failed"}${audit.commitAcknowledgement ? " (committed)" : audit.effectOutcome === "uncertain" ? " (effect uncertain)" : ""}`;
+      if (label === previous) {
+        repeats++;
+        continue;
+      }
+      flush();
+      previous = label;
+      repeats = 1;
+    }
+    flush();
+    return labels;
+  };
   const edge = Math.floor(MAX_FAILURE_PROGRESS_ENTRIES / 2);
-  const sampled = completed.length <= MAX_FAILURE_PROGRESS_ENTRIES ? completed : [...completed.slice(0, edge), ...completed.slice(-edge)];
-  const summaries = sampled.map((audit) => ({
-    ref: audit.ref.length <= MAX_FAILURE_PROGRESS_REF_CHARS ? audit.ref : `${safePrefix(audit.ref, MAX_FAILURE_PROGRESS_REF_CHARS - 1)}\u2026`,
-    outcome: audit.success ? "succeeded" : "failed",
-    ...audit.effectOutcome ? { effectOutcome: audit.effectOutcome } : {},
-    ...audit.commitAcknowledgement ? {
-      commitAcknowledgement: { committed: true, operation: audit.commitAcknowledgement.operation }
-    } : {}
-  }));
-  const omitted = completed.length - summaries.length;
-  const succeeded = completed.filter((audit) => audit.success === true).length;
-  const committed = completed.filter((audit) => audit.commitAcknowledgement).length;
-  const uncertain = completed.filter((audit) => audit.effectOutcome === "uncertain").length;
-  const sampledCommitted = summaries.some((summary) => summary.commitAcknowledgement !== void 0);
+  const summaries = completed.length <= MAX_FAILURE_PROGRESS_ENTRIES ? encode2(completed) : [...encode2(completed.slice(0, edge)), `\u2026 ${completed.length - 2 * edge} more \u2026`, ...encode2(completed.slice(-edge))];
+  const committed = completed.some((audit) => audit.commitAcknowledgement);
+  const uncertain = completed.some((audit) => audit.effectOutcome === "uncertain");
   return [
     `
 
-Completed nested calls before the outer failure (arguments and results omitted): ${JSON.stringify({ total: completed.length, succeeded, failed: completed.length - succeeded, committed, sample: summaries, omitted })}.`,
-    ...uncertain > 0 ? ["Host command effects are uncertain; cancellation or failure is not rollback. Inspect the workspace and external state; never automatically retry the program."] : [],
-    committed > 0 ? sampledCommitted ? "A listed mutation is known committed although acknowledgement failed; inspect the affected file or durable key before retrying." : "A mutation is known committed although acknowledgement failed (not shown in the sample); inspect the affected file or durable key before retrying." : "Inspect current state before retrying fabric_exec; completed calls may already have taken effect, and a blind retry can duplicate effects."
+Nested calls: ${summaries.join(", ")}.`,
+    committed ? "A mutation is known committed although acknowledgement failed; inspect the affected file or durable key before retrying." : `Inspect current state before retrying fabric_exec; completed calls may already have taken effect${uncertain ? " and shell effects are uncertain" : ""}.`
   ].join("\n");
 };
 var MAX_RECEIPT_ENTRIES = 64;
@@ -27729,8 +27738,8 @@ var projectFabricExecutionText = (options) => {
     error: options.result.error ?? "Fabric execution failed",
     ...options.result.typeErrors ? { typeErrors: compactTypeErrors(options.result.typeErrors) } : {},
     ...failure ? { failure } : {},
-    ...options.result.lastShellFailure ? { lastShellFailure: options.result.lastShellFailure } : {},
-    effectiveTimeoutMs: options.result.effectiveTimeoutMs
+    ...options.result.lastShellFailure ? { lastShellFailure: compactShellFailure(options.result.lastShellFailure) } : {},
+    ...options.result.status === "timed_out" ? { effectiveTimeoutMs: options.result.effectiveTimeoutMs } : {}
   };
   const receipt = recoveryReceipt(options.result);
   let receiptId;
@@ -27749,10 +27758,9 @@ Fabric logs: ${JSON.stringify(options.result.logs)}` : "";
   const checkpoints = checkpointIds.length ? `
 
 Ephemeral checkpoint handles (read with artifacts.read): ${JSON.stringify(checkpointIds)}` : "";
-  const counts = receipt ? JSON.stringify(receipt.counts) : "";
-  const recoveryNotice = receipt ? `
+  const recoveryNotice = !receipt ? "" : `${progress ? "" : "\n\nInspect current state before retrying fabric_exec; started calls may already have taken effect."}${receiptId === void 0 ? "\n\nRecovery receipt (unavailable)." : `
 
-Recovery receipt${receiptId === void 0 ? " (unavailable)" : ` ${receiptId}`}: ${counts}. ${receiptId === void 0 ? "" : `Read it with await artifacts.read({ id: ${JSON.stringify(receiptId)} }). `}retryProgram: false; inspect the listed operations before rerunning.` : "";
+Recovery receipt: artifacts.read({id:${JSON.stringify(receiptId)}}).`}`;
   const recoveryHint = receipt ? `
 Recovery receipt${receiptId === void 0 ? " unavailable" : ` ${receiptId} (artifacts.read)`}; retryProgram: false.` : "";
   const complete = `${body}${logs}${progress}${recoveryNotice}${checkpoints}`;

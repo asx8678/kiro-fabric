@@ -154,7 +154,7 @@ describe("state execution acknowledgement", () => {
       expect(result.audits[0]?.commitAcknowledgement).toEqual({ version: 1, operation }); expect(publications).toBe(1);
       const text = projectFabricExecutionText({ result: { ...result, error: "execution failed" }, resultFormat: "json", maxOutputChars: 20000, writeArtifact: () => "unused" }).text;
       expect(text).toContain("known committed although acknowledgement failed");
-      expect(text.slice(text.indexOf("Completed nested calls"))).not.toContain("PRIVATE");
+      expect(text.slice(text.indexOf("Nested calls"))).not.toContain("PRIVATE");
       vi.restoreAllMocks();
       expect(await provider.invoke("list", {}, context)).toMatchObject({ revision: operation === "set" ? 1 : 2 });
       expect(await provider.invoke("get", { key: "PRIVATE-key" }, context)).toMatchObject(operation === "set" ? { value: "PRIVATE-value" } : { found: false });

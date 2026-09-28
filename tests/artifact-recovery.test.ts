@@ -136,8 +136,7 @@ describe("artifact recovery", () => {
     const allowed = ["ref", "nestedToolCallId", "outcome", "startedAt", "endedAt", "elapsedMs", "resultChars", "resultTruncated"];
     for (const entry of receipt.entries) expect(Object.keys(entry).every((key) => allowed.includes(key))).toBe(true);
     expect(receiptText).not.toContain("PRIVATE-VALUE");
-    expect(projection.text).toContain(projection.receiptId!);
-    expect(projection.text).toContain("retryProgram: false");
+    expect(projection.text).toContain(`artifacts.read({id:"${projection.receiptId!}"})`);
     store.close();
   });
   it("bounds receipt entries, counts omitted outcomes, and keeps the last operation", () => {
@@ -175,8 +174,7 @@ describe("artifact recovery", () => {
     const projection = projectFabricExecutionText({ result: { success: false, status: "timed_out", error: retention === "unavailable" ? "x".repeat(3000) : "outer timeout", logs: ["log".repeat(10000)], audits: [{ ref: "local.shell", nestedToolCallId: "fabric_a", startedAt: 1, effectOutcome: "uncertain" }], elapsedMs: 2, effectiveTimeoutMs: 100 }, resultFormat: "json", maxOutputChars: 1000, writeArtifact: text => store.write(text) });
     expect(projection).toMatchObject({ executionStatus: "timed_out", deliveryStatus: retention === "unavailable" ? "unavailable" : "artifact", retention, isError: true, retryProgram: false });
     expect(JSON.parse(store.read(projection.receiptId!).text)).toMatchObject({ executionStatus: "timed_out", counts: { uncertain: 1 } });
-    expect(projection.text).toContain(projection.receiptId!);
-    expect(projection.text).toContain("retryProgram: false");
+    expect(projection.text).toContain(`artifacts.read({id:"${projection.receiptId!}"})`);
     expect(projection.text.length).toBeLessThanOrEqual(1000);
     store.close();
   });
@@ -197,7 +195,7 @@ describe("artifact recovery", () => {
     const projection = projectFabricExecutionText({ result: { success: false, status: "failed", value: undefined, error: "outer failure", logs: [], audits: [{ ref: "local.shell", nestedToolCallId: "fabric_a", startedAt: 1, effectOutcome: "uncertain" }], elapsedMs: 2, effectiveTimeoutMs: 100 }, resultFormat: "json", maxOutputChars: 1000, writeArtifact: () => { throw new Error("store unavailable"); } });
     expect(projection.receiptId).toBeUndefined();
     expect(projection.text).toContain("Recovery receipt (unavailable)");
-    expect(projection.text).toContain("retryProgram: false");
+    expect(projection.text).toContain("Inspect current state before retrying fabric_exec");
     expect(projection.isError).toBe(true);
   });
 });

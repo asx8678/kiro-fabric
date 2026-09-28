@@ -173,7 +173,7 @@ describe("Fabric approval and projection", () => {
       expect(projected.isError).toBe(true);
       expect(projected.text).toContain(`(${reason})`);
       expect(projected.text).toContain("This action was not dispatched");
-      expect(projected.text).toContain('"succeeded":1');
+      expect(projected.text).toMatch(/Nested calls: \S+ succeeded/u);
       expect(projected.text).not.toContain("SECRET-client-detail");
       if (reason === "missing_handler") expect(projected.text).toContain("Use a client with working approval forms");
       else expect(projected.text).not.toContain("no handler for _kiro/mcp/elicitation");
@@ -246,12 +246,9 @@ describe("Fabric approval and projection", () => {
       maxOutputChars: 10_000,
       writeArtifact() { throw new Error("unexpected artifact"); },
     });
-    expect(result.text).toContain('"total":12,"succeeded":6,"failed":6');
-    expect(result.text).toContain('"ref":"state.set_0","outcome":"succeeded"');
-    expect(result.text).toContain('"ref":"state.set_1","outcome":"failed"');
-    expect(result.text).toContain('"ref":"state.late_success_');
-    expect(result.text).toContain('"outcome":"succeeded"');
-    expect(result.text).toContain('"omitted":4');
+    expect(result.text).toContain("Nested calls: state.set_0 succeeded, state.set_1 failed");
+            expect(result.text).toContain("state.late_success_");
+        expect(result.text).toContain("… 4 more …");
     expect(result.text).toContain("Inspect current state before retrying fabric_exec");
     expect(result.text).not.toContain("state.set_5");
     expect(result.text).not.toContain("memory.incomplete");
