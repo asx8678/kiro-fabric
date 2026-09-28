@@ -16,6 +16,13 @@ export class LocalShellExitError extends Error {
   }
 }
 
+export class LocalShellCleanupError extends Error {
+  constructor(message: string, readonly pid: number | undefined) {
+    super(message);
+    this.name = "LocalShellCleanupError";
+  }
+}
+
 // An allowlist, not a backend credential denylist. Never include ambient auth,
 // shell startup hooks, loader options, or language-runtime injection variables.
 export function shellEnvironment(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
@@ -44,6 +51,17 @@ async function sendGroup(pid: number, signal: NodeJS.Signals, end: number): Prom
  * bounded grace even after cancellation/deadline, and must be awaited by close.
  */
 export async function runLocalShell(options: LocalShellOptions): Promise<LocalShellResult> {
+  const isScript = typeof options.script === "string";
+  const executable = isScript && options.interpreter === "bash" ? "bash" : "/bin/sh";
+  const args = isScript
+    ? [...(executable === "bash" ? ["--noprofile", "--norc"] : []), "-c", options.script!, "fabric-script", ...(options.args ?? [])]
+    : ["-c", options.command!];
+  return runLocalProcess({ ...options, executable, args, env: shellEnvironment() });
+}
+
+export async function runLocalProcess(options: Pick<LocalShellOptions, "cwd" | "timeoutMs" | "maxOutputChars" | "signal" | "deadline" | "settle"> & {
+  executable: string; args: string[]; env: NodeJS.ProcessEnv;
+}): Promise<LocalShellResult> {
   if (process.platform !== "linux" && process.platform !== "darwin") throw new Error("Local shell requires Linux or macOS");
   const timeout = options.timeoutMs ?? 30_000;
   const budget = options.maxOutputChars ?? 24_000;
@@ -61,13 +79,8 @@ export async function runLocalShell(options: LocalShellOptions): Promise<LocalSh
   const streamLimit = Math.floor((budget - 256) / 12);
   let child;
   try {
-    const isScript = typeof options.script === "string";
-    const executable = isScript && options.interpreter === "bash" ? "bash" : "/bin/sh";
-    const args = isScript
-      ? [...(executable === "bash" ? ["--noprofile", "--norc"] : []), "-c", options.script!, "fabric-script", ...(options.args ?? [])]
-      : ["-c", options.command!];
-    child = spawn(executable, args, {
-      cwd: options.cwd, env: shellEnvironment(), detached: true,
+    child = spawn(options.executable, options.args, {
+      cwd: options.cwd, env: options.env, detached: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch { throw new Error("Local shell spawn failed"); }
@@ -115,6 +128,7 @@ export async function runLocalShell(options: LocalShellOptions): Promise<LocalSh
   } catch (error) { failure = (error as Error).message; }
   // Cleanup also runs on successful leader exit: inherited pipes/background
   // descendants must not keep a reservation alive indefinitely.
+  let cleanupFailure: string | undefined;
   try {
     if (child.pid !== undefined) {
       let alive = true;
@@ -138,14 +152,18 @@ export async function runLocalShell(options: LocalShellOptions): Promise<LocalSh
           if (!alive) break;
           await delay(Math.min(10, Math.max(0, killEnd - performance.now())));
         }
-        if (alive) failure = "Local shell cleanup uncertain";
+        if (alive) cleanupFailure = "Local shell cleanup uncertain";
       }
     }
     const closeEnd = performance.now() + 500;
     while (!closed && performance.now() < closeEnd) await delay(10);
-    if (!closed) failure = "Local shell stream closure uncertain";
-  } catch { failure = "Local shell cleanup uncertain"; }
+    if (!closed) cleanupFailure ??= "Local shell stream closure uncertain";
+  } catch { cleanupFailure = "Local shell cleanup uncertain"; }
   finally { child.stdout.destroy(); child.stderr.destroy(); }
+  if (cleanupFailure) {
+    child.unref();
+    throw new LocalShellCleanupError(cleanupFailure, child.pid);
+  }
   if (failure) throw new Error(failure);
   check();
   if (result.signal !== null || result.exitCode === null) throw new Error("Local shell terminated abnormally");

@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { canonicalPathContains } from "../kiro/canonical-path.js";
+import { LocalShellCleanupError, runLocalProcess } from "./local-shell.js";
 
 const MISSING_RG = "ripgrep (rg) is required for local.grep/local.find but was not found";
 
@@ -24,26 +25,39 @@ export function verifySearchExecutable(executable: SearchExecutable): void {
   }
 }
 
-export function resolveSearchExecutable(): SearchExecutable {
+export function resolveSearchExecutable(root = fs.realpathSync(process.cwd()), signal?: AbortSignal): Promise<SearchExecutable> {
   // Ignore relative/empty PATH components: workspace files never select rg.
   for (const directory of (process.env.PATH ?? "").split(path.delimiter)) {
     if (!path.isAbsolute(directory)) continue;
+    if (canonicalPathContains(root, path.resolve(directory, "rg"))) continue;
     let target: string;
     try { target = fs.realpathSync(path.join(directory, "rg")); }
     catch (error) {
       if (["ENOENT", "ENOTDIR"].includes((error as NodeJS.ErrnoException).code ?? "")) continue;
       throw error;
     }
+    if (canonicalPathContains(root, target)) continue;
     const stat = fs.lstatSync(target);
     const executable: SearchExecutable = { path: target, version: "", dev: stat.dev, ino: stat.ino };
     verifySearchExecutable(executable);
-    try {
-      const version = execFileSync(target, ["--no-config", "--version"], { encoding: "utf8", env: searchEnvironment(), timeout: 2000, maxBuffer: 4096, stdio: ["ignore", "pipe", "pipe"] }).split("\n")[0]!;
-      if (!/^ripgrep \d+\.\d+/u.test(version)) throw new Error("unexpected version response");
-      executable.version = version.slice(0, 200);
-      verifySearchExecutable(executable);
-      return executable;
-    } catch { throw new Error("ripgrep (rg) prerequisite check failed; install a working ripgrep executable"); }
+    return probeSearchExecutable(executable, signal);
   }
   throw new Error(MISSING_RG);
+}
+
+async function probeSearchExecutable(executable: SearchExecutable, signal?: AbortSignal): Promise<SearchExecutable> {
+  try {
+    const result = await runLocalProcess({ executable: executable.path, args: ["--no-config", "--version"],
+      cwd: path.dirname(executable.path), env: searchEnvironment(), timeoutMs: 2000, maxOutputChars: 256 + 12 * 4096,
+      ...(signal ? { signal } : {}),
+    });
+    const version = result.stdout.split("\n")[0]!;
+    if (result.truncated || !/^ripgrep \d+\.\d+/u.test(version)) throw new Error("unexpected version response");
+    executable.version = version.slice(0, 200);
+    verifySearchExecutable(executable);
+    return executable;
+  } catch (error) {
+    if (error instanceof LocalShellCleanupError) throw error;
+    throw new Error("ripgrep (rg) prerequisite check failed; install a working ripgrep executable", { cause: error });
+  }
 }

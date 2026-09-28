@@ -17,7 +17,7 @@ import { formatLocalEvidence } from "./local-evidence.js";
 import { LocalLineIndex } from "./local-line-index.js";
 import { LOCAL_MAX_FILE_BYTES, LocalNonTextError, LocalPaths, localHash, localIdentity, sameLocalIdentity } from "./local-path.js";
 import type { LocalPathSnapshot } from "./local-path.js";
-import { runLocalShell } from "./local-shell.js";
+import { LocalShellCleanupError, runLocalShell } from "./local-shell.js";
 import { initializeOwnedFile, type OwnedFile } from "./owned-file.js";
 import { FabricDeadline } from "../runtime/deadline.js";
 import { resolveSearchExecutable, verifySearchExecutable, searchEnvironment, type SearchExecutable } from "./local-executable.js";
@@ -104,11 +104,11 @@ export class LocalCodingProvider implements FabricProvider {
   readonly #searchPages = new Map<string, { key: string; fingerprint: string; result: LocalFindResult | LocalGrepResult; offset: number; expires: number }>();
   #closed = false;
   #pendingRelease: (() => void) | undefined;
-  readonly #searchExecutable: SearchExecutable;
+  #cleanupFailure: LocalShellCleanupError | undefined;
+  readonly #searchExecutable: Promise<SearchExecutable>;
 
   constructor(options: LocalProviderOptions) {
     this.#paths = new LocalPaths(options.root);
-    this.#searchExecutable = resolveSearchExecutable();
     this.#budget = Math.min(20000, options.maxResultChars ?? 20000);
     if (!Number.isSafeInteger(this.#budget) || this.#budget < 256) throw new Error("local maxResultChars must be an integer >=256");
     if (options.maxReadManyChars !== undefined && (!Number.isSafeInteger(options.maxReadManyChars) || options.maxReadManyChars < 256)) throw new Error("local maxReadManyChars must be an integer >=256");
@@ -128,10 +128,13 @@ export class LocalCodingProvider implements FabricProvider {
       const raw = rawSchemas[name]!;
       return { name, description: descriptions[name]!, inputSchema: effectful(name) ? { ...raw, properties: { ...(raw.properties as Record<string, unknown>), _localPreparation: metadataSchema, review: { type: "string", maxLength: 11000 } } } : raw, outputSchema: outputSchemas[name]!, risk: name === "shell" ? "execute" : effectful(name) ? "write" : "read", effect: { kind: effectful(name) ? "write" : "read", resources: [`local-workspace:${this.#paths.root}`] } };
     });
+    this.#searchExecutable = resolveSearchExecutable(this.#paths.root, this.#controller.signal);
+    void this.#searchExecutable.catch(error => { if (error instanceof LocalShellCleanupError) this.#cleanupFailure = error; });
   }
   discoveryRevision(): string { return "1"; }
-  async list(): Promise<FabricActionDescriptor[]> { return jsonTree(this.#descriptors); }
+  async list(): Promise<FabricActionDescriptor[]> { await this.#searchExecutable; return jsonTree(this.#descriptors); }
   async describe(name: string): Promise<FabricActionDescriptor | undefined> {
+    await this.#searchExecutable;
     const descriptor = this.#descriptors.find((item) => item.name === name);
     return descriptor ? jsonTree(descriptor) : undefined;
   }
@@ -178,6 +181,9 @@ export class LocalCodingProvider implements FabricProvider {
   async prepareArguments(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<Record<string, unknown>> {
     this.#validate(name, args);
     this.#check(context);
+    await this.#searchExecutable;
+    this.#check(context);
+    if (effectful(name) && this.#cleanupFailure) throw this.#cleanupFailure;
     const canonical = structuredClone(args);
     if (!effectful(name)) {
       if (name === "readMany" || name === "readEvidence") {
@@ -331,6 +337,7 @@ export class LocalCodingProvider implements FabricProvider {
   async reserveInvocation(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<() => void> {
     this.#check(context);
     if (!effectful(name)) return () => {};
+    if (this.#cleanupFailure) throw this.#cleanupFailure;
     try { this.#pendingRelease?.(); }
     catch (error) { throw new Error("local workspace lock unavailable; uncertain cleanup from previous invocation", { cause: error }); }
     const { token, entry } = this.#preparedEntry(name, args);
@@ -342,6 +349,7 @@ export class LocalCodingProvider implements FabricProvider {
     const release = (): void => {
       if (released) return;
       try {
+        if (this.#cleanupFailure) throw this.#cleanupFailure;
         this.#verifyLockRoot();
         if (!owned.identity) throw new Error("uncertain local lock: ownership identity unavailable; operator recovery required");
         try {
@@ -388,21 +396,30 @@ export class LocalCodingProvider implements FabricProvider {
   async #invoke(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<unknown> {
     this.#validate(name, args, effectful(name));
     this.#check(context);
+    await this.#searchExecutable;
+    this.#check(context);
     if (effectful(name)) {
+      if (this.#cleanupFailure) throw this.#cleanupFailure;
       const { entry } = this.#preparedEntry(name, args);
       if (!entry.active) throw new Error("local effect requires an active registry reservation");
       if (name === "shell") {
         if (JSON.stringify(this.#paths.directory(args.cwd as string)) !== JSON.stringify(entry.directory)) throw new Error("local shell approval cwd identity conflict");
         this.#check(context);
         const input: LocalShellInput = typeof args.command === "string" ? { command: args.command } : { script: args.script as string, interpreter: (args.interpreter ?? "sh") as "bash" | "sh", args: (args.args ?? []) as string[] };
-        const result: LocalShellResult = await runLocalShell({ ...input, cwd: args.cwd as string, maxOutputChars: this.#budget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}), ...(typeof args.settle === "boolean" ? { settle: args.settle } : {}), ...(context.deadline ? { deadline: context.deadline } : {}) });
+        let result: LocalShellResult;
+        try {
+          result = await runLocalShell({ ...input, cwd: args.cwd as string, maxOutputChars: this.#budget, signal: context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal, ...(typeof args.timeoutMs === "number" ? { timeoutMs: args.timeoutMs } : {}), ...(typeof args.settle === "boolean" ? { settle: args.settle } : {}), ...(context.deadline ? { deadline: context.deadline } : {}) });
+        } catch (error) {
+          if (error instanceof LocalShellCleanupError) this.#cleanupFailure = error;
+          throw error;
+        }
         this.#check(context);
         return this.#bounded(result);
       }
       return this.#publish(name, entry, context);
     }
     if (name === "read") {
-      const result = this.#read(args);
+      const result = this.#read(args, Math.min(this.#budget, context.maxResultChars ?? this.#budget));
       const source = { path: path.resolve(this.#paths.root, result.path), sha256: result.sha256 };
       observeFovea(context, { phase: "access", paths: [source.path], sources: [source] });
       return result;
@@ -410,7 +427,7 @@ export class LocalCodingProvider implements FabricProvider {
     if (name === "readMany" || name === "readEvidence") {
       const windows = (args.windows as LocalReadWindow[]).map(window => ({ ...window, path: this.#paths.relative(this.#readWindowPath(window.path, args.partial === true)) }));
       const budget = Math.min(this.#readManyBudget, (args.maxChars as number | undefined) ?? 32000,
-        name === "readEvidence" ? context.maxResultChars ?? this.#readManyBudget : this.#readManyBudget);
+        context.maxResultChars ?? this.#readManyBudget);
       const snapshots = new Map<string, ReturnType<LocalPaths["read"]> & { lines: LocalLineIndex }>();
       const result = readManyWindows(windows, budget, window => {
         this.#check(context);
@@ -503,9 +520,11 @@ export class LocalCodingProvider implements FabricProvider {
   async #rg(args: string[], context: FabricInvocationContext): Promise<string> {
     this.#check(context);
     const signal = context.signal ? AbortSignal.any([context.signal, this.#controller.signal]) : this.#controller.signal;
-    verifySearchExecutable(this.#searchExecutable);
+    const executable = await this.#searchExecutable;
+    this.#check(context);
+    verifySearchExecutable(executable);
     const output = await new Promise<string>((resolve, reject) => {
-      execFile(this.#searchExecutable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(10000, Math.floor(context.deadline?.remainingMs() ?? 10000))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
+      execFile(executable.path, ["--no-config", "--sort", "path", ...args], { cwd: this.#paths.root, env: searchEnvironment(), encoding: "utf8", maxBuffer: 2 * 1024 * 1024, timeout: Math.max(1, Math.min(10000, Math.floor(context.deadline?.remainingMs() ?? 10000))), killSignal: "SIGKILL", signal }, (error, stdout, stderr) => {
         if (!error || (error.code === 1 && !error.killed)) resolve(stdout);
         else if (error.code === "ENOENT") reject(new Error("ripgrep (rg) is required for local.grep/local.find but was not found"));
         else reject(new Error(`local rg failed or exceeded bounded work/output: ${String(error.code)} ${stderr.slice(0, 500)}`, { cause: error }));
@@ -521,17 +540,20 @@ export class LocalCodingProvider implements FabricProvider {
     if (relative.split("/").some(part => VCS_METADATA.has(part))) throw new Error("local search excludes VCS metadata");
     const scope = { path: relative, ...(glob ? { glob } : {}), hidden: args.hidden === true, ignoreFiles: true as const,
       ...(args.snapshotScope === "query-v1" ? { snapshotScope: "query-v1" as const } : {}) };
+    const fileRoot = base.stat?.isFile() === true;
+    const enumerationRoot = fileRoot ? path.dirname(base.path) : base.path;
     // Opting into dotfiles does not opt into repository internals or ignored data.
     const enumerationArgs = ["--files", "--null", ...(scope.hidden ? ["--hidden"] : []),
+      ...(fileRoot ? ["--max-depth", "1"] : []),
       ...[...VCS_METADATA].flatMap(name => ["--glob", `!**/${name}`, "--glob", `!**/${name}/**`])];
-    const enumeration = await this.#rg([...enumerationArgs, "--", base.path], context);
-    let files = enumeration.split("\0").filter(Boolean);
+    const enumeration = await this.#rg([...enumerationArgs, "--", enumerationRoot], context);
+    let files = enumeration.split("\0").filter(file => file && (!fileRoot || file === base.path));
     if (!glob && files.length > 10000) throw new Error("local search exceeded 10000-file work limit; narrow path or glob");
     if (glob && glob !== "**/*") {
       // The all-files manifest needs no second rg launch or executable hash.
       // Positive rg globs can override hidden/ignore rules. Intersect with the
       // normal enumeration so a glob only narrows scope, never expands it.
-      const filtered = await this.#rg([...enumerationArgs, "--glob", glob, "--", base.path], context);
+      const filtered = await this.#rg([...enumerationArgs, "--glob", glob, "--", enumerationRoot], context);
       const selected = new Set(filtered.split("\0").filter(Boolean));
       files = files.filter((file) => selected.has(file));
     }
@@ -619,13 +641,11 @@ export class LocalCodingProvider implements FabricProvider {
   }
   async #searchFingerprint(name: string, args: Record<string, unknown>, context: FabricInvocationContext): Promise<string> {
     const base = this.#paths.check((args.path as string | undefined) ?? ".");
-    const enumerationArgs = ["--files", "--null", ...(args.hidden ? ["--hidden"] : []), ...[...VCS_METADATA].flatMap(name => ["--glob", `!**/${name}`, "--glob", `!**/${name}/**`]), "--", base.path];
     // Default retains the whole-enumeration contract. Query-v1 explicitly
     // binds only glob-selected files (including nonmatching grep candidates).
     // Re-enumeration still applies hidden/ignore/VCS rules on every page.
-    const enumerate = async (): Promise<string> => args.snapshotScope === "query-v1"
-      ? (await this.#selectSearch(name, args, context)).files.join("\0")
-      : this.#rg(enumerationArgs, context);
+    const enumerate = async (): Promise<string> => (await this.#selectSearch(name,
+      args.snapshotScope === "query-v1" ? args : { ...args, pattern: "**/*", glob: undefined }, context)).files.join("\0");
     const output = await enumerate();
     const files = output.split("\0").filter(Boolean);
     if (files.length > 10000) throw new Error("local snapshot exceeds 10000-file work limit");
@@ -680,19 +700,31 @@ export class LocalCodingProvider implements FabricProvider {
     const records = "paths" in result ? result.paths : result.matches;
     const all = "paths" in entry.result ? entry.result.paths : entry.result.matches;
     const next = randomUUID();
-    result.nextCursor = next;
-    result.truncated = true;
-    result.truncationReasons = [...(entry.result.truncationReasons ?? []), "count", "output"];
     let offset = entry.offset;
-    while (offset < all.length && records.length < ((args.limit as number | undefined) ?? 100)) {
-      const record = all[offset]!;
-      (records as unknown[]).push(typeof record === "string" ? record : { ...record });
-      if (!this.#fits(result)) { records.pop(); break; }
-      offset++;
+    const limit = (args.limit as number | undefined) ?? 100;
+    if (all.length - offset <= limit) {
+      for (const record of all.slice(offset)) (records as unknown[]).push(typeof record === "string" ? record : { ...record });
+      result.truncated = entry.result.truncated;
+      result.scopeExhausted = entry.result.scopeExhausted;
+      if (entry.result.truncationReasons?.length) result.truncationReasons = [...entry.result.truncationReasons];
+      if (this.#fits(result)) offset = all.length;
+      else records.length = 0;
+    }
+    if (offset < all.length) {
+      result.nextCursor = next;
+      result.truncated = true;
+      result.scopeExhausted = false;
+      result.truncationReasons = [...(entry.result.truncationReasons ?? []), "count", "output"];
+      while (offset < all.length && records.length < limit) {
+        const record = all[offset]!;
+        (records as unknown[]).push(typeof record === "string" ? record : { ...record });
+        if (!this.#fits(result)) { records.pop(); break; }
+        offset++;
+      }
     }
     if (offset === entry.offset && offset < all.length) throw new Error("local search record exceeds output budget; cannot advance cursor");
     result.truncationReasons = [...(entry.result.truncationReasons ?? [])];
-    if (offset < all.length) result.truncationReasons.push(records.length === ((args.limit as number | undefined) ?? 100) ? "count" : "output");
+    if (offset < all.length) result.truncationReasons.push(records.length === limit ? "count" : "output");
     else delete result.nextCursor;
     result.truncated = result.truncationReasons.length > 0;
     result.scopeExhausted = !result.truncated;
@@ -777,9 +809,10 @@ export class LocalCodingProvider implements FabricProvider {
     this.#searchPages.clear();
     this.#closed = true;
     this.#controller.abort(new Error("local provider closed"));
-    await Promise.allSettled([...this.#pending]);
+    await Promise.allSettled([this.#searchExecutable, ...this.#pending]);
     // Approval reservations are released by the registry, not by close while
     // a human prompt or process cleanup is still outstanding.
     for (const [token, entry] of this.#prepared) if (!entry.active) this.#prepared.delete(token);
+    if (this.#cleanupFailure) throw new Error("local provider shutdown failed; unresolved process cleanup requires operator recovery", { cause: this.#cleanupFailure });
   }
 }
