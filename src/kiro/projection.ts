@@ -19,6 +19,7 @@ export interface KiroProjectionResult {
   artifactRetained: boolean;
   retention: "inline" | "complete" | "canonical" | "unavailable";
   checkpointIds?: readonly string[];
+  retentionLoss?: { checkpoints: number; receipt: boolean; output: boolean };
 }
 const MAX_FAILURE_PROGRESS_ENTRIES = 8;
 const MAX_FAILURE_PROGRESS_REF_CHARS = 512;
@@ -158,12 +159,17 @@ export const projectFabricExecutionText = (options: {
   resultFormat: FabricExecResultFormat;
   maxOutputChars: number;
   writeArtifact(content: string): string;
+  retained?: KiroProjectionResult;
+  hasArtifact?(id: string): boolean;
 }): KiroProjectionResult => {
   const visibleMaximum = options.result.success
     ? options.maxOutputChars
     : Math.min(options.maxOutputChars, MAX_FAILURE_OUTPUT_CHARS);
-  const checkpointIds = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8)
+  const issuedCheckpoints = [...new Set((options.result.checkpoints ?? options.result.failure?.checkpoints ?? []).slice(0, 8)
     .map(handle => handle.id).filter(id => /^ka_[a-f0-9]{48}$/u.test(id)))];
+  const available = (id: string): boolean => options.hasArtifact?.(id) ?? true;
+  const checkpointIds = issuedCheckpoints.filter(available);
+  const retained = options.retained;
   const failure = options.result.failure ? { ...options.result.failure,
     ...(options.result.failure.checkpoints ? { checkpoints: checkpointIds.map(id => ({ id })) } : {}),
   } : undefined;
@@ -178,11 +184,21 @@ export const projectFabricExecutionText = (options: {
         ...(options.result.status === "timed_out" ? { effectiveTimeoutMs: options.result.effectiveTimeoutMs } : {}),
       };
   const receipt = recoveryReceipt(options.result);
-  let receiptId: string | undefined;
-  if (receipt) {
+  let receiptId = retained?.receiptId;
+  if (receipt && !retained) {
     try { receiptId = options.writeArtifact(JSON.stringify(receipt)); }
     catch { receiptId = undefined; }
   }
+  const retentionLoss = {
+    checkpoints: issuedCheckpoints.length - checkpointIds.length,
+    receipt: receiptId !== undefined && !available(receiptId),
+    output: retained?.artifactId !== undefined && !available(retained.artifactId),
+  };
+  if (retentionLoss.receipt) receiptId = undefined;
+  const lost = retentionLoss.checkpoints > 0 || retentionLoss.receipt || retentionLoss.output;
+  const retentionNotice = lost
+    ? `\n\nEphemeral evidence unavailable: ${[retentionLoss.checkpoints ? `${retentionLoss.checkpoints} checkpoint(s)` : "", retentionLoss.receipt ? "recovery receipt" : "", retentionLoss.output ? "full output" : ""].filter(Boolean).join(", ")}.`
+    : "";
   const body = stringify(value, options.resultFormat);
   const logs = options.result.logs.length
     ? `\n\nFabric logs: ${JSON.stringify(options.result.logs)}`
@@ -197,33 +213,41 @@ export const projectFabricExecutionText = (options: {
     ? `\nRecovery receipt${receiptId === undefined ? " unavailable" : ` ${receiptId} (artifacts.read)`}; retryProgram: false.`
     : "";
   const complete = `${body}${logs}${progress}${recoveryNotice}${checkpoints}`;
-  if (complete.length <= visibleMaximum) return {
-    text: complete,
+  const inline = complete + retentionNotice;
+  if (inline.length <= visibleMaximum && (retained?.artifactId === undefined || retentionLoss.output)) return {
+    text: inline,
     isError: !options.result.success,
     executionStatus: options.result.status,
     deliveryStatus: "inline",
     retryProgram: false,
     ...(receiptId === undefined ? {} : { receiptId }),
-    visibleChars: complete.length,
-    visibleBytes: Buffer.byteLength(complete, "utf8"),
+    visibleChars: inline.length,
+    visibleBytes: Buffer.byteLength(inline, "utf8"),
     overflowed: false,
     artifactRetained: false,
     retention: "inline",
     checkpointIds,
+    ...(lost ? { retentionLoss } : {}),
   };
   try {
     let artifactId: string;
     let retention: "complete" | "canonical" = "complete";
-    try { artifactId = options.writeArtifact(complete); }
-    catch {
-      // Retry serialization/retention only: NEVER execute the program or a provider again.
-      // Compact JSON removes formatting expansion and auxiliary sections at the store cap.
-      const canonical = JSON.stringify(value) ?? "null";
-      artifactId = options.writeArtifact(canonical);
-      retention = "canonical";
+    if (retained) {
+      if (retained.artifactId === undefined || retentionLoss.output) throw new Error("output artifact unavailable");
+      artifactId = retained.artifactId;
+      retention = retained.retention === "canonical" ? "canonical" : "complete";
+    } else {
+      try { artifactId = options.writeArtifact(complete); }
+      catch {
+        // Retry serialization/retention only: NEVER execute the program or a provider again.
+        // Compact JSON removes formatting expansion and auxiliary sections at the store cap.
+        const canonical = JSON.stringify(value) ?? "null";
+        artifactId = options.writeArtifact(canonical);
+        retention = "canonical";
+      }
     }
     const hint = `\n\nOutput exceeded ${visibleMaximum} characters. ${retention === "complete" ? "Full result" : "Canonical JSON result (formatting/logs/progress omitted)"} is artifact ${artifactId}; read it with await artifacts.read({ id: ${JSON.stringify(artifactId)} }).`;
-    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}`);
+    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}${retentionNotice}`);
     return {
       text,
       isError: !options.result.success,
@@ -238,10 +262,11 @@ export const projectFabricExecutionText = (options: {
       artifactRetained: true,
       retention,
       checkpointIds,
+      ...(lost ? { retentionLoss } : {}),
     };
   } catch {
     const hint = `\n\nOutput could not be retained; execution: ${options.result.status}; delivery: unavailable; retryProgram: false. Effects may already be applied; inspect state.`;
-    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}`);
+    const text = truncateWithHint(complete, visibleMaximum, `${hint}${recoveryHint}${retentionNotice}`);
     return {
       text,
       isError: true,
@@ -255,6 +280,7 @@ export const projectFabricExecutionText = (options: {
       artifactRetained: false,
       retention: "unavailable",
       checkpointIds,
+      ...(lost ? { retentionLoss } : {}),
     };
   }
 };

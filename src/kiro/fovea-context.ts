@@ -29,12 +29,16 @@ export async function collectFoveaContext(collect: (context: FabricInvocationCon
 
 /** Bounded request-to-transport ledger; a handler return is NOT emission. */
 export class FoveaResponseDelivery {
-  readonly #pending = new Map<string | number, { claim: FoveaDeliveryClaim; originalText: string; dispose(): void }>();
+  readonly #pending = new Map<string | number, { claim: FoveaDeliveryClaim; originalText: string; advisoryText: string; dispose(): void }>();
   track(id: string | number, claim: FoveaDeliveryClaim, signal: AbortSignal, originalText: string): boolean {
     if (signal.aborted || this.#pending.size >= 64 || this.#pending.has(id)) { claim.cancel(); return false; }
-    const abort = (): void => { claim.cancel(); };
+    const abort = (): void => {
+      this.#pending.delete(id);
+      signal.removeEventListener("abort", abort);
+      claim.cancel();
+    };
     signal.addEventListener("abort", abort, { once: true });
-    this.#pending.set(id, { claim, originalText, dispose: () => signal.removeEventListener("abort", abort) });
+    this.#pending.set(id, { claim, originalText, advisoryText: originalText + HEADER + claim.notices.map(n => n.text).join("\n"), dispose: () => signal.removeEventListener("abort", abort) });
     return true;
   }
   async send<T>(message: T, write: (message: T) => Promise<void>): Promise<void> {
@@ -42,18 +46,21 @@ export class FoveaResponseDelivery {
     const id = response && (typeof response.id === "string" || typeof response.id === "number") ? response.id : undefined;
     const pending = id !== undefined && response && ("result" in response || "error" in response) ? this.#pending.get(id) : undefined;
     if (pending && id !== undefined) { this.#pending.delete(id); pending.dispose(); }
-    const eligible = pending?.claim.isCurrent() === true;
+    const result = response?.result && typeof response.result === "object" ? response.result as Record<string, unknown> : undefined;
+    const content = Array.isArray(result?.content) ? result.content : undefined;
+    const included = pending !== undefined && content?.[0]?.type === "text" && content[0].text === pending.advisoryText;
+    const eligible = included && pending.claim.isCurrent();
+    if (!eligible) pending?.claim.cancel();
     let outgoing = message;
     // Revocation/cancellation between projection and transport suppresses only
     // the advisory. Keep the original result/error and recovery metadata intact.
-    if (pending && !eligible && response && "result" in response && response.result && typeof response.result === "object") {
-      const result = response.result as Record<string, unknown>;
-      if (Array.isArray(result.content)) outgoing = { ...response, result: { ...result, content: result.content.map((entry, i) => i === 0 ? { ...entry, text: pending.originalText } : entry) } } as T;
+    if (included && !eligible) {
+      outgoing = { ...response, result: { ...result, content: content!.map((entry, i) => i === 0 ? { ...entry, text: pending.originalText } : entry) } } as T;
     }
     try {
       await write(outgoing);
-      if (eligible && response && "result" in response) pending?.claim.emitted(); else pending?.claim.cancel();
-    } catch (error) { pending?.claim.uncertain(); throw error; }
+      if (eligible) pending.claim.emitted();
+    } catch (error) { if (eligible) pending?.claim.uncertain(); throw error; }
   }
   close(): void { for (const pending of this.#pending.values()) { pending.dispose(); pending.claim.cancel(); } this.#pending.clear(); }
 }

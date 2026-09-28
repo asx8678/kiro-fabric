@@ -9,6 +9,7 @@ import { fabricExecInputSchemaJson } from "../kernel/fabric-exec-contract.js";
 import { FoveaHost, type FoveaBoundClient } from "../fovea/host.js";
 import type { FoveaParserDescriptor } from "../fovea/protocol.js";
 import { DISABLED_TRACER, createFabricTracer, resolveTraceEnabled, type FabricTracer } from "../trace/tracer.js";
+import { validateTraceDirectory } from "../trace/trace-directory.js";
 import { FoveaResponseDelivery } from "./fovea-context.js";
 import { inspectCanonicalPath } from "./canonical-path.js";
 import { KiroPowerApprover, kiroElicitationFailureReason } from "./power/approver.js";
@@ -19,7 +20,7 @@ import type { KiroRuntime, KiroRuntimeOptions } from "./runtime.js";
 import { buildRunProvenance, parseRunProvenanceDeclaration, type RunProvenanceInput } from "./run-provenance.js";
 import { createMcpSession } from "./mcp-session.js";
 import { attemptCleanup } from "./mcp-session-lifecycle.js";
-import { isRecord, supportsKiroElicitation, toolError } from "./mcp-response.js";
+import { bounded, isRecord, supportsKiroElicitation, toolError } from "./mcp-response.js";
 
 const EXEC_DESCRIPTION = "Kiro Fabric Code Mode: checked TypeScript; await, then return only what you need (strings print as text). Navigator: repo.sketch/focus/impact->{text,reads,coverage,truncated}; repo.focusRead({query})->{navigation:{text,...},sources:{files:[{path,sha256,source}],remaining}|null,deferredReads}. local.read({path,offset?,limit?})->{text,sha256,totalLines,truncated,nextOffset?}. local.readMany({windows,maxChars?,partial?})->{files,remaining,complete,unreadTails}. local.grep({pattern,path?,glob?,literal?,limit?})->{matches:[{path,line,text}],truncated}; local.find({pattern,path?,limit?}). local.edit({path,expectedSha256,oldText,newText,all?}); local.write overwrite needs expectedSha256. local.shell({command,settle:true})->{ok,exitCode,stdout,stderr,truncated}. APIs: tools.search, tools.describe, fabric.help.";
 const MCP_INSTANCE_ID = `fmcp_${randomBytes(16).toString("hex")}`;
@@ -64,8 +65,9 @@ const TRACE_FILE_NAME = /^fabric-\d+-[a-z0-9]+\.jsonl$/u;
 /** Best-effort trace hygiene: keep only the newest few trace files and
  * nothing older than a week. Never touches non-trace entries or symlinks;
  * failure never blocks startup. */
-const sweepTraceDirectory = (directory: string): void => {
+const sweepTraceDirectory = (directory: string, dataRoot: string): void => {
   try {
+    directory = validateTraceDirectory(directory, dataRoot);
     const now = Date.now();
     const candidates = fs.readdirSync(directory, { withFileTypes: true })
       .filter((entry) => entry.isFile() && !entry.isSymbolicLink() && TRACE_FILE_NAME.test(entry.name))
@@ -77,7 +79,10 @@ const sweepTraceDirectory = (directory: string): void => {
       .sort((left, right) => right.mtimeMs - left.mtimeMs);
     candidates.forEach((entry, index) => {
       if (index < TRACE_RETENTION_MAX_FILES && now - entry.mtimeMs <= TRACE_RETENTION_MAX_AGE_MS) return;
-      try { fs.rmSync(path.join(directory, entry.name), { force: true }); } catch { /* best effort */ }
+      try {
+        validateTraceDirectory(directory, dataRoot);
+        fs.rmSync(path.join(directory, entry.name), { force: true });
+      } catch { /* best effort */ }
     });
   } catch { /* missing directory or unreadable entries: nothing to sweep */ }
 };
@@ -96,9 +101,9 @@ const createAgentTracer = (data: { root: string; configFile: string }, version: 
   if (!resolveTraceEnabled(process.env.KIRO_FABRIC_DEBUG, configured)) return DISABLED_TRACER;
   try {
     const directory = path.join(data.root, "traces");
-    sweepTraceDirectory(directory);
+    sweepTraceDirectory(directory, data.root);
     const file = path.join(directory, `fabric-${process.pid}-${Date.now().toString(36)}.jsonl`);
-    const tracer = createFabricTracer({ file });
+    const tracer = createFabricTracer({ file, dataRoot: data.root });
     tracer.event("init", "agent.mcp.start", undefined, {
       product: "kiro-fabric-agent",
       version,
@@ -132,51 +137,8 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     configured: options.runProvenance?.configured ?? parseRunProvenanceDeclaration(process.env.KIRO_FABRIC_RUN_DECLARATION) ?? {},
     observed: { ...options.runProvenance?.observed, runtimeVersion: version },
   });
-  const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
-  const data = prepareKiroPowerDataPaths(options.dataRoot);
-  const tracer = createAgentTracer(data, version);
-  // Process owner lives above replaceable workspace runtimes. Construction is
-  // idle: no parser child or indexing starts until an authorized analysis query.
-  const fovea = new FoveaHost({ dataRoot: data.root, configFile: path.join(data.config, "fovea.v1.json"),
-    ...(options.managedParser ? { parser: options.managedParser } : {}),
-    entrypoint: path.join(options.runtimeRoot, "fovea", "engine-entry.js") });
-  const foveaClients = new WeakMap<KiroRuntime, FoveaBoundClient>();
-  const foveaDelivery = new FoveaResponseDelivery();
-  const fabricApprover = new KiroPowerApprover({
-    supported: () => supportsKiroElicitation(server.getClientCapabilities()),
-    request: async ({ title: _title, message, signal, timeoutMs }) => {
-      const elicitationId = `form_${randomBytes(8).toString("hex")}`;
-      if (tracer.enabled) {
-        tracer.event("eval", "approval.form.request", undefined, { elicitationId });
-        tracer.flush();
-      }
-      try {
-        const result = await server.elicitInput({
-          mode: "form",
-          message,
-          requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] },
-        }, { ...(signal ? { signal } : {}), timeout: timeoutMs });
-        const approved = isRecord(result.content) && result.content.approved === true;
-        if (tracer.enabled) {
-          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: result.action, approved });
-          tracer.flush();
-        }
-        return { action: result.action, ...(approved ? { approved: true } : {}) };
-      } catch (error) {
-        if (tracer.enabled) {
-          tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: "error", approved: false, reason: kiroElicitationFailureReason(error) });
-          tracer.flush();
-        }
-        throw error;
-      }
-    },
-  });
+  const cleanup: Array<() => unknown> = [];
   let serverClosing = false;
-  const session = createMcpSession({
-    options, server, data, kiroHome, version, runProvenance, tracer, fovea, foveaClients,
-    foveaDelivery, fabricApprover, serverClosing: () => serverClosing,
-    identity: { id: MCP_INSTANCE_ID, parentPid: MCP_PARENT_PID, startedAt: MCP_STARTED_AT },
-  });
   let closeTask: Promise<void> | undefined;
   const close = (): Promise<void> => {
     if (closeTask) return closeTask;
@@ -186,16 +148,68 @@ export const createKiroMcpServer = async (options: KiroMcpServerOptions): Promis
     closeTask = new Promise<void>((yes, no) => { resolve = yes; reject = no; });
     void (async () => {
       const failures: unknown[] = [];
-      await attemptCleanup(failures, () => session.close());
-      await attemptCleanup(failures, () => foveaDelivery.close());
-      await attemptCleanup(failures, () => fovea.close());
-      await attemptCleanup(failures, () => server.close());
-      await attemptCleanup(failures, () => tracer.close());
+      for (const operation of cleanup) await attemptCleanup(failures, operation);
       if (failures.length) throw new AggregateError(failures, "MCP server shutdown failed");
     })().then(resolve, reject);
     return closeTask;
   };
   try {
+    const server = new Server({ name: "kiro-fabric", version }, { capabilities: { tools: {} } });
+    cleanup.push(() => server.close());
+    const data = prepareKiroPowerDataPaths(options.dataRoot);
+    const tracer = createAgentTracer(data, version);
+    cleanup.push(() => tracer.close());
+    // Process owner lives above replaceable workspace runtimes. Construction is
+    // idle: no parser child or indexing starts until an authorized analysis query.
+    const fovea = new FoveaHost({ dataRoot: data.root, configFile: path.join(data.config, "fovea.v1.json"),
+      ...(options.managedParser ? { parser: options.managedParser } : {}),
+      entrypoint: path.join(options.runtimeRoot, "fovea", "engine-entry.js") });
+    cleanup.unshift(() => fovea.close());
+    const foveaClients = new WeakMap<KiroRuntime, FoveaBoundClient>();
+    const foveaDelivery = new FoveaResponseDelivery();
+    cleanup.unshift(() => foveaDelivery.close());
+    const fabricApprover = new KiroPowerApprover({
+      supported: () => supportsKiroElicitation(server.getClientCapabilities()),
+      request: async ({ title: _title, message, signal, timeoutMs }) => {
+        const elicitationId = `form_${randomBytes(8).toString("hex")}`;
+        if (tracer.enabled) {
+          tracer.event("eval", "approval.form.request", undefined, { elicitationId });
+          tracer.flush();
+        }
+        try {
+          const result = await server.elicitInput({
+            mode: "form",
+            message,
+            requestedSchema: { type: "object", properties: { approved: { type: "boolean", title: "Approve once", default: false } }, required: ["approved"] },
+          }, { ...(signal ? { signal } : {}), timeout: timeoutMs });
+          const approved = isRecord(result.content) && result.content.approved === true;
+          if (tracer.enabled) {
+            tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: result.action, approved });
+            tracer.flush();
+          }
+          return { action: result.action, ...(approved ? { approved: true } : {}) };
+        } catch (error) {
+          if (tracer.enabled) {
+            tracer.event("eval", "approval.form.response", undefined, { elicitationId, action: "error", approved: false, reason: kiroElicitationFailureReason(error) });
+            tracer.flush();
+          }
+          throw error;
+        }
+      },
+    });
+    const session = createMcpSession({
+      options, server, data, kiroHome, version, runProvenance, tracer, fovea, foveaClients,
+      foveaDelivery, fabricApprover, serverClosing: () => serverClosing,
+      identity: { id: MCP_INSTANCE_ID, parentPid: MCP_PARENT_PID, startedAt: MCP_STARTED_AT },
+    });
+    cleanup.unshift(() => session.close());
+    server.onclose = () => {
+      if (serverClosing) return;
+      void close().catch(error => {
+        process.stderr.write(`kiro-fabric Agent MCP shutdown failed: ${bounded(error, "unknown failure")}\n`);
+      });
+      if (process.stdin.listenerCount("data") === 0) process.stdin.destroy();
+    };
     server.setNotificationHandler(RootsListChangedNotificationSchema, async () => {
       if (serverClosing) throw new Error("Agent MCP server is shutting down");
       await session.refresh(true);

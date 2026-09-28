@@ -6,7 +6,7 @@ import { FABRIC_COMPILER_TIMEOUT_MS, effectiveFabricTimeout } from "../execution
 import { fabricExecInputSchema, prepareFabricExecArguments, type FabricExecInput } from "../kernel/fabric-exec-contract.js";
 import { fabricPayloadsLimitError, fabricSourceLimitError, MAX_EXECUTOR_SOURCE_BYTES } from "../runtime/source-limit.js";
 import { FabricDeadline } from "../runtime/deadline.js";
-import { FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS } from "../fovea/call-context.js";
+import { FOVEA_CALL_COLLECTION_MS, FOVEA_CALL_RESERVE_MS, FOVEA_CALL_WARM_MS, type FoveaDeliveryClaim } from "../fovea/call-context.js";
 import type { FoveaBoundClient } from "../fovea/host.js";
 import type { FabricArtifactAccess } from "../protocol.js";
 import type { FabricTracer } from "../trace/tracer.js";
@@ -98,6 +98,7 @@ export const callMcpExecution = async (
   if (extra.signal.aborted) cancel(); else extra.signal.addEventListener("abort", cancel, { once: true });
   let execution: ActiveExecution | undefined;
   let timer: NodeJS.Timeout | undefined;
+  let delivery: FoveaDeliveryClaim | undefined;
   const outerStarted = performance.now();
   let outerDeadline = 0;
   const scheduleOuterDeadline = (guestTimeoutMs: number): void => {
@@ -183,11 +184,11 @@ export const callMcpExecution = async (
     // Retention starts after transition settlement. A delivery failure cannot
     // roll back an already committed switch or replay an executed program.
     const publicationHandles: string[] = [];
-    let projection = projectFabricExecutionText({
+    const projectionOptions = {
       result,
       resultFormat: input.resultFormat ?? current.service.config.executor.resultFormat,
       maxOutputChars: current.service.config.executor.maxOutputChars - (pendingMutation ? WORKSPACE_TRANSITION_RESERVE_CHARS : 0),
-      writeArtifact: (content) => {
+      writeArtifact: (content: string) => {
         assertAvailable();
         // A full-output write must not evict the receipt just issued by this
         // same projection. If both cannot fit, report unavailable delivery.
@@ -195,7 +196,9 @@ export const callMcpExecution = async (
         publicationHandles.push(id);
         return id;
       },
-    });
+    };
+    let projection = projectFabricExecutionText(projectionOptions);
+    let advisoryText = "";
     // Optional analysis must not turn an approved write or one-time read
     // into an unapproved repository-wide read. Skip ask/deny without prompting.
     if (contextClient && callObservations && !pendingMutation && current.service.config.approvals.read === "allow") {
@@ -208,7 +211,8 @@ export const callMcpExecution = async (
         try {
           const invocation = { cwd: current.service.cwd, signal: AbortSignal.any([controller.signal, automatic.signal]), deadline: new FabricDeadline(remaining, remaining) };
           const context = await collectFoveaCallContext(contextClient, callObservations, projection, invocation, current.service.config.executor.maxOutputChars);
-          if (!context.delivery || foveaDelivery.track(extra.requestId, context.delivery, extra.signal, projection.text)) projection = context.projection;
+          delivery = context.delivery;
+          advisoryText = context.projection.text.slice(projection.text.length);
         } finally { clearTimeout(timer); }
       }
     }
@@ -216,19 +220,17 @@ export const callMcpExecution = async (
     // receipt at a very small quota. Never advertise an already-invalid host
     // handle. Arbitrary guest-returned strings are not artifact authority.
     const handles = [projection.artifactId, projection.receiptId, ...(projection.checkpointIds ?? [])].filter((id): id is string => id !== undefined);
-    if (handles.length && (sessionLifecycle.unavailable() || handles.some(id => !artifacts.has(id)))) {
-      projection.text = `Ephemeral output evidence became unavailable before delivery; execution: ${result.status}; delivery: unavailable; retryProgram: false. Effects may already be applied; inspect state.`;
-      projection.isError = true;
-      projection.deliveryStatus = "unavailable";
-      projection.artifactRetained = false;
-      projection.retention = "unavailable";
-      delete projection.artifactId;
-      delete projection.receiptId;
-      projection.checkpointIds = [];
+    const unavailable = new Set(handles.filter(id => sessionLifecycle.unavailable() || !artifacts.has(id)));
+    if (unavailable.size) {
+      projection = projectFabricExecutionText({ ...projectionOptions, retained: projection, hasArtifact: id => !unavailable.has(id) });
     }
     if (workspaceTransition) {
       projection.text += workspaceTransitionText(workspaceTransition);
       if (workspaceTransition.status !== "committed") projection.isError = true;
+    }
+    if (delivery && !projection.isError && advisoryText && projection.text.length + advisoryText.length <= current.service.config.executor.maxOutputChars) {
+      if (foveaDelivery.track(extra.requestId, delivery, extra.signal, projection.text)) projection.text += advisoryText;
+      delivery = undefined;
     }
     projection.visibleChars = projection.text.length;
     projection.visibleBytes = Buffer.byteLength(projection.text, "utf8");
@@ -249,6 +251,7 @@ export const callMcpExecution = async (
         executionStatus: projection.executionStatus,
         deliveryStatus: projection.deliveryStatus,
         retryProgram: projection.retryProgram,
+        ...(projection.retentionLoss ? { retentionLoss: projection.retentionLoss } : {}),
         ...(workspaceTransition ? { workspaceTransition } : {}),
         ...(projection.checkpointIds?.length ? { checkpointIds: projection.checkpointIds } : {}),
         ...(projection.receiptId === undefined ? {} : { receiptId: projection.receiptId }),
@@ -258,6 +261,7 @@ export const callMcpExecution = async (
     };
   } catch (error) { return tracedError("adapter_error", error); }
   finally {
+    delivery?.cancel();
     if (timer) clearTimeout(timer);
     if (execution) { releaseExecution(execution); }
     extra.signal.removeEventListener("abort", cancel);
