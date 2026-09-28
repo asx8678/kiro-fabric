@@ -3,11 +3,13 @@ import { isAbsolute, join, relative, sep } from 'node:path';
 import { createHash } from 'node:crypto';
 import { discoveryExclusionReason, filterSupported, isGeneratedSourceBytes } from './core/build.js';
 import { sha256 } from './parser-executable.js';
+import { FOVEA_SCRATCH_MAX_ENTRIES } from './scratch-owner.js';
 import {
   assertSourceComponent, openSourceDirectory, readSourceBounded, sourceLimit,  type SourceHandle, type SourcePlatform, type SourceStat,
 } from './source-platform.js';
 
 export interface SourceSnapshot { id: string; root: string; hashes: Map<string, string>; coverage: Record<string, unknown> }
+export interface SourceRoot { path: string; deviceId: string; fileId: string; handle: SourceHandle }
 export interface SnapshotOptions {
   maxFiles?: number; maxFileBytes?: number; maxBytes?: number; exclude?: string[]; trustedRulesSha256?: string | undefined;
   /** Private previous snapshot only. Live bytes are still hashed; matching trees skip a second copy. */
@@ -25,13 +27,23 @@ function unchangedFile(before: SourceStat, after: SourceStat, length: number): b
 export class SourceAccess {
   constructor(private readonly platform: SourcePlatform) {}
 
+  async openRoot(root: string, expected: { deviceId: string; fileId: string }, signal?: AbortSignal): Promise<SourceRoot> {
+    const handle = await openSourceDirectory(this.platform, root, signal);
+    try {
+      const identity = await handle.stat();
+      if (!identity.isDirectory() || !Number.isSafeInteger(identity.dev) || !Number.isSafeInteger(identity.ino) || String(identity.dev) !== expected.deviceId || String(identity.ino) !== expected.fileId) throw new Error('Navigator authorized filesystem identity changed');
+      signal?.throwIfAborted();
+      return { path: root, deviceId: String(identity.dev), fileId: String(identity.ino), handle };
+    } catch (error) { await handle.close(); throw error; }
+  }
+
   /** Exact byte snapshots; destination must be a fresh, host-owned private
    * staging directory (the engine uses mkdtemp). No live-source path reopens.
    * Admitted bytes stream to the staging tree one file at a time, so retained
    * live memory is bounded by one bounded file read rather than the whole
    * admitted tree; unchanged files relative to a pinned previous snapshot
    * are reassembled from that private tree, never from live source paths. */
-  async captureSourceSnapshot(root: string, destination: string, signal?: AbortSignal, options: SnapshotOptions = {}): Promise<SourceSnapshot> {
+  async captureSourceSnapshot(root: string | SourceRoot, destination: string, signal?: AbortSignal, options: SnapshotOptions = {}): Promise<SourceSnapshot> {
     const maxFiles = sourceLimit(options.maxFiles, 8_000, 'files');
     const maxFileBytes = sourceLimit(options.maxFileBytes, 8 * 1024 * 1024, 'file bytes');
     const maxBytes = sourceLimit(options.maxBytes, 128 * 1024 * 1024, 'total bytes');
@@ -42,6 +54,8 @@ export class SourceAccess {
     // Files whose live bytes were streamed into the staging tree. Unchanged
     // paths (relative to a pinned previous snapshot) keep metadata only.
     const staged = new Set<string>();
+    const directories = new Set<string>();
+    let stagedEntries = 1;
     const capFor = (path: string): number =>
       Math.min(maxFileBytes, /\.(?:proto|graphql|gql)$/i.test(path) ? 8 * 1024 * 1024 : 1024 * 1024);
     // Pin the previous host-owned private snapshot before relying on it; an
@@ -107,6 +121,12 @@ export class SourceAccess {
           if (!filterSupported([path], routePatterns).length && !/\.(?:svelte|mdx|astro|vue)$/i.test(path)) { report('unsupported', path); continue; }
           const cap = capFor(path);
           if (before.size > cap) { report('oversized', path); continue; }
+          const parents: string[] = [];
+          for (let slash = path.indexOf('/'); slash >= 0; slash = path.indexOf('/', slash + 1)) {
+            const parent = path.slice(0, slash);
+            if (!directories.has(parent)) parents.push(parent);
+          }
+          if (stagedEntries + parents.length + 1 > FOVEA_SCRATCH_MAX_ENTRIES) { capped = true; report('entryCap', path); continue; }
           const data = await readSourceBounded(handle, cap, signal);
           if (!data) { report('oversized', path); continue; }
           const after = await handle.stat();
@@ -124,6 +144,8 @@ export class SourceAccess {
           }
           if (isGeneratedSourceBytes(path, data)) report('generated', path);
           const hash = sha256(data);
+          for (const parent of parents) directories.add(parent);
+          stagedEntries += parents.length + 1;
           if (previousHashOf(path) !== hash) {
             // Stream new or changed bytes into the staging tree at once, so
             // retained live memory stays bounded by a single file read.
@@ -137,8 +159,8 @@ export class SourceAccess {
         } finally { await handle.close(); }
       }
     };
-    const rootHandle = await openSourceDirectory(this.platform, root, signal);
-    try { await walk(rootHandle, '', 0); } finally { await rootHandle.close(); }
+    const rootHandle = typeof root === 'string' ? await openSourceDirectory(this.platform, root, signal) : root.handle;
+    try { await walk(rootHandle, '', 0); } finally { if (typeof root === 'string') await rootHandle.close(); }
     signal?.throwIfAborted();
     if (trustedRulesSha256 && hashes.get('.fovea/rules.json') !== trustedRulesSha256) throw new Error('Trusted project rules missing or unavailable');
     const digest = createHash('sha256');
@@ -225,17 +247,18 @@ export class SourceAccess {
   }
 
   /** Bounded Git shallow-ledger reader; same ancestor/no-follow boundary as capture. */
-  async readScopeSafeFile(root: string, path: string, maxBytes: number): Promise<string | undefined> {
+  async readScopeSafeFile(root: string | SourceRoot, path: string, maxBytes: number): Promise<string | undefined> {
     sourceLimit(maxBytes, 128 * 1024 * 1024, 'metadata bytes');
-    const rel = relative(root, path);
+    const rel = relative(typeof root === 'string' ? root : root.path, path);
     if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) throw new Error('Git metadata is outside authorized scope');
     const segments = rel.split(sep);
-    let directory = await openSourceDirectory(this.platform, root);
+    const rootHandle = typeof root === 'string' ? await openSourceDirectory(this.platform, root) : root.handle;
+    let directory = rootHandle;
     try {
       for (const segment of segments.slice(0, -1)) {
         assertSourceComponent(segment);
         const next = await this.platform.openChild(directory, segment, 'directory');
-        try { await directory.close(); } catch (error) { await next.close(); throw error; }
+        try { if (directory !== rootHandle) await directory.close(); } catch (error) { await next.close(); throw error; }
         directory = next;
       }
       const name = segments.at(-1)!;
@@ -252,7 +275,10 @@ export class SourceAccess {
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
       throw error;
-    } finally { await directory.close(); }
+    } finally {
+      try { if (directory !== rootHandle) await directory.close(); }
+      finally { if (typeof root === 'string') await rootHandle.close(); }
+    }
   }
 }export function relativeStorageExclusion(root: string, storageRoot: string): string[] {
   const rel = relative(root, storageRoot);

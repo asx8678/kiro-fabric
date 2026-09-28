@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { FoveaEngine } from './engine.js';
-import { decodeRequest, encodeFrame, projectEngineJson, type FoveaResponse } from './protocol.js';
+import { decodeRequest, encodeFrame, projectEngineJson, type FoveaMessage, type FoveaResponse } from './protocol.js';
 
 let engine: FoveaEngine | undefined;
 let current: { id: string; controller: AbortController } | undefined;
@@ -33,7 +33,13 @@ process.once('disconnect', () => { void shutdown(); });
 process.once('SIGTERM', () => { void shutdown(); });
 process.on('message', raw => {
   void (async () => {
-    const message = decodeRequest(raw);
+    let message: FoveaMessage;
+    try { message = decodeRequest(raw); }
+    catch (error) {
+      const id = typeof raw === 'string' ? /^\{"version":1,"type":"(?:initialize|query|retireConversation)","id":"([a-zA-Z0-9_-]{1,100})"[,}]/u.exec(raw.slice(0, 256))?.[1] : undefined;
+      if (id) send({ version: 1, id, ok: false, error: safeError(error) });
+      return;
+    }
     if (message.type === 'cancel') { if (message.id === current?.id) current.controller.abort(new Error('Navigator request cancelled')); return; }
     if (message.type === 'shutdown') { await shutdown(message.id); return; }
     if (closing || seen.has(message.id) || current) throw new Error('Navigator replay or concurrent request rejected');

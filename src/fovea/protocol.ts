@@ -2,12 +2,13 @@ import { fabricJsonText } from "../runtime/json-budget.js";
 
 const FOVEA_IPC_VERSION = 1;
 const FOVEA_FRAME_CHARS = 1_000_000;
-const FOVEA_REQUEST_CHARS = 64_000;
+const FOVEA_REQUEST_CHARS = 2_000_000;
 export interface FoveaParserDescriptor { path: string; sha256: string; version: string; generationRoot?: string | undefined }
 export interface FoveaEngineInitialization { parser: FoveaParserDescriptor; storageRoot: string; gitPath?: string }
 export interface FoveaQuery {
   conversationId: string; conversationEpoch: number;
   rootId: string; root: string; authorizationEpoch: number;
+  deviceId?: string; fileId?: string;
   operation: string; args: Record<string, unknown>;
 }
 export type FoveaMessage =
@@ -21,7 +22,7 @@ export const record = (v: unknown): v is Record<string, unknown> => !!v && typeo
 const identifier = (v: unknown): v is string => typeof v === "string" && /^[a-zA-Z0-9_-]{1,100}$/u.test(v);
 const epoch = (v: unknown): boolean => Number.isSafeInteger(v) && Number(v) >= 0;
 const keys = (v: Record<string, unknown>, names: string[]): boolean => Object.keys(v).every(k => names.includes(k));
-export function encodeFrame(value: FoveaMessage | FoveaResponse): string { return fabricJsonText(value, FOVEA_FRAME_CHARS); }
+export function encodeFrame(value: FoveaMessage | FoveaResponse): string { return fabricJsonText(value, "type" in value ? FOVEA_REQUEST_CHARS : FOVEA_FRAME_CHARS); }
 export function decodeRequest(raw: unknown): FoveaMessage {
   if (typeof raw !== "string" || raw.length > FOVEA_REQUEST_CHARS) throw new Error("Navigator request frame limit");
   const v: unknown = JSON.parse(raw);
@@ -39,7 +40,7 @@ export function decodeRequest(raw: unknown): FoveaMessage {
   }
   if (v.type === "query" && keys(v, ["version", "type", "id", "remainingMs", "request"]) && Number.isSafeInteger(v.remainingMs) && Number(v.remainingMs) > 0 && Number(v.remainingMs) <= 900_000 && record(v.request)) {
     const q = v.request;
-    if (keys(q, ["conversationId", "conversationEpoch", "rootId", "root", "authorizationEpoch", "operation", "args"]) && identifier(q.conversationId) && epoch(q.conversationEpoch) && identifier(q.rootId) && epoch(q.authorizationEpoch) && typeof q.root === "string" && q.root.length <= 4096 && identifier(q.operation) && record(q.args)) return v as unknown as FoveaMessage;
+    if (keys(q, ["conversationId", "conversationEpoch", "rootId", "root", "deviceId", "fileId", "authorizationEpoch", "operation", "args"]) && identifier(q.conversationId) && epoch(q.conversationEpoch) && identifier(q.rootId) && epoch(q.authorizationEpoch) && typeof q.root === "string" && q.root.length <= 4096 && typeof q.deviceId === "string" && /^\d{1,20}$/u.test(q.deviceId) && typeof q.fileId === "string" && /^\d{1,20}$/u.test(q.fileId) && identifier(q.operation) && record(q.args)) return v as unknown as FoveaMessage;
   }
   throw new Error("Invalid Navigator private request");
 }

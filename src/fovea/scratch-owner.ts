@@ -2,13 +2,77 @@ import fs, { type Stats } from 'node:fs';
 import { lstat, mkdtemp, opendir, realpath, rename, rmdir, unlink } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path';
 
-const MAX_ENTRIES = 50_000, MAX_DEPTH = 66;
+export const FOVEA_SCRATCH_MAX_ENTRIES = 50_000;
+const MAX_DEPTH = 66;
 const generatedFile = /^(?:managed-parser|git|source-platform\.node|pi-fovea-(?:(?:cochange-)?[a-f0-9]{16}\.json|(?:focus|dwell|impact|sketch)-[a-f0-9]{8}\.txt|provenance-[a-f0-9]{16}-[a-f0-9]{16}\.json|scan-[1-9][0-9]*-[a-f0-9-]{36}\.yml)(?:\.tmp-[1-9][0-9]*-[a-f0-9-]{36})?)$/u;
 const absent = (error: unknown): boolean => (error as NodeJS.ErrnoException).code === 'ENOENT';
 const privateNode = (s: Stats): boolean => typeof process.getuid === 'function' && s.uid === process.getuid() && (s.mode & 0o077) === 0 && !s.isSymbolicLink();
 const sameDirectory = (a: Stats, b: Stats): boolean => privateNode(b) && b.isDirectory() && a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs && a.mode === b.mode && a.uid === b.uid && a.gid === b.gid;
 const sameFile = (a: Stats, b: Stats): boolean => privateNode(b) && b.isFile() && b.nlink === 1 && a.dev === b.dev && a.ino === b.ino && a.birthtimeMs === b.birthtimeMs && a.mode === b.mode && a.uid === b.uid && a.gid === b.gid && a.size === b.size && a.mtimeMs === b.mtimeMs && a.ctimeMs === b.ctimeMs;
 interface Node { path: string; stat: Stats; children?: Node[] }
+
+export class FoveaHostArtifacts {
+  readonly #parent: Stats;
+  readonly #identity: Stats;
+  #native: Stats | undefined;
+  #binding: Stats | undefined;
+  constructor(readonly directory: string) {
+    const parent = dirname(directory);
+    if (!isAbsolute(directory) || fs.realpathSync(parent) !== parent) throw new Error('Navigator host storage parent must be canonical');
+    this.#parent = fs.lstatSync(parent);
+    if (!privateNode(this.#parent) || !this.#parent.isDirectory()) throw new Error('Navigator host storage parent must be private and owned');
+    fs.mkdirSync(directory, { mode: 0o700 });
+    this.#identity = fs.lstatSync(directory);
+    if (!privateNode(this.#identity) || !this.#identity.isDirectory()) throw new Error('Navigator host storage identity unsafe');
+  }
+  createNativeDirectory(): string {
+    const directory = join(this.directory, 'provenance-native');
+    fs.mkdirSync(directory, { mode: 0o700 });
+    this.#native = fs.lstatSync(directory);
+    if (!privateNode(this.#native) || !this.#native.isDirectory()) throw new Error('Navigator native storage identity unsafe');
+    return directory;
+  }
+  async #check(): Promise<void> {
+    if (!sameDirectory(this.#parent, await lstat(dirname(this.directory))) || !sameDirectory(this.#identity, await lstat(this.directory)) || await realpath(this.directory) !== this.directory) throw new Error('Navigator host storage changed; retain artifacts');
+    if (this.#native && !sameDirectory(this.#native, await lstat(join(this.directory, 'provenance-native')))) throw new Error('Navigator native storage changed; retain artifacts');
+  }
+  async captureFile(file: string, identity: Stats): Promise<void> {
+    await this.#check();
+    if (!this.#native || file !== join(this.directory, 'provenance-native', 'source-platform.node') || this.#binding) throw new Error('Navigator host artifact is outside its owned layout');
+    const stat = await lstat(file);
+    if (!sameFile(identity, stat)) throw new Error('Navigator host artifact identity unsafe');
+    this.#binding = stat;
+  }
+  async close(): Promise<void> {
+    await this.#check();
+    const contents = async (directory: string, expected: string[]): Promise<void> => {
+      const names: string[] = [];
+      for await (const entry of await opendir(directory)) {
+        if (!expected.includes(entry.name) || names.length >= expected.length) throw new Error('Navigator host storage has unowned content; retain artifacts');
+        names.push(entry.name);
+      }
+      if (names.sort().join('\0') !== expected.sort().join('\0')) throw new Error('Navigator host artifacts disappeared; retain evidence');
+    };
+    const native = join(this.directory, 'provenance-native');
+    await contents(this.directory, this.#native ? ['provenance-native'] : []);
+    if (this.#native) {
+      await contents(native, this.#binding ? ['source-platform.node'] : []);
+      if (this.#binding) {
+        const file = join(native, 'source-platform.node');
+        await this.#check();
+        await contents(this.directory, ['provenance-native']);
+        await contents(native, ['source-platform.node']);
+        if (!sameFile(this.#binding, await lstat(file))) throw new Error('Navigator host artifact changed; retain evidence');
+        await unlink(file); this.#binding = undefined;
+      }
+      await this.#check();
+      await contents(this.directory, ['provenance-native']);
+      await rmdir(native); this.#native = undefined;
+    }
+    await this.#check();
+    await rmdir(this.directory);
+  }
+}
 
 /** Only this instance's exclusively created private scratch may be reclaimed.
  * Preflight is bounded and retain-first; disposal unlinks captured regular files
@@ -28,7 +92,7 @@ export class FoveaScratchOwner {
     if (!isAbsolute(storageRoot) || fs.realpathSync(storageRoot) !== storageRoot) throw new Error('Navigator scratch parent must be canonical');
     this.#anchor = fs.lstatSync(storageRoot);
     if (!privateNode(this.#anchor) || !this.#anchor.isDirectory()) throw new Error('Navigator scratch parent must be private and owned');
-    this.#maxEntries = Math.min(MAX_ENTRIES, Math.max(1, limits.maxEntries ?? MAX_ENTRIES));
+    this.#maxEntries = Math.min(FOVEA_SCRATCH_MAX_ENTRIES, Math.max(1, limits.maxEntries ?? FOVEA_SCRATCH_MAX_ENTRIES));
     this.#maxDepth = Math.min(MAX_DEPTH, Math.max(1, limits.maxDepth ?? MAX_DEPTH));
   }
   #admit(): void {

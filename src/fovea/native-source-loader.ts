@@ -1,12 +1,12 @@
 import { createHash } from 'node:crypto';
-import { constants } from 'node:fs';
-import { lstat, open, realpath, writeFile, chmod } from 'node:fs/promises';
+import { constants, type Stats } from 'node:fs';
+import { lstat, open, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { captureDirectoryAncestry } from '../installation/filesystem-boundary.mjs';
 import { createNativeSourcePlatform, type PosixSourceBinding } from './source-platform-native.js';
 import type { ParserDescriptor } from './parser-executable.js';
-import { SourcePlatformUnavailableError, type SourcePlatform } from './source-platform.js';
+import { readSourceBounded, SourcePlatformUnavailableError, type SourcePlatform } from './source-platform.js';
 
 const hash = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 const BINARY = 'app/fovea/source-platform.node';
@@ -29,14 +29,15 @@ export function validateNativeSourceArtifact(metadata: unknown, bytes: Buffer, s
 }
 
 const readOwnedRegular = async (file: string, limit: number): Promise<Buffer> => {
-  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const stat = await handle.stat();
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > limit || (stat.mode & 0o022) || stat.uid !== process.getuid?.()) {
       throw new Error('Native source artifact must be an owned, unaliased regular file');
     }
-    const bytes = await handle.readFile();
-    if (bytes.length !== stat.size) throw new Error('Native source artifact changed during read');
+    const bytes = await readSourceBounded(handle, limit);
+    const after = await handle.stat();
+    if (!bytes || bytes.length !== stat.size || after.size !== stat.size || after.mode !== stat.mode || after.uid !== stat.uid || after.nlink !== stat.nlink || after.mtimeMs !== stat.mtimeMs || after.ctimeMs !== stat.ctimeMs) throw new Error('Native source artifact changed during read');
     return bytes;
   } finally { await handle.close(); }
 };
@@ -46,7 +47,7 @@ const readOwnedRegular = async (file: string, limit: number): Promise<Buffer> =>
  * workspace-local addon, unverified dlopen or runtime compilation. Verified
  * bytes are captured into the engine's private directory before loading so a
  * later pathname replacement cannot select different code. */
-export async function loadManagedSourcePlatform(parser: ParserDescriptor, storage: string): Promise<SourcePlatform> {
+export async function loadManagedSourcePlatform(parser: ParserDescriptor, storage: string, captureFile?: (file: string, identity: Stats) => Promise<void>): Promise<SourcePlatform> {
   if (process.platform !== 'darwin' || !parser.generationRoot) {
     throw new SourcePlatformUnavailableError(process.platform, 'missing trusted installation-local native source binding');
   }
@@ -65,8 +66,12 @@ export async function loadManagedSourcePlatform(parser: ParserDescriptor, storag
   const stat = await lstat(storage);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o7777) !== 0o700 || await realpath(storage) !== storage) throw new Error('Unsafe native source storage');
   const file = join(storage, 'source-platform.node');
-  await writeFile(file, binary, { flag: 'wx', mode: 0o500 });
-  await chmod(file, 0o500);
-  destinationGuard.check();
+  const handle = await open(file, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o500);
+  try {
+    await handle.writeFile(binary);
+    await handle.chmod(0o500);
+    destinationGuard.check();
+    await captureFile?.(file, await handle.stat());
+  } finally { await handle.close(); }
   return createNativeSourcePlatform(createRequire(import.meta.url)(file) as PosixSourceBinding);
 }

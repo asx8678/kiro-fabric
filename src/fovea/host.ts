@@ -12,6 +12,7 @@ import { FoveaEngineProcess } from "./engine-process.js";
 import { FoveaRootLeases, type FoveaBindingAuthority, type FoveaLease } from "./root-leases.js";
 import { FoveaResultStore, type ResultOwner } from "./result-store.js";
 import { FoveaScheduler } from "./scheduler.js";
+import { FoveaHostArtifacts } from "./scratch-owner.js";
 import { FoveaCallContexts, type FoveaDeliveryClaim } from "./call-context.js";
 import { record, type FoveaParserDescriptor } from "./protocol.js";
 import type { FoveaObservation, FoveaObserver } from "./observations.js";
@@ -40,6 +41,7 @@ export class FoveaHost {
   readonly #conversations = new Map<string, { configuration: FoveaConfiguration; trustedRules: Map<string, string>; leases: Set<FoveaLease> }>();
   readonly #retirements = new Map<string, Promise<void>>();
   readonly #process: FoveaEngineProcess | undefined;
+  readonly #artifacts: FoveaHostArtifacts;
   readonly #observed = new Map<string, { paths: Set<string>; dirty: boolean; gap: boolean; operations: number }>();
   readonly #journal: Promise<FoveaProvenanceJournal | undefined>;
   #journalTail: Promise<void> = Promise.resolve();
@@ -47,12 +49,14 @@ export class FoveaHost {
   #closeTask: Promise<void> | undefined;
   constructor(readonly options: FoveaHostOptions) {
     const root = createFoveaDirectory(options.dataRoot, "fovea"), instances = createFoveaDirectory(root, "instances");
-    const storageRoot = createFoveaDirectory(instances, this.hostInstanceId);
+    const artifacts = new FoveaHostArtifacts(path.join(instances, this.hostInstanceId));
+    this.#artifacts = artifacts;
+    const storageRoot = artifacts.directory;
     this.#journal = (async () => {
       // Reuse complete-generation authentication, but capture in a host-owned
       // directory distinct from the engine's read-only binding copy.
       const platform = process.platform === 'darwin' && options.parser
-        ? await loadManagedSourcePlatform(options.parser, createFoveaDirectory(storageRoot, 'provenance-native')) : undefined;
+        ? await loadManagedSourcePlatform(options.parser, artifacts.createNativeDirectory(), (file, identity) => artifacts.captureFile(file, identity)) : undefined;
       return new FoveaProvenanceJournal(root, platform);
     })().catch(() => undefined); // unavailable storage is reported as a gap
     privateFoveaDirectory(path.dirname(options.configFile));
@@ -120,6 +124,9 @@ export class FoveaHost {
       }
       this.#conversations.clear(); this.#retirements.clear();
       this.#observed.clear();
+      if (!failures.length && (!this.#process?.starts || this.#process.retainedScratchGenerations === 0 && this.#process.cleanup?.processGroup === 'confirmed' && this.#process.cleanup.scratch === 'removed')) {
+        try { await this.#artifacts.close(); } catch (error) { failures.push(error); }
+      }
       if (failures.length) throw new AggregateError(failures, 'Navigator host cleanup failed', { cause: failures[0] });
     });
     // Install shared ownership before abort listeners can reenter close.
@@ -195,6 +202,7 @@ export class FoveaHost {
         if (trustedRulesSha256) parameters.trustedRulesSha256 = trustedRulesSha256;
         return this.#process!.query({
           conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath,
+          deviceId: lease.deviceId, fileId: lease.fileId,
           authorizationEpoch: lease.authorizationEpoch, operation: "impact", args: parameters,
         }, signal, budget);
       });
@@ -278,7 +286,7 @@ export class FoveaHost {
       }
       const observedRevision = this.#observed.get(lease.rootId)?.operations;
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation) && parameters.maxTokens === undefined) parameters.maxTokens = config.tools.defaultBudget;
-      const value = await this.#process!.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, authorizationEpoch: lease.authorizationEpoch, operation: operation === "augment" ? "focus" : operation, args: operation === "augment" ? { ...parameters, transient: true } : parameters }, signal, context.deadline?.remainingMs() ?? 120_000);
+      const value = await this.#process!.query({ conversationId: lease.conversationId, conversationEpoch: lease.conversationEpoch, rootId: lease.rootId, root: lease.canonicalPath, deviceId: lease.deviceId, fileId: lease.fileId, authorizationEpoch: lease.authorizationEpoch, operation: operation === "augment" ? "focus" : operation, args: operation === "augment" ? { ...parameters, transient: true } : parameters }, signal, context.deadline?.remainingMs() ?? 120_000);
       this.#check(lease, args, context);
       if (operation === "reset") { this.#results.revoke(lease.rootId, lease.authorizationEpoch); this.#calls.revoke(lease.rootId); this.#observed.delete(lease.rootId); }
       if (["focus", "sketch", "dwell", "impact", "augment"].includes(operation)) {

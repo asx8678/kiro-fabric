@@ -3,6 +3,7 @@ import { constants } from 'node:fs';
 import { open, realpath, writeFile, chmod } from 'node:fs/promises';
 import { isAbsolute, relative, sep, join } from 'node:path';
 import { execFile } from 'node:child_process';
+import { readSourceBounded, sourceLimit } from './source-platform.js';
 
 export interface ParserDescriptor {
   path: string;
@@ -14,19 +15,20 @@ export const sha256 = (bytes: Uint8Array | string): string => createHash('sha256
 
 /** Host supplies identity; neither PATH nor environment may select an executable. */
 export async function readVerifiedExecutable(path: string, maxBytes = 128 * 1024 * 1024): Promise<Buffer> {
+  sourceLimit(maxBytes, 128 * 1024 * 1024, 'executable bytes');
   if (!isAbsolute(path)) throw new Error('Executable path must be absolute');
   const canonical = await realpath(path);
   if (canonical !== path) throw new Error('Executable path must be canonical and cannot contain symlinks');
-  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const before = await handle.stat();
     if (!before.isFile() || !(before.mode & 0o111) || (before.mode & 0o022) || before.size > maxBytes) {
       throw new Error('Unsafe executable permissions, type, or size');
     }
     if (before.uid !== 0 && before.uid !== process.getuid?.()) throw new Error('Untrusted executable owner');
-    const bytes = await handle.readFile();
+    const bytes = await readSourceBounded(handle, maxBytes);
     const after = await handle.stat();
-    if (bytes.length > maxBytes || before.size !== after.size || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
+    if (!bytes || bytes.length !== before.size || before.size !== after.size || before.mode !== after.mode || before.uid !== after.uid || before.mtimeMs !== after.mtimeMs || before.ctimeMs !== after.ctimeMs) {
       throw new Error('Executable changed during verification');
     }
     return bytes;
@@ -58,4 +60,3 @@ export async function resolveParserDescriptor(descriptor: ParserDescriptor, stor
   if (version !== `ast-grep ${descriptor.version}`) throw new Error(`Managed parser version mismatch: ${version}`);
   return { ...descriptor, path };
 }
-

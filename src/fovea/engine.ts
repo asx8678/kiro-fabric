@@ -10,11 +10,12 @@ import { sync, syncBaselineStore } from './core/sync.js';
 import { provenancePathFor } from './core/provenance.js';
 import { writeAtomicTemp } from './core/temp-storage.js';
 import { validateProvenanceJournal } from './provenance-journal.js';
-import { observeSessionPaths } from './core/session.js';
+import { observeSessionPaths, type FoveaSession } from './core/session.js';
+import { discoverFiles } from './core/build.js';
 import { loadRepoRules, DEFAULT_PACK } from './core/anchors.js';
 import { aggregateFiles, promote, posterior } from './core/discover.js';
 import { boundResultDetails } from './core/result-budget.js';
-import { SourceAccess, relativeStorageExclusion } from './source-access.js';
+import { SourceAccess, relativeStorageExclusion, type SourceRoot } from './source-access.js';
 import { sourcePlatform } from './source-platform.js';
 import { loadManagedSourcePlatform } from './native-source-loader.js';
 import { resolveParserDescriptor, readVerifiedExecutable, type ParserDescriptor } from './parser-executable.js';
@@ -29,6 +30,8 @@ export interface EngineRequest {
   conversationEpoch: number;
   rootId: string;
   root: string;
+  deviceId?: string;
+  fileId?: string;
   authorizationEpoch: number;
   operation: string;
   args: Record<string, unknown>;
@@ -154,8 +157,18 @@ export class FoveaEngine {
     if (!object(args) || !request.conversationId || !request.rootId || !Number.isSafeInteger(request.conversationEpoch) || request.conversationEpoch < 0 || !Number.isSafeInteger(request.authorizationEpoch) || request.authorizationEpoch < 0) throw new Error('Invalid engine request identity');
     const identity = await lstat(request.root, { bigint: true });
     if (!identity.isDirectory() || identity.isSymbolicLink()) throw new Error("Navigator root must be a physical directory");
+    const expected = { deviceId: String(identity.dev), fileId: String(identity.ino) };
+    if ((request.deviceId !== undefined || request.fileId !== undefined) && (request.deviceId !== expected.deviceId || request.fileId !== expected.fileId)) throw new Error('Navigator authorized filesystem identity changed');
+    if (['status', 'reset', 'reload'].includes(operation) || operation === 'sync' && args.commitPreparationId !== undefined) return this.executeAtRoot(request, signal, expected);
+    await this.initialize(signal);
+    const sourceRoot = await this.source!.openRoot(request.root, expected, signal);
+    try { return await this.executeAtRoot(request, signal, sourceRoot, sourceRoot); }
+    finally { await sourceRoot.handle.close(); }
+  }
+  private async executeAtRoot(request: EngineRequest, signal: AbortSignal, identity: { deviceId: string; fileId: string }, sourceRoot?: SourceRoot): Promise<EngineResult> {
+    const { operation, args } = request;
     // Authorization is checked by the host for every call; cache identity never grants access.
-    const rootKey = JSON.stringify([request.root, String(identity.dev), String(identity.ino)]);
+    const rootKey = JSON.stringify([request.root, identity.deviceId, identity.fileId]);
     const conversationKey = JSON.stringify([request.conversationId, request.conversationEpoch, rootKey]);
     // Private host-only acknowledgment. Guests must never supply this field.
     if (operation === 'sync' && args.commitPreparationId !== undefined) {
@@ -181,8 +194,6 @@ export class FoveaEngine {
       if (operation === 'reload') this.roots.get(rootKey)?.store.clear();
       return { status: 'ok', operation, reset: 'conversation-root', ...(operation === 'reload' ? { graphInvalidated: true } : {}) };
     }
-    await this.initialize(signal);
-    if (!isAbsolute(request.root) || await realpath(request.root) !== request.root) throw new Error('Navigator root must be canonical');
     let root = this.roots.get(rootKey);
     if (!root) {
       if (this.roots.size >= 32) {
@@ -216,7 +227,7 @@ export class FoveaEngine {
       cleanupTemporary: (file, snapshot, available) => this.scratch!.removeTemporary(file, snapshot, available),
       readGitMetadata: async path => {
         signal.throwIfAborted();
-        const text = await this.source!.readScopeSafeFile(request.root, resolve(request.root, path), 1024 * 1024);
+        const text = await this.source!.readScopeSafeFile(sourceRoot!, resolve(request.root, path), 1024 * 1024);
         if (text === undefined) throw new Error('Git shallow metadata unavailable');
         return text;
       },
@@ -225,7 +236,7 @@ export class FoveaEngine {
     return coreContext.run(ctx, async () => {
       let primary: { error: unknown } | undefined;
       try {
-        const snapshot = await this.source!.captureSourceSnapshot(request.root, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
+        const snapshot = await this.source!.captureSourceSnapshot(sourceRoot!, stage, signal, { exclude: relativeStorageExclusion(request.root, this.options.storageRoot),
           trustedRulesSha256: typeof args.trustedRulesSha256 === 'string' ? args.trustedRulesSha256 : undefined,
           ...(root.snapshotId && root.snapshotHashes ? { previous: { id: root.snapshotId, root: root.path, hashes: root.snapshotHashes } } : {}) });
         signal.throwIfAborted();
@@ -236,7 +247,16 @@ export class FoveaEngine {
           await this.scratch!.moveStage(stage, root.path);
         }
         const head = this.git ? await gitHead(root.path) : undefined;
-        const warm = snapshotReused && head === root.head ? getState(root.path) : undefined;
+        const cached = getState(root.path);
+        let warm = snapshotReused && head === root.head ? cached : undefined;
+        if (cached && this.git) {
+          const { fileRoutes } = await loadRepoRules(root.path);
+          const listing = await discoverFiles(root.path, fileRoutes.map(route => new RegExp(route.re)), cached.store.enrolled);
+          if (JSON.stringify(listing.files) !== JSON.stringify(cached.files) || JSON.stringify(listing.report) !== JSON.stringify(cached.discovery)) {
+            await this.clearRootStore(root);
+            warm = undefined;
+          }
+        }
         const state = warm ?? await ensureState(root.path, { force: true, hints: [...snapshot.hashes.keys()] });
         signal.throwIfAborted();
         root.snapshotId = snapshot.id; root.snapshotHashes = snapshot.hashes; root.head = head;
@@ -273,11 +293,11 @@ export class FoveaEngine {
           return { status: 'ok', ...boundResultDetails(value), sourceSnapshotId: snapshot.id, graphGeneration: state.generation, coverage: snapshot.coverage };
         }
         if (operation === 'sync') {
-          const attention = strings(args.files);
-          if (attention?.length) observeSessionPaths(root.path, attention);
           const navigationBeforePush = conversation.store.get('session.ts:sessions');
           const savedNavigation = navigationBeforePush ? structuredClone(navigationBeforePush) : undefined;
-          const native = await this.bridgeProvenance(request, root, conversation, snapshot.hashes, state.facts, String(identity.dev), String(identity.ino));
+          const attention = strings(args.files);
+          if (attention?.length) observeSessionPaths(root.path, attention);
+          const native = await this.bridgeProvenance(request, root, conversation, snapshot.hashes, state.facts, identity.deviceId, identity.fileId);
           let outcome: Awaited<ReturnType<typeof sync>>;
           let syncFailure: { error: unknown } | undefined;
           try { outcome = await sync(root.path, { files: strings(args.files), budget,
@@ -354,11 +374,15 @@ export class FoveaEngine {
         if ((operation === 'focus' || operation === 'dwell') && packet.status === 'ok' && !transient) {
           const revision = (conversation.focuses.get(focusId) ?? 0) + 1;
           conversation.focuses.set(focusId, revision); conversation.active = focusId;
-          while (conversation.focuses.size > 32) conversation.focuses.delete(conversation.focuses.keys().next().value!);
           packet.focusId = focusId; packet.focusRevision = revision;
         }
         signal.throwIfAborted();
-        if (!transient) this.conversations.set(conversationKey, conversation);
+        if (!transient && !(operation === 'focus' && packet.status === 'no-match')) {
+          const sessions = conversation.store.get('session.ts:sessions') as Map<string, FoveaSession> | undefined;
+          for (const id of conversation.focuses.keys()) if (!sessions?.has(`${root.path}:${id}`)) conversation.focuses.delete(id);
+          if (!conversation.focuses.has(conversation.active)) conversation.active = '';
+          this.conversations.set(conversationKey, conversation);
+        }
         return packet;
       } catch (error) {
         // Never reuse partially refreshed state or forget in-flight filesystem work.

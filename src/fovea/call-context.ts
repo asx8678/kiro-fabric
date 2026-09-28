@@ -26,6 +26,7 @@ export interface FoveaDeliveryClaim {
 export class FoveaCallContexts {
   readonly #roots = new Map<string, { generation: number; retryAfter: number }>();
   readonly #emitted = new Map<string, string>();
+  readonly #revisions = new Map<string, object>();
   constructor(private readonly now: () => number = Date.now) {}
   budget(rootId: string, generation: number, remainingMs: number): number {
     const state = this.#roots.get(rootId);
@@ -46,9 +47,12 @@ export class FoveaCallContexts {
     signal.throwIfAborted(); check();
     const key = createHash("sha256").update(JSON.stringify([rootId, epoch, semanticKey, text])).digest("hex");
     if (this.#emitted.has(key) || !text || text.length + 160 > maxChars) return undefined;
+    const revision = this.#revisions.get(rootId) ?? {};
+    this.#revisions.delete(rootId); this.#revisions.set(rootId, revision);
+    while (this.#revisions.size > MAX_ROOTS) this.#revisions.delete(this.#revisions.keys().next().value!);
     let active = true;
     const current = (): boolean => {
-      if (!active || signal.aborted) return false;
+      if (!active || signal.aborted || this.#revisions.get(rootId) !== revision) return false;
       try { check(); return true; } catch { return false; }
     };
     const settle = (emitted: boolean): void => {
@@ -64,8 +68,9 @@ export class FoveaCallContexts {
     return { notices: [Object.freeze({ text })], isCurrent: current, emitted: () => settle(true), uncertain: cancel, cancel };
   }
   revoke(rootId: string): void {
+    this.#revisions.delete(rootId);
     this.#roots.delete(rootId);
     for (const [key, owner] of this.#emitted) if (owner === rootId) this.#emitted.delete(key);
   }
-  clear(): void { this.#roots.clear(); this.#emitted.clear(); }
+  clear(): void { this.#roots.clear(); this.#emitted.clear(); this.#revisions.clear(); }
 }

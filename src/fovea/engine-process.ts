@@ -50,6 +50,7 @@ export class FoveaEngineProcess {
   }
   async query(request: FoveaQuery, signal: AbortSignal, remainingMs: number): Promise<Record<string, unknown>> {
     signal.throwIfAborted(); this.#available();
+    request = (JSON.parse(encodeFrame({ version: 1, type: 'query', id: `q_${'0'.repeat(32)}`, remainingMs: 900_000, request })) as { request: FoveaQuery }).request;
     const end = performance.now() + Math.min(900_000, remainingMs);
     if (!(end > performance.now())) throw new Error('Navigator request deadline expired before startup');
     let id: string | undefined, child: ChildProcess | undefined, cancelled: Error | undefined, primary: unknown;
@@ -195,7 +196,7 @@ export class FoveaEngineProcess {
       await Promise.resolve();
       const child = this.#child, generation = this.generation;
       if (unexpected && child) this.#failures.push(Date.now());
-      let acknowledged = false, mode: Cleanup['mode'] = 'forced', cleanupError: Error | undefined;
+      let acknowledged = false, mode: Cleanup['mode'] = child ? 'forced' : 'graceful', cleanupError: Error | undefined;
       try {
         child?.removeAllListeners('message'); child?.removeAllListeners('exit'); child?.removeAllListeners('error'); child?.on('error', () => {});
         if (child?.pid) {
