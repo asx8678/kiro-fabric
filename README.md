@@ -85,10 +85,12 @@ Requires macOS or glibc Linux, Node >=24, pnpm **11.20.0**, ripgrep (`rg`) and K
 From the Kiro Fabric checkout (not with `sudo`):
 
 ```sh
+git clone https://github.com/asx8678/kiro-fabric.git
+cd kiro-fabric
 bash ./install.sh
 ```
 
-The installer builds Fabric, copies it to `~/.kiro/kiro-fabric`, and writes the `kiro-fabric` agent profile. Your data directory is preserved across updates.
+The installer runs `pnpm install` and `pnpm run build` (the built bundle is not committed), copies Fabric to `~/.kiro/kiro-fabric/{app,tools,resources}`, and writes the `kiro-fabric` agent profile. Your data directory is preserved across updates. Useful options: `bash ./install.sh --help`, `--uninstall`.
 
 Then, from the project you want Kiro to work on:
 
@@ -96,7 +98,19 @@ Then, from the project you want Kiro to work on:
 ~/.kiro/kiro-fabric/bin/kiro-fabric
 ```
 
-Restart existing sessions after updates. See [installation and troubleshooting](docs/installer.md).
+To update, pull and install again, then restart any running Kiro sessions:
+
+```sh
+git pull && bash ./install.sh
+```
+
+File edits ask for approval by default; shell commands and reads are allowed. To run edits without prompts, merge `{"schemaVersion":1,"approvals":{"write":"allow"}}` into the private file `~/.kiro/kiro-fabric/data/fabric/config/config.json`. Headless use (after `chat`):
+
+```sh
+kiro-cli chat --v3 --agent kiro-fabric --output-format stream-json --require-mcp-startup 'your task'
+```
+
+See [installation and troubleshooting](docs/installer.md).
 
 ## Current limitations
 
